@@ -1,0 +1,6 @@
+{
+  "name": "Click & Save AI",
+  "description": "מנוע ה-AI להוזלת הוצאות משק הבית בישראל: חשמל, סלולר, אינטרנט סיבים, ביטוחים ומנויים.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
