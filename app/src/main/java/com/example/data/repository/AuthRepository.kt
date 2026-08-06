@@ -1,5 +1,6 @@
 package com.example.data.repository
 
+import android.app.Activity
 import android.content.Context
 import android.util.Log
 import androidx.credentials.CredentialManager
@@ -21,8 +22,6 @@ data class UserSession(
     val email: String = "",
     val displayName: String = "",
     val photoUrl: String = "",
-    val idToken: String = "",
-    val gmailOAuthAccessToken: String? = null,
     val isAuthenticated: Boolean = false
 )
 
@@ -33,10 +32,7 @@ sealed class AuthState {
     data class Error(val message: String) : AuthState()
 }
 
-class AuthRepository(private val context: Context) {
-
-    private val credentialManager by lazy { CredentialManager.create(context) }
-
+class AuthRepository(private val applicationContext: Context) {
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
@@ -49,8 +45,8 @@ class AuthRepository(private val context: Context) {
 
     private fun getFirebaseAuthSafe(): FirebaseAuth? {
         return try {
-            if (com.google.firebase.FirebaseApp.getApps(context).isEmpty()) {
-                com.google.firebase.FirebaseApp.initializeApp(context)
+            if (com.google.firebase.FirebaseApp.getApps(applicationContext).isEmpty()) {
+                com.google.firebase.FirebaseApp.initializeApp(applicationContext)
             }
             FirebaseAuth.getInstance()
         } catch (e: Exception) {
@@ -78,9 +74,9 @@ class AuthRepository(private val context: Context) {
         _authState.value = AuthState.Authenticated(session)
     }
 
-    suspend fun signInWithGoogle(webClientId: String): Result<UserSession> {
+    suspend fun signInWithGoogle(activity: Activity, webClientId: String): Result<UserSession> {
         if (webClientId.isBlank()) {
-            val message = "Google Sign-In is not configured: a Web Client ID is required."
+            val message = "Google Sign-In is not configured: google_web_client_id is required."
             _authState.value = AuthState.Error(message)
             return Result.failure(IllegalStateException(message))
         }
@@ -97,9 +93,9 @@ class AuthRepository(private val context: Context) {
                 .addCredentialOption(googleIdOption)
                 .build()
 
-            val result: GetCredentialResponse = credentialManager.getCredential(
+            val result: GetCredentialResponse = CredentialManager.create(activity).getCredential(
                 request = request,
-                context = context
+                context = activity
             )
 
             val credential = result.credential
@@ -121,7 +117,6 @@ class AuthRepository(private val context: Context) {
                 email = user.email.orEmpty(),
                 displayName = user.displayName.orEmpty(),
                 photoUrl = user.photoUrl?.toString().orEmpty(),
-                idToken = googleCredential.idToken,
                 isAuthenticated = true
             )
             _userSession.value = session
@@ -138,16 +133,6 @@ class AuthRepository(private val context: Context) {
             _authState.value = AuthState.Error(message)
             Result.failure(e)
         }
-    }
-
-    fun updateGmailOAuthAccessToken(token: String) {
-        if (token.isBlank()) {
-            _authState.value = AuthState.Error("A non-empty Gmail OAuth access token is required.")
-            return
-        }
-        val updated = _userSession.value.copy(gmailOAuthAccessToken = token)
-        _userSession.value = updated
-        _authState.value = AuthState.Authenticated(updated)
     }
 
     fun signOut() {
