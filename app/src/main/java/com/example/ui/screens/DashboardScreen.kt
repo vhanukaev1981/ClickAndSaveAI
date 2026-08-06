@@ -1,8 +1,6 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,32 +12,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,26 +47,37 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.example.data.local.InvoiceItem
 import com.example.ui.MainViewModel
-import com.example.ui.theme.EmeraldSavings
 import com.example.ui.theme.TechBluePrimary
 
 @Composable
 fun DashboardScreen(
     viewModel: MainViewModel,
     onNavigateToTab: (Int) -> Unit,
-    onOpenReceiptScan: () -> Unit
+    onOpenReceiptScan: () -> Unit,
+    onGoogleSignIn: () -> Unit,
+    onRequestGmailAuthorization: () -> Unit
 ) {
     val invoices by viewModel.invoices.collectAsState()
     val totalMonthlyCost by viewModel.totalMonthlyCost.collectAsState()
-    val totalPotentialSavings by viewModel.totalMonthlySavingsPotential.collectAsState()
+    val verifiedSavings by viewModel.totalMonthlySavingsPotential.collectAsState()
+    val session by viewModel.userSession.collectAsState()
     val isConnected by viewModel.isGmailConnected.collectAsState()
     val connectedEmail by viewModel.connectedEmail.collectAsState()
     val isSyncing by viewModel.isSyncingGmail.collectAsState()
     val syncMessage by viewModel.gmailSyncStep.collectAsState()
+    var showGmailConsent by remember { mutableStateOf(false) }
+
+    if (showGmailConsent) {
+        GmailConsentDialog(
+            onDismiss = { showGmailConsent = false },
+            onApprove = {
+                showGmailConsent = false
+                onRequestGmailAuthorization()
+            }
+        )
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -84,30 +88,17 @@ fun DashboardScreen(
     ) {
         item {
             Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                ),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                 shape = RoundedCornerShape(18.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Security,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onErrorContainer
-                    )
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+                    Icon(Icons.Default.Security, contentDescription = null)
                     Spacer(modifier = Modifier.size(10.dp))
                     Column {
+                        Text("תשתית Backend מאובטחת", fontWeight = FontWeight.Bold)
                         Text(
-                            text = "גרסת אב־טיפוס מאובטחת",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "חיבור Gmail, ניתוח AI, ניטור מחירים והעברת בקשות לספקים אינם מחוברים עדיין. לא יוצגו נתוני דמה כהצלחה.",
-                            style = MaterialTheme.typography.bodyMedium
+                            "Gmail, AI ולידים פועלים רק דרך Firebase Functions מאומתות. לפני פריסה והגדרת הסודות, הפעולות יחזירו שגיאה ולא נתוני דמה.",
+                            style = MaterialTheme.typography.bodySmall
                         )
                     }
                 }
@@ -120,20 +111,21 @@ fun DashboardScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Email, contentDescription = null, tint = TechBluePrimary)
                         Spacer(modifier = Modifier.size(8.dp))
-                        Text(
-                            text = "חיבור Gmail",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text("Gmail לקריאת חשבוניות", fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (isConnected) {
-                            "מחובר לחשבון: $connectedEmail"
-                        } else {
-                            "לא קיים כרגע OAuth token תקף ל-Gmail."
+                        when {
+                            !session.isAuthenticated -> "יש להתחבר תחילה ל-Google/Firebase."
+                            isConnected -> "מחובר בהרשאת קריאה בלבד: ${connectedEmail.ifBlank { session.email }}"
+                            else -> "טרם אושרה הרשאת gmail.readonly."
                         },
                         style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "השרת מחפש נושאי חשבונית/קבלה בלבד. אין הרשאת שליחה, מחיקה או שינוי הודעות.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (syncMessage.isNotBlank()) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -141,38 +133,55 @@ fun DashboardScreen(
                             color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text(
-                                text = syncMessage,
-                                modifier = Modifier.padding(10.dp),
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                            Text(syncMessage, modifier = Modifier.padding(10.dp), style = MaterialTheme.typography.bodySmall)
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = { viewModel.connectGmail() },
-                            enabled = !isSyncing,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            if (isSyncing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Color.White
-                                )
-                            } else {
-                                Icon(Icons.Default.Refresh, contentDescription = null)
+                    when {
+                        !session.isAuthenticated -> {
+                            Button(onClick = onGoogleSignIn, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Default.Login, contentDescription = null)
+                                Spacer(modifier = Modifier.size(6.dp))
+                                Text("התחבר ל-Google")
                             }
-                            Spacer(modifier = Modifier.size(6.dp))
-                            Text("בדוק חיבור")
                         }
-                        if (isConnected) {
-                            OutlinedButton(
-                                onClick = { viewModel.disconnectGmail() },
-                                modifier = Modifier.weight(1f)
+                        !isConnected -> {
+                            Button(
+                                onClick = { showGmailConsent = true },
+                                enabled = !isSyncing,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("נתק")
+                                Icon(Icons.Default.Security, contentDescription = null)
+                                Spacer(modifier = Modifier.size(6.dp))
+                                Text("קרא ואשר הרשאת Gmail")
+                            }
+                        }
+                        else -> {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = viewModel::triggerGmailSync,
+                                    enabled = !isSyncing,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    if (isSyncing) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            strokeWidth = 2.dp,
+                                            color = Color.White
+                                        )
+                                    } else {
+                                        Icon(Icons.Default.Refresh, contentDescription = null)
+                                    }
+                                    Spacer(modifier = Modifier.size(6.dp))
+                                    Text("סרוק")
+                                }
+                                OutlinedButton(
+                                    onClick = viewModel::disconnectGmail,
+                                    enabled = !isSyncing,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("נתק ובטל הרשאה")
+                                }
                             }
                         }
                     }
@@ -181,10 +190,7 @@ fun DashboardScreen(
         }
 
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MetricCard(
                     modifier = Modifier.weight(1f),
                     title = "הוצאה חודשית מתועדת",
@@ -192,61 +198,38 @@ fun DashboardScreen(
                 )
                 MetricCard(
                     modifier = Modifier.weight(1f),
-                    title = "חיסכון מאומת",
-                    value = "₪${String.format("%.2f", totalPotentialSavings)}"
+                    title = "חיסכון שאומת",
+                    value = "₪${String.format("%.2f", verifiedSavings)}"
                 )
             }
         }
 
         item {
-            Text(
-                text = "פעולות זמינות",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Text("פעולות", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
 
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                DashboardActionButton(
-                    text = "נהל חשבוניות ידניות",
-                    icon = Icons.Default.ReceiptLong,
-                    onClick = { onNavigateToTab(1) }
-                )
-                DashboardActionButton(
-                    text = "צפה בקטלוג ספקים להדגמה",
-                    icon = Icons.Default.Storefront,
-                    onClick = { onNavigateToTab(2) }
-                )
-                DashboardActionButton(
-                    text = "בדוק את מצב שירות ה-AI",
-                    icon = Icons.Default.AutoAwesome,
-                    onClick = { onNavigateToTab(3) }
-                )
-                OutlinedButton(
-                    onClick = onOpenReceiptScan,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                DashboardActionButton("נהל חשבוניות ולידים", Icons.Default.ReceiptLong) { onNavigateToTab(1) }
+                DashboardActionButton("עיין בקטלוג ספקים", Icons.Default.Storefront) { onNavigateToTab(2) }
+                DashboardActionButton("ניתוח AI דרך השרת", Icons.Default.AutoAwesome) { onNavigateToTab(3) }
+                OutlinedButton(onClick = onOpenReceiptScan, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.CloudOff, contentDescription = null)
                     Spacer(modifier = Modifier.size(8.dp))
-                    Text("סריקת קבלה אינה זמינה")
+                    Text("סריקת תמונות עדיין אינה זמינה")
                 }
             }
         }
 
         item {
-            Text(
-                text = "חשבוניות מקומיות",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Text("חשבוניות", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
 
         if (invoices.isEmpty()) {
             item {
                 EmptyStateCard(
                     title = "אין חשבוניות",
-                    body = "האפליקציה מתחילה כעת ללא נתוני דמה. אפשר להוסיף חשבונית ידנית במסך החשבוניות."
+                    body = "אפשר להוסיף חשבונית ידנית או לייבא לאחר חיבור Gmail. כל יבוא מסומן כלא מאומת."
                 )
             }
         } else {
@@ -255,17 +238,38 @@ fun DashboardScreen(
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(invoice.providerName, fontWeight = FontWeight.Bold)
                         Text("${invoice.category} • ₪${String.format("%.2f", invoice.monthlyCost)}")
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = invoice.status,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text(invoice.status, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun GmailConsentDialog(onDismiss: () -> Unit, onApprove: () -> Unit) {
+    var accepted by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("אישור גישה מוגבלת ל-Gmail") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("האפליקציה מבקשת gmail.readonly בלבד כדי לחפש הודעות שנושאיהן קשורים לחשבוניות וקבלות.")
+                Text("היא אינה יכולה לשלוח, למחוק, לערוך או לסמן הודעות. קוד ההרשאה נשלח לשרת, וה-refresh token נשמר מוצפן.")
+                Text("ניתן לבטל את החיבור וההרשאה בכל עת.")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = accepted, onCheckedChange = { accepted = it })
+                    Text("קראתי ואני מאשר/ת גישה זו במפורש.")
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onApprove, enabled = accepted) { Text("המשך ל-Google") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("ביטול") }
+        }
+    )
 }
 
 @Composable
@@ -284,11 +288,7 @@ private fun DashboardActionButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit
 ) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = ButtonDefaults.buttonColors(containerColor = TechBluePrimary)
-    ) {
+    Button(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Icon(icon, contentDescription = null)
         Spacer(modifier = Modifier.size(8.dp))
         Text(text)
@@ -302,14 +302,7 @@ private fun EmptyStateCard(title: String, body: String) {
         shape = RoundedCornerShape(16.dp)
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .background(TechBluePrimary.copy(alpha = 0.12f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Info, contentDescription = null, tint = TechBluePrimary)
-            }
+            Icon(Icons.Default.Info, contentDescription = null)
             Spacer(modifier = Modifier.size(10.dp))
             Column {
                 Text(title, fontWeight = FontWeight.Bold)
@@ -317,107 +310,4 @@ private fun EmptyStateCard(title: String, body: String) {
             }
         }
     }
-}
-
-@Suppress("UNUSED_PARAMETER")
-@Composable
-fun SwitchRequestModal(
-    invoice: InvoiceItem,
-    onDismiss: () -> Unit,
-    onSubmit: (String, String, String) -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("מעבר ספק אינו מחובר") },
-        text = {
-            Column {
-                Text(
-                    text = "לא תישלח בקשה ל-${invoice.recommendedAlternative}. אין כרגע backend או אינטגרציה עם ספקים, ולכן האפליקציה אינה אוספת פרטים אישיים במסך זה."
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "הפעולה הושבתה כדי למנוע הצגת הצלחה שאינה אמיתית.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        confirmButton = {
-            Button(onClick = onDismiss) { Text("הבנתי") }
-        }
-    )
-}
-
-@Composable
-fun AddInvoiceModal(
-    onDismiss: () -> Unit,
-    onAddInvoice: (String, String, Double, String, Double, Double) -> Unit
-) {
-    var providerName by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf("חשמל") }
-    var monthlyCostText by remember { mutableStateOf("") }
-    val categories = listOf("חשמל", "סלולר", "אינטרנט", "ביטוח", "טלוויזיה")
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("הוספת חשבונית ידנית") },
-        text = {
-            Column {
-                Text(
-                    text = "החשבונית תישמר מקומית בלבד. לא יופק חיסכון או ניתוח AI ללא מקור מאומת.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(categories) { category ->
-                        FilterChip(
-                            selected = selectedCategory == category,
-                            onClick = { selectedCategory = category },
-                            label = { Text(category) }
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = providerName,
-                    onValueChange = { providerName = it },
-                    label = { Text("שם הספק") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = monthlyCostText,
-                    onValueChange = { monthlyCostText = it },
-                    label = { Text("סכום חודשי") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val cost = monthlyCostText.toDoubleOrNull() ?: return@Button
-                    onAddInvoice(
-                        providerName,
-                        selectedCategory,
-                        cost,
-                        "טרם בוצעה השוואה מאומתת",
-                        cost,
-                        0.0
-                    )
-                },
-                enabled = providerName.isNotBlank() && (monthlyCostText.toDoubleOrNull() ?: 0.0) > 0.0
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(modifier = Modifier.size(6.dp))
-                Text("שמור מקומית")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("ביטול") }
-        }
-    )
 }
