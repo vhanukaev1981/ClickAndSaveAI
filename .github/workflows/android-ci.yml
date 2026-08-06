@@ -1,4 +1,4 @@
-name: Android CI
+name: Android and Backend CI
 
 on:
   pull_request:
@@ -11,7 +11,31 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  backend-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: functions
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: functions/package.json
+
+      - name: Install backend dependencies
+        run: npm install --ignore-scripts
+
+      - name: Run backend tests
+        run: npm test
+
+  android-build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -29,7 +53,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install required Android SDK packages
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+        run: sdkmanager 'platforms;android-36.1' 'build-tools;36.0.0'
 
       - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
