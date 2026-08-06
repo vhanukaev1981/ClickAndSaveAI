@@ -34,7 +34,7 @@ android {
   buildTypes {
     release {
       isCrunchPngs = false
-      isMinifyEnabled = false
+      isMinifyEnabled = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
@@ -47,11 +47,16 @@ android {
 
   buildFeatures {
     compose = true
+    buildConfig = true
   }
 
   testOptions {
     unitTests { isIncludeAndroidResources = true }
   }
+}
+
+ksp {
+  arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
@@ -74,11 +79,16 @@ dependencies {
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
   implementation(libs.firebase.auth)
+  implementation("com.google.firebase:firebase-functions")
+  implementation("com.google.firebase:firebase-appcheck-playintegrity")
+  debugImplementation("com.google.firebase:firebase-appcheck-debug")
   implementation(libs.androidx.credentials)
   implementation(libs.androidx.credentials.play.services)
   implementation(libs.googleid)
+  implementation("com.google.android.gms:play-services-auth:21.6.0")
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
   implementation(libs.okhttp)
 
   testImplementation(libs.androidx.compose.ui.test.junit4)
