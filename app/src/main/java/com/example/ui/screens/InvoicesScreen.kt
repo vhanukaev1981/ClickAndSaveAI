@@ -126,7 +126,7 @@ fun InvoicesScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("חשבוניות ולידים", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text(
-                            "חשבוניות Gmail מסומנות כלא מאומתות. ליד נשלח רק לאחר התחברות והסכמה מפורשת.",
+                            "חשבוניות Gmail מסומנות כלא מאומתות. ליד נשמר בתור קליטה מאובטח רק לאחר התחברות והסכמה מפורשת.",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -226,13 +226,16 @@ private fun InvoiceCard(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text("חיוב חודשי: ₪${String.format("%.2f", invoice.monthlyCost)}")
-            Text(invoice.status, style = MaterialTheme.typography.bodySmall)
+            Text(
+                invoice.status.replace("ליד נשלח ל-CRM", "ליד נשמר בתור הקליטה"),
+                style = MaterialTheme.typography.bodySmall
+            )
             Text("אימות: ${invoice.verificationStatus}", style = MaterialTheme.typography.bodySmall)
             Spacer(modifier = Modifier.height(10.dp))
             Button(onClick = onLead, modifier = Modifier.fillMaxWidth()) {
                 Icon(if (authenticated) Icons.Default.Send else Icons.Default.Login, contentDescription = null)
                 Spacer(modifier = Modifier.size(6.dp))
-                Text(if (authenticated) "שלח ליד ל-CRM" else "התחבר כדי ליצור ליד")
+                Text(if (authenticated) "שמור ליד בתור הקליטה" else "התחבר כדי ליצור ליד")
             }
         }
     }
@@ -257,12 +260,18 @@ private fun ProviderLeadDialog(
 
     AlertDialog(
         onDismissRequest = { if (!submitting) onDismiss() },
-        title = { Text(if (success == null) "יצירת ליד למעבר ספק" else "הליד התקבל") },
+        title = { Text(if (success == null) "יצירת ליד למעבר ספק" else "הליד נשמר") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (success != null) {
                     Text("מזהה ליד: ${success.result.leadId}")
-                    Text(if (success.result.duplicate) "הבקשה כבר התקבלה בעבר ולא נוצרה כפילות." else "סטטוס: ${success.result.status}")
+                    Text(
+                        if (success.result.duplicate) {
+                            "הבקשה כבר נשמרה בעבר ולא נוצרה כפילות."
+                        } else {
+                            "הליד נמצא בתור הקליטה המאובטח. טרם הועבר ל-CRM חיצוני."
+                        }
+                    )
                 } else {
                     Text("ספק נוכחי: ${invoice.providerName} • קטגוריה: ${invoice.category}")
                     OutlinedTextField(
@@ -301,7 +310,7 @@ private fun ProviderLeadDialog(
                             onCheckedChange = { consent = it },
                             enabled = !submitting
                         )
-                        Text("אני מאשר/ת להעביר את פרטי הקשר ל-CRM לצורך טיפול בבקשה זו.")
+                        Text("אני מאשר/ת לשמור את פרטי הקשר בתור הלידים לצורך טיפול בבקשה זו.")
                     }
                     if (state is ProviderLeadUiState.Error) {
                         Text(state.message, color = MaterialTheme.colorScheme.error)
@@ -320,7 +329,7 @@ private fun ProviderLeadDialog(
                     if (submitting) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("שלח ליד")
+                        Text("שמור ליד")
                     }
                 }
             }
