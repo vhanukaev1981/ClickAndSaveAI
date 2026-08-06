@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -61,7 +62,10 @@ fun MainAppStructure(viewModel: MainViewModel) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            Surface(color = MaterialTheme.colorScheme.errorContainer) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.errorContainer
+            ) {
                 Text(
                     text = "אב־טיפוס: Gmail, AI ומעבר ספקים אינם מחוברים",
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -92,7 +96,11 @@ fun MainAppStructure(viewModel: MainViewModel) {
                 2 -> ProvidersScreen(viewModel)
                 3 -> AiAssistantScreen(viewModel)
                 4 -> ProfileScreen(viewModel)
-                else -> viewModel.setTab(0)
+                else -> DashboardScreen(
+                    viewModel = viewModel,
+                    onNavigateToTab = viewModel::setTab,
+                    onOpenReceiptScan = viewModel::reportReceiptScanUnavailable
+                )
             }
         }
     }
