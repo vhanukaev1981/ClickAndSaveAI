@@ -18,7 +18,13 @@ import com.example.data.repository.GmailRepository
 import com.example.data.repository.GmailSyncState
 import com.example.data.repository.ShoppingRepository
 import com.example.data.repository.UserSession
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class ChatMessage(
@@ -53,57 +59,57 @@ data class DailyTip(
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
-
     private val db = AppDatabase.getDatabase(application)
     private val repository = ShoppingRepository(db)
     private val geminiService = GeminiShoppingService()
-    
+
     val authRepository = AuthRepository(application)
     val gmailRepository = GmailRepository(repository)
 
     val userSession: StateFlow<UserSession> = authRepository.userSession
     val authState: StateFlow<AuthState> = authRepository.authState
-
     val isGmailConnected: StateFlow<Boolean> = gmailRepository.isConnected
     val connectedEmail: StateFlow<String> = gmailRepository.connectedEmail
     val lastScanTime: StateFlow<String> = gmailRepository.lastScanTime
 
-    val isSyncingGmail = MutableStateFlow(false)
-    val gmailSyncStep = MutableStateFlow("")
+    private val _isSyncingGmail = MutableStateFlow(false)
+    val isSyncingGmail: StateFlow<Boolean> = _isSyncingGmail.asStateFlow()
+
+    private val _gmailSyncStep = MutableStateFlow("")
+    val gmailSyncStep: StateFlow<String> = _gmailSyncStep.asStateFlow()
 
     init {
         viewModelScope.launch {
             gmailRepository.syncState.collect { state ->
                 when (state) {
                     is GmailSyncState.Syncing -> {
-                        isSyncingGmail.value = true
-                        gmailSyncStep.value = state.stepMessage
+                        _isSyncingGmail.value = true
+                        _gmailSyncStep.value = state.stepMessage
                     }
                     is GmailSyncState.Success -> {
-                        isSyncingGmail.value = false
-                        gmailSyncStep.value = state.message
+                        _isSyncingGmail.value = false
+                        _gmailSyncStep.value = state.message
                     }
                     is GmailSyncState.Error -> {
-                        isSyncingGmail.value = false
-                        gmailSyncStep.value = state.errorMessage
+                        _isSyncingGmail.value = false
+                        _gmailSyncStep.value = state.errorMessage
                     }
-                    is GmailSyncState.Idle -> {
-                        isSyncingGmail.value = false
-                        gmailSyncStep.value = ""
+                    GmailSyncState.Idle -> {
+                        _isSyncingGmail.value = false
+                        _gmailSyncStep.value = ""
                     }
                 }
             }
         }
     }
 
-    // User Preferences & Savings Goal State
     val monthlySavingsGoal = MutableStateFlow(2000.0)
-    val preferredElectricityProvider = MutableStateFlow("אלקטרה פאוור")
-    val preferredCellularProvider = MutableStateFlow("019 מובייל")
-    val preferredInternetProvider = MutableStateFlow("בזק סיבים")
-    val preferredInsuranceProvider = MutableStateFlow("הראל ביטוח")
-    val preferredStreamingProvider = MutableStateFlow("FreeTV")
-    val autoSwitchAlertsEnabled = MutableStateFlow(true)
+    val preferredElectricityProvider = MutableStateFlow("לא נבחר")
+    val preferredCellularProvider = MutableStateFlow("לא נבחר")
+    val preferredInternetProvider = MutableStateFlow("לא נבחר")
+    val preferredInsuranceProvider = MutableStateFlow("לא נבחר")
+    val preferredStreamingProvider = MutableStateFlow("לא נבחר")
+    val autoSwitchAlertsEnabled = MutableStateFlow(false)
     val minSavingsThreshold = MutableStateFlow(20.0)
 
     fun updatePreferences(
@@ -116,71 +122,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         autoSwitch: Boolean,
         minThreshold: Double
     ) {
-        monthlySavingsGoal.value = goal
+        monthlySavingsGoal.value = goal.coerceAtLeast(0.0)
         preferredElectricityProvider.value = electricity
         preferredCellularProvider.value = cellular
         preferredInternetProvider.value = internet
         preferredInsuranceProvider.value = insurance
         preferredStreamingProvider.value = streaming
         autoSwitchAlertsEnabled.value = autoSwitch
-        minSavingsThreshold.value = minThreshold
+        minSavingsThreshold.value = minThreshold.coerceAtLeast(0.0)
     }
 
-    // Daily Savings Tips Data & State
     val dailyTips = listOf(
         DailyTip(
             id = 1,
-            title = "אופטימיזציית חשמל במסלול הייטק / לילה",
+            title = "בדיקת תנאי חשבון חשמל",
             category = "חשמל",
             iconSymbol = "⚡",
-            description = "מעבר למסלול חשמל מוזל בשעות העומס או מסלול הייטק מעניק 5%-7% הנחה קבועה על כל חשבון החשמל הביתי.",
-            estimatedMonthlySavings = 85.0,
-            actionText = "עבור לאלקטרה פאוור"
+            description = "בדוק את תנאי המסלול מול מקור רשמי ועדכני לפני קבלת החלטה.",
+            estimatedMonthlySavings = 0.0,
+            actionText = "פתח קטלוג הדגמה"
         ),
         DailyTip(
             id = 2,
-            title = "איחוד קווי סלולר למשפחה",
+            title = "בדיקת חבילת סלולר משפחתית",
             category = "סלולר",
             iconSymbol = "📱",
-            description = "ניוד 3 קווי סלולר לחבילה משפחתית מורחבת ב-019 מובייל או Wecom יוריד את התשלום החודשי מ-₪90 ל-₪30 בלבד.",
-            estimatedMonthlySavings = 60.0,
-            actionText = "השווה חבילות סלולר"
+            description = "השווה נפח גלישה, מספר קווים, תקופת מבצע ומחיר לאחר המבצע.",
+            estimatedMonthlySavings = 0.0,
+            actionText = "בדוק אפשרויות"
         ),
         DailyTip(
             id = 3,
-            title = "ביטול כפילויות ביטוח בריאות ותאונות",
+            title = "בדיקת כפילויות ביטוח",
             category = "ביטוח",
             iconSymbol = "🛡️",
-            description = "סריקה אוטומטית ב'הר הביטוח' מזהה כפילויות בפוליסות פרטיות וקופות חולים המביאות לבזבוז מיותר.",
-            estimatedMonthlySavings = 140.0,
-            actionText = "סרוק בהר הביטוח"
-        ),
-        DailyTip(
-            id = 4,
-            title = "שדרוג לסיבים ללא דמי שכירות ראוטר",
-            category = "אינטרנט",
-            iconSymbol = "🌐",
-            description = "מעבר לתשתית בזק סיבים או סלקום פייבר הכוללת פטור מדמי שכירות נתב חודשיים.",
-            estimatedMonthlySavings = 35.0,
-            actionText = "בדוק סיבים בכתובתך"
-        ),
-        DailyTip(
-            id = 5,
-            title = "פטור מעמלות דמי כרטיס אשראי",
-            category = "משק בית",
-            iconSymbol = "💳",
-            description = "המרת כרטיסי האשראי הבנקאיים לכרטיסי מועדון ללא עמלת דמי כרטיס חודשיים למשך שנתיים.",
-            estimatedMonthlySavings = 40.0,
-            actionText = "בקש פטור מדמי כרטיס"
-        ),
-        DailyTip(
-            id = 6,
-            title = "ניקוי מנויי TV וסטרימינג שאינם בשימוש",
-            category = "טלוויזיה",
-            iconSymbol = "📺",
-            description = "ביטול ערוצי פרימיום ומנויי תוכן שהתווספו אוטומטית בתום תקופת הטבה ראשונית.",
-            estimatedMonthlySavings = 55.0,
-            actionText = "בדוק מנויים פעילים"
+            description = "יש לבצע בדיקה מול מקורות מוסמכים ולוודא התאמת כיסוי לפני שינוי פוליסה.",
+            estimatedMonthlySavings = 0.0,
+            actionText = "קבל מידע כללי"
         )
     )
 
@@ -191,52 +169,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun prevDailyTip() {
-        val prev = currentTipIndex.value - 1
-        currentTipIndex.value = if (prev < 0) dailyTips.size - 1 else prev
+        currentTipIndex.value = if (currentTipIndex.value == 0) {
+            dailyTips.lastIndex
+        } else {
+            currentTipIndex.value - 1
+        }
     }
 
-    // Push notification simulation state
     val showPushBanner = MutableStateFlow(false)
-    val pushNotificationTitle = MutableStateFlow("🔔 חשבונית חשמל חדשה שורבבה למייל (₪450)")
-    val pushNotificationBody = MutableStateFlow("מצאנו חלופה ב-₪418/חודש! לחץ לצפייה ומעבר בקליק")
-
-    // Price Hike Saver Alerts (שומר מסך מפני התייקרויות - התראה 14 יום לפני פקיעה)
-    val priceHikeAlerts = MutableStateFlow(
-        listOf(
-            PriceHikeAlertItem(
-                id = 1L,
-                serviceName = "פלאפון סלולר",
-                planName = "חבילת 100GB ללא הגבלה",
-                daysUntilExpiry = 14,
-                expiryDate = "10/08/2026",
-                currentPrice = 29.90,
-                expectedPriceAfterHike = 69.90,
-                alternativeProvider = "סלקום סלולר",
-                alternativePrice = 25.00,
-                category = "סלולר"
-            ),
-            PriceHikeAlertItem(
-                id = 2L,
-                serviceName = "פרטנר אינטרנט סיבים",
-                planName = "חבילת 1000Mb סיבים אופטיים",
-                daysUntilExpiry = 14,
-                expiryDate = "10/08/2026",
-                currentPrice = 69.00,
-                expectedPriceAfterHike = 119.00,
-                alternativeProvider = "בזק סיבים (Bezeq Fiber)",
-                alternativePrice = 65.00,
-                category = "אינטרנט/סיבים"
-            )
-        )
-    )
+    val pushNotificationTitle = MutableStateFlow("הדגמת הודעה מקומית")
+    val pushNotificationBody = MutableStateFlow("לא נשלחה התראת Push ולא בוצעה פעולה חיצונית.")
+    val priceHikeAlerts = MutableStateFlow<List<PriceHikeAlertItem>>(emptyList())
 
     fun triggerSimulatedPushNotification() {
+        pushNotificationTitle.value = "הדגמת הודעה מקומית"
+        pushNotificationBody.value = "זו תצוגה בתוך האפליקציה בלבד, לא התראת Push אמיתית."
         showPushBanner.value = true
     }
 
     fun triggerPriceHikeSimulatedPush() {
-        pushNotificationTitle.value = "🛡️ שומר מסך: התראת התייקרות בעוד 14 ימים!"
-        pushNotificationBody.value = "מבצע הסלולר ב-פלאפון (₪29.90) פוקע בעוד 14 ימים והמחיר יקפוץ ל-₪69.90. לחץ עכשיו למעבר לספק מוזל ב-₪25/חודש!"
+        pushNotificationTitle.value = "הדגמת התראת מחיר"
+        pushNotificationBody.value = "אין כרגע ניטור מחירים או התראה מתוזמנת ברקע."
         showPushBanner.value = true
     }
 
@@ -244,23 +197,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         showPushBanner.value = false
     }
 
-    fun connectGmail(email: String = "vadim.hanukaev1981@gmail.com") {
+    fun connectGmail(email: String = "") {
         viewModelScope.launch {
-            val token = userSession.value.gmailOAuthAccessToken
-            gmailRepository.fetchAndParseInvoices(accessToken = token, userEmail = email)
+            val session = userSession.value
+            gmailRepository.fetchAndParseInvoices(
+                accessToken = session.gmailOAuthAccessToken,
+                userEmail = email.ifBlank { session.email }
+            )
         }
     }
+
+    fun triggerGmailSync() = connectGmail()
 
     fun disconnectGmail() {
         gmailRepository.disconnectGmail()
-    }
-
-    fun triggerGmailSync() {
-        viewModelScope.launch {
-            val token = userSession.value.gmailOAuthAccessToken
-            val email = userSession.value.email.ifBlank { "vadim.hanukaev1981@gmail.com" }
-            gmailRepository.fetchAndParseInvoices(accessToken = token, userEmail = email)
-        }
     }
 
     fun signInWithGoogle(webClientId: String = "") {
@@ -279,33 +229,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val selectedCategory = MutableStateFlow("All")
 
     val watchlistItems: StateFlow<List<WatchlistItem>> = repository.watchlistItems
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val coupons: StateFlow<List<CouponItem>> = repository.coupons
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val savingsRecords: StateFlow<List<SavingsRecord>> = repository.savingsRecords
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val invoices: StateFlow<List<InvoiceItem>> = repository.invoices
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val totalMonthlySavingsPotential: StateFlow<Double> = repository.totalMonthlySavingsPotential
-        .map { it ?: 464.40 }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 464.40)
-
+        .map { it ?: 0.0 }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
     val totalMonthlyCost: StateFlow<Double> = repository.totalMonthlyCost
-        .map { it ?: 3229.00 }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 3229.00)
-
+        .map { it ?: 0.0 }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
     val totalSavings: StateFlow<Double> = repository.totalSavingsAmount
-        .map { it ?: 129.50 }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 129.50)
+        .map { it ?: 0.0 }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
 
     fun requestProviderSwitch(invoice: InvoiceItem) {
-        viewModelScope.launch {
-            repository.requestProviderSwitch(invoice)
-        }
+        viewModelScope.launch { repository.requestProviderSwitch(invoice) }
     }
 
     fun addManualInvoice(
@@ -317,51 +260,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         savings: Double
     ) {
         viewModelScope.launch {
-            val newInvoice = InvoiceItem(
-                providerName = providerName,
-                category = category,
-                monthlyCost = monthlyCost,
-                recommendedAlternative = recommendedAlternative,
-                alternativeMonthlyCost = alternativeCost,
-                potentialMonthlySavings = savings,
-                status = "פוענח - הצעה מוכנה",
-                isSwitchRequested = false
+            val note = recommendedAlternative.takeIf { it.isNotBlank() }
+                ?.let { "טרם אומת. טקסט שהוזן: $it" }
+                ?: "טרם בוצעה השוואה מאומתת"
+            repository.addInvoice(
+                InvoiceItem(
+                    providerName = providerName.ifBlank { "ספק לא צוין" },
+                    category = category,
+                    monthlyCost = monthlyCost.coerceAtLeast(0.0),
+                    recommendedAlternative = note,
+                    alternativeMonthlyCost = monthlyCost.coerceAtLeast(0.0),
+                    potentialMonthlySavings = 0.0,
+                    status = "נוסף ידנית - ממתין לאימות",
+                    isSwitchRequested = false,
+                    accountNumber = "",
+                    billDate = ""
+                )
             )
-            repository.addInvoice(newInvoice)
         }
+        @Suppress("UNUSED_VARIABLE")
+        val ignoredUnverifiedCalculation = alternativeCost + savings
     }
 
     fun deleteInvoice(id: Long) {
-        viewModelScope.launch {
-            repository.deleteInvoice(id)
-        }
+        viewModelScope.launch { repository.deleteInvoice(id) }
     }
-
 
     val aiDealAnalysis = MutableStateFlow<DealAnalysisResult?>(null)
     val isAnalyzingDeal = MutableStateFlow(false)
-
-    val chatMessages = MutableStateFlow<List<ChatMessage>>(
+    val chatMessages = MutableStateFlow(
         listOf(
             ChatMessage(
-                text = "שלום! אני סייען ה-AI של Click & Save AI. שאל אותי לגבי קופונים, הוזלת חשבוניות חשמל/תקשורת/ביטוח, או השוואת מחירים!",
+                text = "שירות ה-AI אינו מחובר כרגע. לא יישלח מידע לספק חיצוני.",
                 isUser = false
             )
         )
     )
     val isAiChatLoading = MutableStateFlow(false)
-
     val receiptScanResult = MutableStateFlow<ReceiptScanResult?>(null)
     val isReceiptScanning = MutableStateFlow(false)
 
-    init {
-        viewModelScope.launch {
-            repository.seedSampleDataIfNeeded()
-        }
-    }
-
     fun setTab(index: Int) {
-        selectedTab.value = index
+        selectedTab.value = index.coerceIn(0, 4)
     }
 
     fun setSearchQuery(query: String) {
@@ -376,29 +316,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (query.isBlank()) return
         viewModelScope.launch {
             isAnalyzingDeal.value = true
-            val result = geminiService.analyzeDeal(query)
-            aiDealAnalysis.value = result
-            isAnalyzingDeal.value = false
+            try {
+                aiDealAnalysis.value = geminiService.analyzeDeal(query)
+            } finally {
+                isAnalyzingDeal.value = false
+            }
         }
     }
 
     fun sendChatMessage(userText: String) {
         if (userText.isBlank()) return
-        val currentList = chatMessages.value.toMutableList()
-        val userMsg = ChatMessage(text = userText, isUser = true)
-        currentList.add(userMsg)
-        chatMessages.value = currentList
+        val userMessage = ChatMessage(text = userText, isUser = true)
+        chatMessages.value = chatMessages.value + userMessage
 
         viewModelScope.launch {
             isAiChatLoading.value = true
-            val history = currentList.takeLast(6).joinToString("\n") {
-                if (it.isUser) "User: ${it.text}" else "AI: ${it.text}"
+            try {
+                val history = chatMessages.value.takeLast(6).joinToString("\n") {
+                    if (it.isUser) "User: ${it.text}" else "AI: ${it.text}"
+                }
+                val reply = geminiService.chatWithAi(userText, history)
+                chatMessages.value = chatMessages.value + ChatMessage(text = reply, isUser = false)
+            } finally {
+                isAiChatLoading.value = false
             }
-            val reply = geminiService.chatWithAi(userText, history)
-            val updated = chatMessages.value.toMutableList()
-            updated.add(ChatMessage(text = reply, isUser = false))
-            chatMessages.value = updated
-            isAiChatLoading.value = false
         }
     }
 
@@ -411,66 +352,66 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         category: String
     ) {
         viewModelScope.launch {
-            val item = WatchlistItem(
-                name = name,
-                storeName = store,
-                originalPrice = originalPrice,
-                currentPrice = currentPrice,
-                targetPrice = targetPrice,
-                category = category,
-                priceHistoryCsv = "${originalPrice.toInt()},${((originalPrice + currentPrice)/2).toInt()},${currentPrice.toInt()}"
+            repository.addWatchlistItem(
+                WatchlistItem(
+                    name = name,
+                    storeName = store,
+                    originalPrice = originalPrice,
+                    currentPrice = currentPrice,
+                    targetPrice = targetPrice,
+                    category = category,
+                    priceHistoryCsv = currentPrice.toString()
+                )
             )
-            repository.addWatchlistItem(item)
         }
     }
 
     fun deleteWatchlistItem(id: Long) {
-        viewModelScope.launch {
-            repository.removeWatchlistItem(id)
-        }
+        viewModelScope.launch { repository.removeWatchlistItem(id) }
     }
 
     fun copyCoupon(coupon: CouponItem) {
-        viewModelScope.launch {
-            repository.incrementCouponCopy(coupon)
-        }
+        viewModelScope.launch { repository.incrementCouponCopy(coupon) }
     }
 
     fun toggleFavoriteCoupon(coupon: CouponItem) {
-        viewModelScope.launch {
-            repository.toggleCouponFavorite(coupon)
-        }
+        viewModelScope.launch { repository.toggleCouponFavorite(coupon) }
     }
 
     fun addSavingsRecord(title: String, store: String, amount: Double, category: String, note: String) {
+        if (amount <= 0.0) return
         viewModelScope.launch {
-            val record = SavingsRecord(
-                title = title,
-                storeName = store,
-                amountSaved = amount,
-                category = category,
-                note = note
+            repository.addSavings(
+                SavingsRecord(
+                    title = title,
+                    storeName = store,
+                    amountSaved = amount,
+                    category = category,
+                    note = note
+                )
             )
-            repository.addSavings(record)
         }
     }
 
     fun scanReceipt(bitmap: Bitmap) {
         viewModelScope.launch {
             isReceiptScanning.value = true
-            val result = geminiService.scanReceiptOrCoupon(bitmap)
-            receiptScanResult.value = result
-            isReceiptScanning.value = false
-            
-            // Auto add to savings log
-            addSavingsRecord(
-                title = "Receipt Match: ${result.storeName}",
-                store = result.storeName,
-                amount = result.estimatedSavings,
-                category = "Scanned Receipt",
-                note = result.itemSummary
-            )
+            try {
+                receiptScanResult.value = geminiService.scanReceiptOrCoupon(bitmap)
+            } finally {
+                isReceiptScanning.value = false
+            }
         }
+    }
+
+    fun reportReceiptScanUnavailable() {
+        receiptScanResult.value = ReceiptScanResult(
+            storeName = "לא נותח",
+            totalAmount = 0.0,
+            estimatedSavings = 0.0,
+            itemSummary = "צילום וסריקת קבלה אינם מחוברים בגרסה זו.",
+            cashbackTips = "לא הופקה המלצה."
+        )
     }
 
     fun clearReceiptResult() {
