@@ -1,5 +1,6 @@
 package com.example.ui
 
+import android.app.Activity
 import android.app.Application
 import android.graphics.Bitmap
 import androidx.lifecycle.AndroidViewModel
@@ -220,8 +221,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { gmailRepository.disconnectGmail() }
     }
 
-    fun signInWithGoogle(webClientId: String = "") {
-        viewModelScope.launch { authRepository.signInWithGoogle(webClientId) }
+    fun signInWithGoogle(activity: Activity, webClientId: String) {
+        viewModelScope.launch { authRepository.signInWithGoogle(activity, webClientId) }
     }
 
     fun signOut() {
@@ -282,7 +283,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         requestedProvider = requestedProvider,
                         category = invoice.category,
                         invoiceLocalId = invoice.id.toString(),
-                        idempotencyKey = "invoice-${invoice.id}-${phone.filter(Char::isDigit)}-${requestedProvider.hashCode()}"
+                        idempotencyKey = "invoice-${invoice.id}-${phone.filter { it.isDigit() }}-${requestedProvider.hashCode()}"
                     )
                 )
             }.onSuccess { result ->
@@ -329,7 +330,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         @Suppress("UNUSED_VARIABLE")
-        val ignoredUnverifiedCalculation = recommendedAlternative + alternativeCost + savings
+        val ignoredUnverifiedCalculation = "$recommendedAlternative|$alternativeCost|$savings"
     }
 
     fun deleteInvoice(id: Long) {
