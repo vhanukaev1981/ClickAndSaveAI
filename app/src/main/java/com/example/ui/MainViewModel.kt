@@ -255,10 +255,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .map { it ?: 0.0 }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
 
-    fun requestProviderSwitch(invoice: InvoiceItem) {
-        viewModelScope.launch { shoppingRepository.requestProviderSwitch(invoice) }
-    }
-
     fun submitProviderLead(
         invoice: InvoiceItem,
         contactName: String,
@@ -268,7 +264,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         consentAccepted: Boolean
     ) {
         if (!consentAccepted) {
-            _providerLeadState.value = ProviderLeadUiState.Error("נדרשת הסכמה מפורשת להעברת הפרטים ל-CRM.")
+            _providerLeadState.value = ProviderLeadUiState.Error(
+                "נדרשת הסכמה מפורשת לשמירת הפרטים בתור הלידים."
+            )
             return
         }
         viewModelScope.launch {
@@ -290,13 +288,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 shoppingRepository.updateInvoice(
                     invoice.copy(
                         isSwitchRequested = true,
-                        status = "ליד נשלח ל-CRM • ${result.leadId.take(8)}"
+                        status = "ליד נשמר בתור הקליטה • ${result.leadId.take(8)}"
                     )
                 )
                 _providerLeadState.value = ProviderLeadUiState.Success(result)
             }.onFailure { error ->
                 _providerLeadState.value = ProviderLeadUiState.Error(
-                    error.localizedMessage ?: "שליחת הליד נכשלה."
+                    error.localizedMessage ?: "שמירת הליד נכשלה."
                 )
             }
         }
@@ -340,7 +338,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val aiDealAnalysis = MutableStateFlow<DealAnalysisResult?>(null)
     val isAnalyzingDeal = MutableStateFlow(false)
     val chatMessages = MutableStateFlow(
-        listOf(ChatMessage(text = "שירות ה-AI פועל דרך Backend מאומת. מחירים ותנאים עדיין דורשים מקור רשמי.", isUser = false))
+        listOf(
+            ChatMessage(
+                text = "שירות ה-AI פועל דרך Backend מאומת. מחירים ותנאים עדיין דורשים מקור רשמי.",
+                isUser = false
+            )
+        )
     )
     val isAiChatLoading = MutableStateFlow(false)
     val receiptScanResult = MutableStateFlow<ReceiptScanResult?>(null)
@@ -392,7 +395,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun addWatchlistItem(name: String, store: String, originalPrice: Double, currentPrice: Double, targetPrice: Double, category: String) {
+    fun addWatchlistItem(
+        name: String,
+        store: String,
+        originalPrice: Double,
+        currentPrice: Double,
+        targetPrice: Double,
+        category: String
+    ) {
         viewModelScope.launch {
             shoppingRepository.addWatchlistItem(
                 WatchlistItem(
@@ -420,11 +430,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { shoppingRepository.toggleCouponFavorite(coupon) }
     }
 
-    fun addSavingsRecord(title: String, store: String, amount: Double, category: String, note: String) {
+    fun addSavingsRecord(
+        title: String,
+        store: String,
+        amount: Double,
+        category: String,
+        note: String
+    ) {
         if (amount <= 0.0) return
         viewModelScope.launch {
             shoppingRepository.addSavings(
-                SavingsRecord(title = title, storeName = store, amountSaved = amount, category = category, note = note)
+                SavingsRecord(
+                    title = title,
+                    storeName = store,
+                    amountSaved = amount,
+                    category = category,
+                    note = note
+                )
             )
         }
     }
