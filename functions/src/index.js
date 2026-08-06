@@ -73,7 +73,7 @@ async function refreshGoogleAccessToken(encryptedRefreshToken) {
   if (!payload.access_token) {
     throw new HttpsError("failed-precondition", "Google did not return an access token.");
   }
-  return { accessToken: payload.access_token, refreshToken };
+  return { accessToken: payload.access_token };
 }
 
 exports.connectGmail = onCall(
@@ -100,7 +100,6 @@ exports.connectGmail = onCall(
       client_secret: googleOAuthClientSecret.value(),
       code: serverAuthCode,
       grant_type: "authorization_code",
-      redirect_uri: "",
     });
 
     const grantedScopes = String(tokenPayload.scope || "")
@@ -335,7 +334,6 @@ exports.analyzeDeal = onCall(
         model: "gemini-3.6-flash",
         contents: prompt,
         config: {
-          temperature: 0.1,
           responseMimeType: "application/json",
         },
       });
