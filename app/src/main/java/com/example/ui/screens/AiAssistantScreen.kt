@@ -15,7 +15,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -46,6 +47,8 @@ fun AiAssistantScreen(viewModel: MainViewModel) {
     val isAnalyzing by viewModel.isAnalyzingDeal.collectAsState()
     val messages by viewModel.chatMessages.collectAsState()
     val isChatLoading by viewModel.isAiChatLoading.collectAsState()
+    val errorMessage by viewModel.aiErrorMessage.collectAsState()
+    val session by viewModel.userSession.collectAsState()
 
     var analysisInput by remember { mutableStateOf("") }
     var chatInput by remember { mutableStateOf("") }
@@ -59,18 +62,30 @@ fun AiAssistantScreen(viewModel: MainViewModel) {
     ) {
         item {
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                 shape = RoundedCornerShape(18.dp)
             ) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Default.CloudOff, contentDescription = null)
+                    Icon(Icons.Default.CloudDone, contentDescription = null)
                     Spacer(modifier = Modifier.size(10.dp))
                     Column {
-                        Text("שירות AI מושבת בצד הלקוח", fontWeight = FontWeight.Bold)
+                        Text("AI דרך Backend מאומת", fontWeight = FontWeight.Bold)
                         Text(
-                            "מפתחות API אינם נארזים עוד ב-APK, וחשבוניות אינן נשלחות ישירות לספק AI. נדרש backend מאומת לפני הפעלת השירות.",
+                            "מפתח Gemini נשמר ב-Secret Manager ואינו נמצא ב-APK. השירות אינו רשאי להמציא מחירים או חיסכון, וכל טענה מסחרית דורשת מקור רשמי ומתוארך.",
                             style = MaterialTheme.typography.bodySmall
                         )
+                    }
+                }
+            }
+        }
+
+        if (!session.isAuthenticated) {
+            item {
+                Card(shape = RoundedCornerShape(18.dp)) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Login, contentDescription = null)
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text("יש להתחבר במסך הפרופיל לפני שימוש ב-AI.")
                     }
                 }
             }
@@ -82,7 +97,7 @@ fun AiAssistantScreen(viewModel: MainViewModel) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null)
                         Spacer(modifier = Modifier.size(8.dp))
-                        Text("בדיקת מצב ניתוח", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("ניתוח זהיר", fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
@@ -94,14 +109,18 @@ fun AiAssistantScreen(viewModel: MainViewModel) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
                         onClick = { viewModel.analyzeDeal(analysisInput) },
-                        enabled = analysisInput.isNotBlank() && !isAnalyzing,
+                        enabled = session.isAuthenticated && analysisInput.isNotBlank() && !isAnalyzing,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         if (isAnalyzing) {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         } else {
-                            Text("בדוק")
+                            Text("נתח דרך השרת")
                         }
+                    }
+                    if (errorMessage.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(errorMessage, color = MaterialTheme.colorScheme.error)
                     }
                     analysis?.let {
                         Spacer(modifier = Modifier.height(10.dp))
@@ -135,10 +154,14 @@ fun AiAssistantScreen(viewModel: MainViewModel) {
                             chatInput = ""
                             viewModel.sendChatMessage(message)
                         },
-                        enabled = chatInput.isNotBlank() && !isChatLoading,
+                        enabled = session.isAuthenticated && chatInput.isNotBlank() && !isChatLoading,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.Send, contentDescription = null)
+                        if (isChatLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Send, contentDescription = null)
+                        }
                         Spacer(modifier = Modifier.size(6.dp))
                         Text("שלח")
                     }
