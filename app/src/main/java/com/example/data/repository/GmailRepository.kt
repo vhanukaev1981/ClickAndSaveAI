@@ -33,6 +33,18 @@ class GmailRepository(
     private val _lastScanTime = MutableStateFlow("טרם בוצעה סריקה")
     val lastScanTime: StateFlow<String> = _lastScanTime.asStateFlow()
 
+    suspend fun refreshConnectionStatus(): Result<GmailConnectionResult> {
+        return runCatching {
+            val connection = backendRepository.getGmailConnectionStatus()
+            _isConnected.value = connection.connected
+            _connectedEmail.value = if (connection.connected) connection.email else ""
+            connection
+        }.onFailure { error ->
+            Log.e("GmailRepository", "Gmail status refresh failed", error)
+            _isConnected.value = false
+        }
+    }
+
     suspend fun connectWithAuthorizationCode(
         serverAuthCode: String,
         userEmail: String
@@ -66,9 +78,12 @@ class GmailRepository(
 
     suspend fun scanInvoices(): Result<GmailScanResult> {
         if (!_isConnected.value) {
-            val message = "יש לחבר Gmail ולאשר הרשאת קריאה בלבד לפני הסריקה."
-            _syncState.value = GmailSyncState.Error(message, isAuthRequired = true)
-            return Result.failure(IllegalStateException(message))
+            val refreshed = refreshConnectionStatus().getOrNull()
+            if (refreshed?.connected != true) {
+                val message = "יש לחבר Gmail ולאשר הרשאת קריאה בלבד לפני הסריקה."
+                _syncState.value = GmailSyncState.Error(message, isAuthRequired = true)
+                return Result.failure(IllegalStateException(message))
+            }
         }
 
         _syncState.value = GmailSyncState.Syncing("סורק בשרת הודעות עם נושאי חשבונית בלבד...", 45)
@@ -94,13 +109,19 @@ class GmailRepository(
                 )
             }
             _lastScanTime.value = "עכשיו"
+            val recoveredCount = (result.invoices.size - result.importedCount).coerceAtLeast(0)
             _syncState.value = GmailSyncState.Success(
-                invoicesFound = result.importedCount,
+                invoicesFound = result.invoices.size,
                 totalSavingsPotential = 0.0,
-                message = if (result.importedCount == 0) {
-                    "הסריקה הסתיימה. לא נמצאו חשבוניות חדשות שניתן לזהות באופן דטרמיניסטי."
-                } else {
-                    "יובאו ${result.importedCount} חשבוניות חדשות ללא המלצת חיסכון עד לאימות."
+                message = when {
+                    result.importedCount > 0 && recoveredCount > 0 ->
+                        "יובאו ${result.importedCount} חשבוניות חדשות ושוחזרו $recoveredCount רשומות קיימות. כולן ממתינות לאימות."
+                    result.importedCount > 0 ->
+                        "יובאו ${result.importedCount} חשבוניות חדשות ללא המלצת חיסכון עד לאימות."
+                    recoveredCount > 0 ->
+                        "לא נמצאו חשבוניות חדשות; שוחזרו $recoveredCount רשומות שכבר נקלטו בשרת."
+                    else ->
+                        "הסריקה הסתיימה. לא נמצאו חשבוניות שניתן לזהות באופן דטרמיניסטי."
                 }
             )
             result
