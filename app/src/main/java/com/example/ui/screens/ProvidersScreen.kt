@@ -16,15 +16,15 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,9 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.example.data.local.IsraeliMarketData
 import com.example.data.local.MarketProviderOption
 import com.example.ui.MainViewModel
-import com.example.ui.theme.EmeraldSavings
 
-@Suppress("UNUSED_PARAMETER")
 @Composable
 fun ProvidersScreen(viewModel: MainViewModel) {
     var selectedCategory by remember { mutableStateOf("הכל") }
@@ -70,15 +68,11 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Info, contentDescription = null)
                     Spacer(modifier = Modifier.size(8.dp))
-                    Text(
-                        text = "קטלוג ספקים להדגמה בלבד",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("קטלוג ספקים להדגמה בלבד", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "המחירים והתנאים בקוד אינם מקור מסחרי מאומת ואינם מעודכנים בזמן אמת. אין לבצע מעבר על סמך מסך זה.",
+                    "המחירים והתנאים בקוד אינם מקור מסחרי מאומת ואינם מעודכנים בזמן אמת. ליד נוצר רק ממסך חשבוניות ובאישור מפורש.",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(12.dp))
@@ -109,38 +103,30 @@ fun ProvidersScreen(viewModel: MainViewModel) {
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(options) { option ->
-                ReadOnlyProviderCard(option)
+                ReadOnlyProviderCard(option = option, onOpenInvoices = { viewModel.setTab(1) })
             }
         }
     }
 }
 
 @Composable
-private fun ReadOnlyProviderCard(option: MarketProviderOption) {
+private fun ReadOnlyProviderCard(option: MarketProviderOption, onOpenInvoices: () -> Unit) {
     Card(shape = RoundedCornerShape(16.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(option.providerName, fontWeight = FontWeight.Bold)
             Text(option.planName, style = MaterialTheme.typography.bodyMedium)
             Spacer(modifier = Modifier.height(6.dp))
+            Text("טווח שמור בקוד: ${option.priceRange}", fontWeight = FontWeight.SemiBold)
             Text(
-                text = "טווח שמור בקוד: ${option.priceRange}",
-                color = EmeraldSavings,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = option.highlights,
+                option.highlights,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(10.dp))
-            OutlinedButton(
-                onClick = {},
-                enabled = false,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Lock, contentDescription = null)
+            Button(onClick = onOpenInvoices, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.ArrowForward, contentDescription = null)
                 Spacer(modifier = Modifier.size(6.dp))
-                Text("בקשת מעבר אינה מחוברת")
+                Text("עבור לחשבוניות וליד מאומת")
             }
         }
     }
