@@ -1,23 +1,54 @@
 # Click & Save AI
 
-Android prototype for organizing household bills and exploring future savings workflows.
+Android application and Firebase backend for importing household invoices, creating provider-change leads and producing cautious AI-assisted analysis.
 
-## Current status
+## Current branch status
 
-This repository is **not production-ready**. The current hardened prototype intentionally does not claim that unavailable integrations are working:
+The remediation branch implements the approved architecture but is **not deployed production infrastructure**:
 
-- Gmail OAuth is not configured end to end.
-- AI requests are not sent from the Android client.
-- Provider-switch requests are not sent to providers.
-- Price monitoring and push delivery are not active.
-- No sample invoices or savings are inserted automatically.
+- Firebase Authentication is used for identity.
+- Gmail authorization requests only `gmail.readonly` with explicit consent.
+- Google server authorization codes are exchanged by Cloud Functions.
+- Gmail refresh tokens are encrypted with AES-256-GCM before Firestore storage.
+- Gmail scanning runs on the backend and deduplicates by Gmail message ID.
+- Imported invoices remain unverified and do not generate automatic savings.
+- Provider-change requests create idempotent leads in a backend-owned Firestore queue.
+- Gemini is called only from an authenticated, App-Check-protected Cloud Function.
+- Android contains no Gmail refresh token, OAuth client secret or Gemini API key.
+- Fake invoices, fake authentication, fake savings and fake provider-switch success paths have been removed.
 
-## Security direction
+The CRM queue still requires an operational dispatcher/integration before external launch. Image receipt scanning, background price monitoring and real provider fulfillment are not implemented.
 
-AI provider keys must never be bundled in the APK. A production implementation should use an authenticated backend that handles authorization, redaction, quotas, audit logging and provider credentials.
+## Repository layout
 
-Local financial data is currently stored in Room. Android backup is disabled while a complete encrypted, user-scoped data design is being implemented.
+- `app/` — Android Kotlin/Compose client
+- `functions/` — Firebase Functions 2nd generation, Node.js 22
+- `firestore.rules` — direct-client access restrictions
+- `docs/DEPLOYMENT.md` — Firebase, OAuth, App Check and secret setup
+- `.github/workflows/android-ci.yml` — Android build/lint/tests and backend tests
 
-## Build notes
+## Security boundaries
 
-The repository still needs a committed Gradle Wrapper and a CI workflow before builds are reproducible. Do not ship a release until the remaining audit blockers are resolved.
+Backend-owned collections containing OAuth credentials, Gmail-import audit records and CRM leads are denied to direct Android clients. Callable functions require Firebase Authentication and App Check. Provider credentials and model keys must remain in Secret Manager.
+
+Android backup and cleartext traffic are disabled. Room uses an explicit migration and imported Gmail invoices have a unique source-message index.
+
+## Local validation
+
+Backend unit tests:
+
+```bash
+cd functions
+npm install
+npm test
+```
+
+Android validation currently uses Gradle 9.3.1 in CI because a committed Gradle Wrapper is still pending:
+
+```bash
+gradle testDebugUnitTest lintDebug assembleDebug
+```
+
+## Deployment
+
+Follow [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). Do not ship or enable App Check enforcement until OAuth verification, Firebase secrets, signing fingerprints, retention policy, CRM operations and end-to-end staging tests are complete.
