@@ -1,25 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // These collections contain OAuth credentials, CRM leads and import audit data.
-    // They are accessible only through authenticated Cloud Functions using Admin SDK.
-    match /gmailConnections/{uid} {
-      allow read, write: if false;
-    }
-
-    match /providerLeads/{leadId} {
-      allow read, write: if false;
-    }
-
-    match /users/{uid}/gmailMessageImports/{messageId} {
-      allow read, write: if false;
-    }
-
-    // Reserved for future user-visible data. A user can access only their own subtree.
-    match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
-
+    // Production data is backend-owned. Cloud Functions use Admin SDK and bypass rules.
+    // No Android client receives direct access to OAuth credentials, import audit data,
+    // CRM lead records, or any future user subtree until an explicit schema is reviewed.
     match /{document=**} {
       allow read, write: if false;
     }
