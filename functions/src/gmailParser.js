@@ -59,13 +59,13 @@ function parseGmailMessage(message) {
 
   if (!message?.id || amount == null || category == null) return null;
 
+  // Persist only the minimum fields needed for invoice deduplication and display.
+  // The Gmail subject, sender and message snippet are deliberately not returned.
   return {
     sourceMessageId: String(message.id),
     providerName: identifyProvider(from, subject, snippet),
     category,
     monthlyCost: amount,
-    subject: subject.slice(0, 300),
-    sender: from.slice(0, 300),
     receivedDate: date.slice(0, 120),
     verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
   };
