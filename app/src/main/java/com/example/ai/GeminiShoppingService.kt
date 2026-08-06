@@ -1,6 +1,7 @@
 package com.example.ai
 
 import android.graphics.Bitmap
+import com.example.data.repository.BackendRepository
 
 data class DealAnalysisResult(
     val dealScore: Int,
@@ -26,36 +27,63 @@ data class ReceiptScanResult(
 )
 
 /**
- * Client-side Gemini calls are intentionally disabled.
- *
- * API provider secrets must never be embedded in an Android APK. A future implementation
- * should call an authenticated backend that performs authorization, redaction, quotas and
- * audit logging before invoking an AI provider.
+ * AI requests are sent only to an authenticated Firebase callable function.
+ * No model credential is present in the Android application.
  */
-class GeminiShoppingService {
-
+class GeminiShoppingService(
+    private val backendRepository: BackendRepository = BackendRepository()
+) {
     suspend fun analyzeDeal(productOrUrl: String): DealAnalysisResult {
-        val subject = productOrUrl.trim().take(120)
+        val analysis = backendRepository.analyzeDeal(productOrUrl)
+        val verificationNote = if (analysis.requiresVerification) {
+            "כל טענה מסחרית דורשת אימות מול מקור רשמי ומתוארך."
+        } else {
+            ""
+        }
         return DealAnalysisResult(
             dealScore = 0,
-            recommendation = "ניתוח AI אינו מחובר",
-            summary = buildString {
-                append("לא הופק ניתוח עבור ")
-                append(if (subject.isBlank()) "הבקשה" else "\"$subject\"")
-                append(". קריאות AI מהטלפון הושבתו כדי למנוע חשיפת מפתח API ומידע פיננסי.")
-            },
+            recommendation = "בדיקה זהירה בלבד",
+            summary = analysis.summary,
             predictedLowestPrice = 0.0,
-            couponSuggestion = "לא הופקה המלצה או השוואת מחיר.",
+            couponSuggestion = buildString {
+                if (analysis.risks.isNotEmpty()) {
+                    append("סיכונים: ")
+                    append(analysis.risks.joinToString(" • "))
+                }
+                if (analysis.questions.isNotEmpty()) {
+                    if (isNotEmpty()) append("\n")
+                    append("שאלות לבדיקה: ")
+                    append(analysis.questions.joinToString(" • "))
+                }
+                if (verificationNote.isNotBlank()) {
+                    if (isNotEmpty()) append("\n")
+                    append(verificationNote)
+                }
+            },
             storeComparison = emptyList()
         )
     }
 
     suspend fun chatWithAi(userMessage: String, conversationHistory: String = ""): String {
-        val hasContext = userMessage.isNotBlank() || conversationHistory.isNotBlank()
-        return if (hasContext) {
-            "שירות ה-AI אינו מחובר כרגע. לא נשלח מידע לספק AI ולא הופקה תשובה פיננסית."
-        } else {
-            "שירות ה-AI אינו מחובר כרגע."
+        val query = buildString {
+            if (conversationHistory.isNotBlank()) {
+                append(conversationHistory.takeLast(2500))
+                append("\n")
+            }
+            append(userMessage)
+        }
+        val analysis = backendRepository.analyzeDeal(query)
+        return buildString {
+            append(analysis.summary)
+            if (analysis.risks.isNotEmpty()) {
+                append("\n\nסיכונים: ")
+                append(analysis.risks.joinToString(" • "))
+            }
+            if (analysis.questions.isNotEmpty()) {
+                append("\n\nמה כדאי לבדוק: ")
+                append(analysis.questions.joinToString(" • "))
+            }
+            append("\n\nיש לאמת מחירים ותנאים מול מקור רשמי ומתוארך.")
         }
     }
 
@@ -65,7 +93,7 @@ class GeminiShoppingService {
             storeName = "לא נותח",
             totalAmount = 0.0,
             estimatedSavings = 0.0,
-            itemSummary = "סריקת מסמכים באמצעות AI אינה מחוברת. התמונה לא נשלחה לשירות חיצוני.",
+            itemSummary = "סריקת תמונות אינה מחוברת עדיין ל-Backend, ולכן התמונה לא נשלחה.",
             cashbackTips = "לא הופקה המלצה."
         )
     }
