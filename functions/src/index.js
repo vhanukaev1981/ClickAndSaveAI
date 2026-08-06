@@ -3,7 +3,6 @@
 const crypto = require("node:crypto");
 const { initializeApp } = require("firebase-admin/app");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
-const { GoogleGenAI } = require("@google/genai");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { defineSecret, defineString } = require("firebase-functions/params");
@@ -41,6 +40,22 @@ function invalidArgument(error) {
   return new HttpsError("invalid-argument", message);
 }
 
+function storedInvoiceOrNull(data) {
+  const invoice = data?.invoice;
+  if (!invoice || typeof invoice !== "object") return null;
+  if (!invoice.sourceMessageId || !invoice.providerName || !invoice.category) return null;
+  const monthlyCost = Number(invoice.monthlyCost);
+  if (!Number.isFinite(monthlyCost) || monthlyCost <= 0) return null;
+  return {
+    sourceMessageId: String(invoice.sourceMessageId),
+    providerName: String(invoice.providerName),
+    category: String(invoice.category),
+    monthlyCost,
+    receivedDate: String(invoice.receivedDate || ""),
+    verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
+  };
+}
+
 async function postForm(url, values) {
   const response = await fetch(url, {
     method: "POST",
@@ -75,6 +90,26 @@ async function refreshGoogleAccessToken(encryptedRefreshToken) {
   }
   return { accessToken: payload.access_token };
 }
+
+exports.getGmailConnectionStatus = onCall(
+  { enforceAppCheck: true },
+  async (request) => {
+    const uid = requireAuth(request);
+    const snapshot = await db.collection("gmailConnections").doc(uid).get();
+    if (!snapshot.exists) {
+      return { connected: false, email: "", consentVersion: "" };
+    }
+    const data = snapshot.data();
+    const connected = Array.isArray(data?.scopes) &&
+      data.scopes.includes(GMAIL_READONLY_SCOPE) &&
+      Boolean(data.encryptedRefreshToken);
+    return {
+      connected,
+      email: connected ? String(data.email || request.auth.token.email || "") : "",
+      consentVersion: connected ? String(data.consentVersion || "") : "",
+    };
+  }
+);
 
 exports.connectGmail = onCall(
   {
@@ -176,7 +211,8 @@ exports.scanGmailInvoices = onCall(
     const messageIds = Array.isArray(listPayload.messages)
       ? listPayload.messages.map((item) => item.id).filter(Boolean)
       : [];
-    const importedInvoices = [];
+    const invoices = [];
+    let importedCount = 0;
 
     for (const messageId of messageIds) {
       const auditRef = db
@@ -184,8 +220,12 @@ exports.scanGmailInvoices = onCall(
         .doc(uid)
         .collection("gmailMessageImports")
         .doc(String(messageId));
-      const alreadyImported = await auditRef.get();
-      if (alreadyImported.exists) continue;
+      const existingSnapshot = await auditRef.get();
+      const existingInvoice = storedInvoiceOrNull(existingSnapshot.data());
+      if (existingInvoice) {
+        invoices.push(existingInvoice);
+        continue;
+      }
 
       const detailUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`;
       const detailResponse = await fetch(detailUrl, {
@@ -199,18 +239,25 @@ exports.scanGmailInvoices = onCall(
       const parsed = parseGmailMessage(await detailResponse.json());
       if (!parsed) continue;
 
+      let resolvedInvoice = parsed;
       let wasCreated = false;
       await db.runTransaction(async (transaction) => {
         const current = await transaction.get(auditRef);
-        if (current.exists) return;
-        transaction.create(auditRef, {
+        const transactionInvoice = storedInvoiceOrNull(current.data());
+        if (transactionInvoice) {
+          resolvedInvoice = transactionInvoice;
+          return;
+        }
+        transaction.set(auditRef, {
           sourceMessageId: parsed.sourceMessageId,
+          invoice: parsed,
           importedAt: FieldValue.serverTimestamp(),
           parserVersion: 1,
         });
         wasCreated = true;
       });
-      if (wasCreated) importedInvoices.push(parsed);
+      if (wasCreated) importedCount += 1;
+      invoices.push(resolvedInvoice);
     }
 
     await connectionRef.set({
@@ -221,12 +268,13 @@ exports.scanGmailInvoices = onCall(
     logger.info("Gmail scan completed", {
       uid,
       candidates: messageIds.length,
-      imported: importedInvoices.length,
+      returned: invoices.length,
+      imported: importedCount,
     });
     return {
-      invoices: importedInvoices,
+      invoices,
       scannedMessages: messageIds.length,
-      importedCount: importedInvoices.length,
+      importedCount,
     };
   }
 );
@@ -320,7 +368,6 @@ exports.analyzeDeal = onCall(
       throw invalidArgument(error);
     }
 
-    const ai = new GoogleGenAI({ apiKey: geminiApiKey.value() });
     const prompt = [
       "You are a cautious Israeli household-services comparison assistant.",
       "Return JSON only with keys: summary, risks, questions, requiresVerification.",
@@ -330,6 +377,8 @@ exports.analyzeDeal = onCall(
     ].join("\n");
 
     try {
+      const { GoogleGenAI } = await import("@google/genai");
+      const ai = new GoogleGenAI({ apiKey: geminiApiKey.value() });
       const response = await ai.models.generateContent({
         model: "gemini-3.6-flash",
         contents: prompt,
