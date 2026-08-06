@@ -53,6 +53,19 @@ data class BackendDealAnalysis(
 class BackendRepository(
     private val functions: FirebaseFunctions = FirebaseFunctions.getInstance("europe-west1")
 ) {
+    suspend fun getGmailConnectionStatus(): GmailConnectionResult {
+        val response = functions.getHttpsCallable("getGmailConnectionStatus")
+            .call()
+            .await()
+            .data
+            .asStringMap()
+        return GmailConnectionResult(
+            connected = response["connected"] as? Boolean ?: false,
+            email = response["email"] as? String ?: "",
+            consentVersion = response["consentVersion"] as? String ?: ""
+        )
+    }
+
     suspend fun connectGmail(
         serverAuthCode: String,
         consentVersion: String = "gmail-readonly-v1"
@@ -90,7 +103,7 @@ class BackendRepository(
         return GmailScanResult(
             invoices = invoices,
             scannedMessages = (response["scannedMessages"] as? Number)?.toInt() ?: 0,
-            importedCount = (response["importedCount"] as? Number)?.toInt() ?: invoices.size
+            importedCount = (response["importedCount"] as? Number)?.toInt() ?: 0
         )
     }
 
