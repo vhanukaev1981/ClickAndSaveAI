@@ -38,7 +38,7 @@ test("refresh token encryption round trips", () => {
   assert.equal(decryptToken(encrypted, key), "refresh-token");
 });
 
-test("Gmail parser returns only deterministic unverified invoices", () => {
+test("Gmail parser returns only minimal deterministic invoice fields", () => {
   const parsed = parseGmailMessage({
     id: "gmail-message-1",
     snippet: "סכום לתשלום ₪123.45",
@@ -54,4 +54,7 @@ test("Gmail parser returns only deterministic unverified invoices", () => {
   assert.equal(parsed.category, "חשמל");
   assert.equal(parsed.monthlyCost, 123.45);
   assert.equal(parsed.verificationStatus, "UNVERIFIED_GMAIL_IMPORT");
+  assert.equal(parsed.subject, undefined);
+  assert.equal(parsed.sender, undefined);
+  assert.equal(parsed.snippet, undefined);
 });
