@@ -1,7 +1,19 @@
 package com.example.data.local
 
 import android.content.Context
-import androidx.room.*
+import androidx.room.Database
+import androidx.room.Dao
+import androidx.room.Entity
+import androidx.room.Index
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.PrimaryKey
+import androidx.room.Query
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -60,11 +72,11 @@ interface InvoiceDao {
     @Query("SELECT * FROM invoice_items ORDER BY dateAdded DESC")
     fun getAllInvoices(): Flow<List<InvoiceItem>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertInvoice(invoice: InvoiceItem): Long
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertInvoices(invoices: List<InvoiceItem>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertInvoices(invoices: List<InvoiceItem>): List<Long>
 
     @Update
     suspend fun updateInvoice(invoice: InvoiceItem)
@@ -84,8 +96,8 @@ interface InvoiceDao {
 
 @Database(
     entities = [WatchlistItem::class, CouponItem::class, SavingsRecord::class, InvoiceItem::class],
-    version = 2,
-    exportSchema = false
+    version = 3,
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun watchlistDao(): WatchlistDao
@@ -97,6 +109,18 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE invoice_items ADD COLUMN sourceMessageId TEXT")
+                db.execSQL("ALTER TABLE invoice_items ADD COLUMN sourceType TEXT NOT NULL DEFAULT 'MANUAL'")
+                db.execSQL("ALTER TABLE invoice_items ADD COLUMN verificationStatus TEXT NOT NULL DEFAULT 'UNVERIFIED'")
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_invoice_items_sourceMessageId " +
+                        "ON invoice_items(sourceMessageId)"
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -104,12 +128,11 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "click_and_save_ai.db"
                 )
-                .fallbackToDestructiveMigration()
-                .build()
+                    .addMigrations(MIGRATION_2_3)
+                    .build()
                 INSTANCE = instance
                 instance
             }
         }
     }
 }
-
