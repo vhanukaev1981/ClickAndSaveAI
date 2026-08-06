@@ -39,9 +39,6 @@ import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
 import com.google.firebase.FirebaseApp
-import com.google.firebase.appcheck.FirebaseAppCheck
-import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
-import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
@@ -96,12 +93,7 @@ class MainActivity : ComponentActivity() {
     private fun configureFirebaseAndAppCheck() {
         runCatching {
             FirebaseApp.initializeApp(this)
-            val factory = if (BuildConfig.DEBUG) {
-                DebugAppCheckProviderFactory.getInstance()
-            } else {
-                PlayIntegrityAppCheckProviderFactory.getInstance()
-            }
-            FirebaseAppCheck.getInstance().installAppCheckProviderFactory(factory, true)
+            AppCheckInstaller.install()
         }.onFailure {
             Log.w("MainActivity", "Firebase/App Check unavailable: ${it.localizedMessage}")
         }
@@ -216,7 +208,13 @@ fun MainAppStructure(
                     onGoogleSignIn = onGoogleSignIn,
                     onRequestGmailAuthorization = onRequestGmailAuthorization
                 )
-                else -> viewModel.setTab(0)
+                else -> DashboardScreen(
+                    viewModel = viewModel,
+                    onNavigateToTab = viewModel::setTab,
+                    onOpenReceiptScan = viewModel::reportReceiptScanUnavailable,
+                    onGoogleSignIn = onGoogleSignIn,
+                    onRequestGmailAuthorization = onRequestGmailAuthorization
+                )
             }
         }
     }
