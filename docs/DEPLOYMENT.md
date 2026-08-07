@@ -4,18 +4,21 @@ This document describes the minimum configuration required before the Android ap
 
 ## 1. Create and select the Firebase project
 
-1. Create a Firebase project in the Google Cloud organization that will own production data.
-2. Copy `.firebaserc.example` to `.firebaserc` and replace `YOUR_FIREBASE_PROJECT_ID`.
-3. Register the Android application ID `com.aistudio.clickandsaveai.app`.
-4. Download `google-services.json` into `app/`. The file is intentionally ignored by Git.
-5. Register debug and release SHA-1/SHA-256 signing certificate fingerprints.
+The staging project is already registered as `clickandsaveai-staging`.
+
+1. Copy `.firebaserc.example` to `.firebaserc`; the example already points at `clickandsaveai-staging`.
+2. Keep the registered Android application ID as `com.aistudio.clickandsaveai.app`.
+3. Place the downloaded `google-services.json` in `app/`. The file is intentionally ignored by Git.
+4. The staging debug SHA-1 and SHA-256 fingerprints are already registered. Add release fingerprints only when the release signing key exists.
+
+Never commit `google-services.json`, Android signing keys or Firebase CLI login material.
 
 ## 2. Enable required services
 
 Enable:
 
 - Firebase Authentication with Google as a provider
-- Cloud Firestore in a European location selected for the project
+- Cloud Firestore in the selected European location
 - Cloud Functions, 2nd generation
 - Gmail API
 - Firebase App Check
@@ -26,19 +29,26 @@ Do not enable App Check enforcement until debug and release requests are visible
 
 ## 3. Configure OAuth clients
 
-Create or identify:
+The staging Firebase project has already generated:
 
-- an Android OAuth client for the application ID and signing fingerprints
-- a Web OAuth client used by Firebase Authentication and server-side code exchange
+- an Android OAuth client for `com.aistudio.clickandsaveai.app` and the registered debug signing certificate
+- a Web OAuth client for Firebase Authentication and server-side code exchange
 
-Set the same Web client ID in both places:
+The staging Web client ID is already wired into `app/src/main/res/values/strings.xml` as `google_web_client_id`.
 
-1. `app/src/main/res/values/strings.xml` as `google_web_client_id`
-2. `functions/.env.<PROJECT_ID>`:
+For Functions, copy the checked-in non-secret template:
+
+```bash
+cp functions/.env.example functions/.env.clickandsaveai-staging
+```
+
+The resulting file contains only the non-secret string parameter:
 
 ```dotenv
-GOOGLE_OAUTH_CLIENT_ID=000000000000-example.apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_ID=716864421960-hnt5709tqk9qp79si8ggplf5jif1ulfu.apps.googleusercontent.com
 ```
+
+`functions/.env.clickandsaveai-staging` is ignored by Git. OAuth client secrets and API keys must not be added to this env file.
 
 The requested Gmail scope is limited to:
 
@@ -53,9 +63,9 @@ This is a Google restricted scope. Configure the OAuth consent screen, privacy p
 Run from the repository root after authenticating Firebase CLI:
 
 ```bash
-firebase functions:secrets:set GOOGLE_OAUTH_CLIENT_SECRET
-firebase functions:secrets:set OAUTH_TOKEN_ENCRYPTION_KEY
-firebase functions:secrets:set GEMINI_API_KEY
+firebase functions:secrets:set GOOGLE_OAUTH_CLIENT_SECRET --project clickandsaveai-staging
+firebase functions:secrets:set OAUTH_TOKEN_ENCRYPTION_KEY --project clickandsaveai-staging
+firebase functions:secrets:set GEMINI_API_KEY --project clickandsaveai-staging
 ```
 
 Generate the OAuth encryption key with:
@@ -64,13 +74,13 @@ Generate the OAuth encryption key with:
 openssl rand -base64 32
 ```
 
-Never reuse the Firebase service-account key, Android signing key or Gemini key as the encryption key.
+Never reuse the Firebase service-account key, Android signing key or Gemini key as the encryption key. Do not paste secret values into GitHub issues, PR comments or source files.
 
 ## 5. App Check
 
 - Debug builds use the Firebase App Check debug provider. Register only developer/CI debug tokens.
 - Release builds use Play Integrity.
-- Register the release SHA-256 certificate in Firebase App Check.
+- Register the release SHA-256 certificate in Firebase App Check when the release key exists.
 - Confirm callable-function traffic is valid before enforcing App Check for Cloud Functions.
 
 ## 6. Firestore data model
@@ -85,6 +95,13 @@ Cloud Functions access these collections with Admin SDK. Review data retention, 
 
 ## 7. Deploy and verify
 
+Before deployment, create the local Firebase alias file and Functions env file:
+
+```bash
+cp .firebaserc.example .firebaserc
+cp functions/.env.example functions/.env.clickandsaveai-staging
+```
+
 Install dependencies and run backend tests:
 
 ```bash
@@ -94,13 +111,13 @@ npm test
 cd ..
 ```
 
-Deploy rules and functions:
+Deploy rules, indexes and functions explicitly to staging:
 
 ```bash
-firebase deploy --only firestore:rules,firestore:indexes,functions
+firebase deploy --project clickandsaveai-staging --only firestore:rules,firestore:indexes,functions
 ```
 
-Verify in a non-production Firebase project first:
+Verify in staging:
 
 1. Google/Firebase sign-in succeeds.
 2. Gmail consent names only `gmail.readonly`.
