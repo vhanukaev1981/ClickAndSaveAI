@@ -34,7 +34,7 @@ The staging Firebase project has already generated:
 - an Android OAuth client for `com.aistudio.clickandsaveai.app` and the registered debug signing certificate
 - a Web OAuth client for Firebase Authentication and server-side code exchange
 
-The staging Web client ID is already wired into `app/src/main/res/values/strings.xml` as `google_web_client_id`.
+The staging Web client ID is scoped to debug builds in `app/src/debug/res/values/strings.xml`. The main/release resource intentionally remains blank so a staging OAuth client cannot accidentally ship in a production build. A future production Firebase project must provide its own release Web OAuth client ID.
 
 For Functions, copy the checked-in non-secret template:
 
