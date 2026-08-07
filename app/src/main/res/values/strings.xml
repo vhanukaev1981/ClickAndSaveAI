@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">Click &amp; Save AI</string>
-    <!-- Set this to the OAuth 2.0 Web client ID used by Firebase Auth and Cloud Functions. -->
-    <string name="google_web_client_id" translatable="false"></string>
+    <!-- OAuth 2.0 Web client ID for the ClickAndSaveAI staging Firebase project. -->
+    <string name="google_web_client_id" translatable="false">716864421960-hnt5709tqk9qp79si8ggplf5jif1ulfu.apps.googleusercontent.com</string>
 </resources>
