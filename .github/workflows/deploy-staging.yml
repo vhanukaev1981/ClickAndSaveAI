@@ -1,0 +1,103 @@
+name: Deploy Firebase Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to deploy after CI is green
+        required: true
+        default: agent/ai-native-financial-core
+        type: string
+      confirm_project:
+        description: Type clickandsaveai-staging to confirm the deployment target
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-clickandsaveai-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ inputs.confirm_project == 'clickandsaveai-staging' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 30
+
+    steps:
+      - name: Guard deployment source
+        shell: bash
+        env:
+          DEPLOY_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$DEPLOY_REF" != "agent/ai-native-financial-core" ]]; then
+            echo "Only agent/ai-native-financial-core may be deployed by this staging workflow." >&2
+            exit 1
+          fi
+
+      - name: Check out requested ref
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Verify staging deployment configuration
+        env:
+          WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$WIF_PROVIDER" || -z "$DEPLOY_SERVICE_ACCOUNT" ]]; then
+            echo 'The staging environment must define GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_DEPLOY_SERVICE_ACCOUNT.' >&2
+            exit 1
+          fi
+          node <<'NODE'
+          const fs = require('fs');
+          const config = JSON.parse(fs.readFileSync('.firebaserc.example', 'utf8'));
+          if (config?.projects?.default !== 'clickandsaveai-staging') {
+            throw new Error('Repository staging project guard does not point at clickandsaveai-staging');
+          }
+          const firebase = JSON.parse(fs.readFileSync('firebase.json', 'utf8'));
+          if (!firebase.functions || !firebase.firestore) {
+            throw new Error('firebase.json does not define both Functions and Firestore deployment targets');
+          }
+          NODE
+
+      - id: auth
+        name: Authenticate to Google Cloud with GitHub OIDC
+        uses: google-github-actions/auth@v3
+        with:
+          create_credentials_file: 'true'
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Install backend dependencies
+        working-directory: functions
+        run: npm install --ignore-scripts
+
+      - name: Re-run backend tests before deployment
+        working-directory: functions
+        run: npm test
+
+      - name: Install pinned Firebase CLI
+        run: npm install --global firebase-tools@15.1.0
+
+      - name: Deploy functions and Firestore to staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase deploy \
+            --project clickandsaveai-staging \
+            --only firestore:rules,firestore:indexes,functions \
+            --non-interactive
