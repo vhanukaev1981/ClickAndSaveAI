@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -75,12 +74,12 @@ fun ProfileScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    "הפרופיל שלי",
+                    "אני והעדפות",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "החשבון והעדפות החיסכון שלך במקום אחד.",
+                    "החשבון, יעדי החיסכון והשליטה בפרטיות במקום אחד.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -96,7 +95,7 @@ fun ProfileScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.AccountCircle, contentDescription = null, tint = TechBluePrimary)
                         Spacer(modifier = Modifier.size(8.dp))
-                        Text("החשבון שלך", fontWeight = FontWeight.Bold)
+                        Text("החשבון שלי", fontWeight = FontWeight.Bold)
                     }
 
                     if (session.isAuthenticated) {
@@ -120,13 +119,13 @@ fun ProfileScreen(
                         }
                     } else {
                         Text(
-                            "התחבר כדי לשמור את החוויה האישית שלך ולהמשיך מאותו חשבון.",
+                            "התחבר כדי לשמור את התמונה הפיננסית וההעדפות שלך.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Button(onClick = onGoogleSignIn, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Login, contentDescription = null)
                             Spacer(modifier = Modifier.size(6.dp))
-                            Text("התחבר עם Google")
+                            Text("התחבר")
                         }
                     }
                 }
@@ -145,14 +144,14 @@ fun ProfileScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Savings, contentDescription = null, tint = TechBluePrimary)
                         Spacer(modifier = Modifier.size(8.dp))
-                        Text("העדפות החיסכון שלי", fontWeight = FontWeight.Bold)
+                        Text("יעדי החיסכון שלי", fontWeight = FontWeight.Bold)
                     }
                     Text(
                         if (monthlyGoal > 0.0) "יעד חיסכון חודשי: ₪${monthlyGoal.toInt()}" else "עדיין לא הוגדר יעד חיסכון חודשי",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        if (minSavingsThreshold > 0.0) "סף חיסכון מועדף: ₪${minSavingsThreshold.toInt()} בחודש" else "אפשר להגדיר מאיזה סכום חיסכון תרצה להתמקד",
+                        if (minSavingsThreshold > 0.0) "הצג לי חיסכון משמעותי מ־₪${minSavingsThreshold.toInt()} בחודש" else "אפשר להגדיר מאיזה סכום חיסכון תרצה להתמקד",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -180,7 +179,7 @@ fun ProfileScreen(
                         Text("פרטיות ושליטה", fontWeight = FontWeight.Bold)
                     }
                     Text(
-                        "Click&SaveAI מציגה המלצות רק כשיש מספיק מידע כדי לאמת אותן. פעולה מול ספק מתבצעת רק לאחר אישור מפורש שלך.",
+                        "המלצות מוצגות רק כשיש מספיק מידע כדי לאמת אותן. כל פעולה מול נותן שירות דורשת אישור מפורש שלך.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     OutlinedButton(
@@ -230,7 +229,7 @@ private fun PrivacyConnectionsScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "כאן אפשר לראות ולבטל חיבורים פעילים.",
+                        "כאן אפשר לראות ולבטל מקורות מידע שחיברת.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -256,9 +255,9 @@ private fun PrivacyConnectionsScreen(
                     )
                     Text(
                         if (isGmailConnected) {
-                            "הגישה היא לקריאה בלבד ומשמשת לאיתור מסמכים פיננסיים רלוונטיים. אפשר לבטל אותה בכל עת."
+                            "החיבור הוא לקריאה בלבד ומשמש לאיתור חשבוניות ומסמכי חיוב רלוונטיים. אפשר לבטל אותו בכל עת."
                         } else {
-                            "חיבור חדש מתבצע רק מתהליך ההצטרפות במסך הבית, כדי לשמור על חוויה פשוטה וברורה."
+                            "חיבור חדש מתבצע מתהליך ההצטרפות במסך הבית."
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -287,7 +286,7 @@ private fun PrivacyConnectionsScreen(
                 ) {
                     Text("השליטה נשארת אצלך", fontWeight = FontWeight.Bold)
                     Text(
-                        "המערכת אינה מבצעת מעבר ספק או פעולה כספית ללא אישור מפורש שלך, ואינה שולחת לספק את תוכן ה-Gmail או את תמונת ההוצאות שלך.",
+                        "המערכת אינה מבצעת מעבר ספק או פעולה כספית ללא אישור מפורש שלך, ואינה מעבירה לנותן שירות את תוכן תיבת הדואר או את תמונת ההוצאות המלאה שלך.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
