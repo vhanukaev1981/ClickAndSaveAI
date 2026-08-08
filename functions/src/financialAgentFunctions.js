@@ -3,6 +3,7 @@
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const logger = require("firebase-functions/logger");
 const {
   buildFinancialContext,
@@ -15,6 +16,8 @@ const MAX_SOURCE_DOCS_PER_AGENT_RUN = 500;
 const MAX_PROVIDER_OFFERS_PER_RUN = 500;
 const MAX_WRITES_PER_BATCH = 400;
 const MAX_HOME_ITEMS = 20;
+const MAX_USERS_PER_SWEEP = 250;
+const SWEEP_CONCURRENCY = 5;
 
 function requireAuth(request) {
   const uid = request.auth?.uid;
@@ -97,7 +100,7 @@ async function persistFinancialState(uid, invoices, providerOffers = []) {
       activeInsightIds: insights.map((item) => item.id),
       activeOpportunityIds: opportunities.map((item) => item.id),
       generatedAt: FieldValue.serverTimestamp(),
-      engineVersion: 2,
+      engineVersion: 3,
     },
   });
 
@@ -108,7 +111,7 @@ async function persistFinancialState(uid, invoices, providerOffers = []) {
         ...insight,
         engineGenerated: true,
         updatedAt: FieldValue.serverTimestamp(),
-        engineVersion: 2,
+        engineVersion: 3,
       },
     });
   }
@@ -122,7 +125,7 @@ async function persistFinancialState(uid, invoices, providerOffers = []) {
         ...opportunity,
         engineGenerated: true,
         updatedAt: FieldValue.serverTimestamp(),
-        engineVersion: 2,
+        engineVersion: 3,
       },
     });
 
@@ -143,7 +146,7 @@ async function persistFinancialState(uid, invoices, providerOffers = []) {
           commissionValue: commission?.commissionValue ?? null,
           attributionStatus: "MATCHED_NOT_ACTED",
           updatedAt: FieldValue.serverTimestamp(),
-          engineVersion: 2,
+          engineVersion: 3,
         },
       });
     }
@@ -161,11 +164,12 @@ async function persistFinancialState(uid, invoices, providerOffers = []) {
   };
 }
 
-async function runFinancialAgentForUser(uid) {
-  const [invoices, providerOffers] = await Promise.all([
-    loadObservedInvoices(uid),
-    loadProviderOffers(),
-  ]);
+async function runFinancialAgentForUser(uid, providerOffersOverride = null) {
+  const invoicesPromise = loadObservedInvoices(uid);
+  const offersPromise = providerOffersOverride == null
+    ? loadProviderOffers()
+    : Promise.resolve(providerOffersOverride);
+  const [invoices, providerOffers] = await Promise.all([invoicesPromise, offersPromise]);
   const result = await persistFinancialState(uid, invoices, providerOffers);
   logger.info("Financial agent evaluation completed", {
     uid,
@@ -233,6 +237,34 @@ function homeInsight(item) {
   };
 }
 
+async function runSweep() {
+  const [connections, providerOffers] = await Promise.all([
+    db.collection("gmailConnections").limit(MAX_USERS_PER_SWEEP).get(),
+    loadProviderOffers(),
+  ]);
+  const userIds = connections.docs.map((doc) => doc.id);
+  let successCount = 0;
+  let failureCount = 0;
+
+  for (let index = 0; index < userIds.length; index += SWEEP_CONCURRENCY) {
+    const group = userIds.slice(index, index + SWEEP_CONCURRENCY);
+    const results = await Promise.allSettled(
+      group.map((uid) => runFinancialAgentForUser(uid, providerOffers))
+    );
+    for (const result of results) {
+      if (result.status === "fulfilled") successCount += 1;
+      else failureCount += 1;
+    }
+  }
+
+  logger.info("Scheduled financial agent sweep completed", {
+    userCount: userIds.length,
+    providerOfferCount: providerOffers.length,
+    successCount,
+    failureCount,
+  });
+}
+
 exports.onGmailFinancialDataChanged = onDocumentWritten(
   {
     document: "users/{uid}/gmailMessageImports/{messageId}",
@@ -245,6 +277,17 @@ exports.onGmailFinancialDataChanged = onDocumentWritten(
     if (!uid) return;
     await runFinancialAgentForUser(uid);
   }
+);
+
+exports.financialAgentSweep = onSchedule(
+  {
+    schedule: "every 4 hours",
+    timeZone: "Asia/Jerusalem",
+    region: "europe-west1",
+    memory: "512MiB",
+    timeoutSeconds: 540,
+  },
+  runSweep
 );
 
 exports.refreshFinancialAgent = onCall(
@@ -305,3 +348,4 @@ exports._loadObservedInvoices = loadObservedInvoices;
 exports._loadProviderOffers = loadProviderOffers;
 exports._homeOpportunity = homeOpportunity;
 exports._homeInsight = homeInsight;
+exports._runSweep = runSweep;
