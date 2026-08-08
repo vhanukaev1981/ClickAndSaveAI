@@ -33,6 +33,8 @@ const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const CONSENT_VERSION = "gmail-readonly-v1";
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
+const INITIAL_GMAIL_LOOKBACK = "6m";
+const GMAIL_LIST_PAGE_SIZE = 100;
 
 function requireAuth(request) {
   if (!request.auth?.uid) {
@@ -197,6 +199,45 @@ async function analyzePdfInvoice(message, pdfBase64, filename) {
   return normalizePdfInvoiceCandidate(candidate, message);
 }
 
+async function listGmailCandidateMessageIds(accessToken) {
+  const query = `newer_than:${INITIAL_GMAIL_LOOKBACK} {חשבונית קבלה "הודעת תשלום" "פירוט חיוב" "חשבון חודשי" invoice receipt bill statement סלקום cellcom פרטנר partner פלאפון pelephone בזק bezeq "חברת החשמל" HOT yes filename:pdf}`;
+  const messageIds = [];
+  const seen = new Set();
+  let pageToken = "";
+  let pageCount = 0;
+
+  do {
+    const params = new URLSearchParams({
+      q: query,
+      maxResults: String(GMAIL_LIST_PAGE_SIZE),
+    });
+    if (pageToken) params.set("pageToken", pageToken);
+
+    const listResponse = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?${params.toString()}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!listResponse.ok) {
+      logger.error("Gmail messages.list failed", { status: listResponse.status, pageCount });
+      throw new HttpsError("unavailable", "Gmail could not be scanned right now.");
+    }
+
+    const listPayload = await listResponse.json();
+    for (const item of Array.isArray(listPayload.messages) ? listPayload.messages : []) {
+      const id = String(item?.id || "");
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        messageIds.push(id);
+      }
+    }
+
+    pageToken = String(listPayload.nextPageToken || "");
+    pageCount += 1;
+  } while (pageToken);
+
+  return { messageIds, pageCount };
+}
+
 exports.getGmailConnectionStatus = onCall(
   { enforceAppCheck: true },
   async (request) => {
@@ -300,8 +341,8 @@ exports.scanGmailInvoices = onCall(
   {
     enforceAppCheck: true,
     secrets: [googleOAuthClientSecret, oauthTokenEncryptionKey, geminiApiKey],
-    timeoutSeconds: 120,
-    memory: "512MiB",
+    timeoutSeconds: 540,
+    memory: "1GiB",
   },
   async (request) => {
     const uid = requireAuth(request);
@@ -317,22 +358,7 @@ exports.scanGmailInvoices = onCall(
     }
 
     const { accessToken } = await refreshGoogleAccessToken(connectionData.encryptedRefreshToken);
-    const query = encodeURIComponent(
-      'newer_than:24m {חשבונית קבלה "הודעת תשלום" "פירוט חיוב" "חשבון חודשי" invoice receipt bill statement סלקום cellcom פרטנר partner פלאפון pelephone בזק bezeq "חברת החשמל" HOT yes filename:pdf}'
-    );
-    const listResponse = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=100`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    if (!listResponse.ok) {
-      logger.error("Gmail messages.list failed", { uid, status: listResponse.status });
-      throw new HttpsError("unavailable", "Gmail could not be scanned right now.");
-    }
-
-    const listPayload = await listResponse.json();
-    const messageIds = Array.isArray(listPayload.messages)
-      ? listPayload.messages.map((item) => item.id).filter(Boolean)
-      : [];
+    const { messageIds, pageCount } = await listGmailCandidateMessageIds(accessToken);
     const invoices = [];
     let importedCount = 0;
     let pdfCandidates = 0;
@@ -408,11 +434,15 @@ exports.scanGmailInvoices = onCall(
 
     await connectionRef.set({
       lastScanAt: FieldValue.serverTimestamp(),
+      initialBackfillLookback: INITIAL_GMAIL_LOOKBACK,
+      initialBackfillPages: pageCount,
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
 
     logger.info("Gmail scan completed", {
       uid,
+      lookback: INITIAL_GMAIL_LOOKBACK,
+      pages: pageCount,
       candidates: messageIds.length,
       returned: invoices.length,
       imported: importedCount,
@@ -423,6 +453,8 @@ exports.scanGmailInvoices = onCall(
       invoices,
       scannedMessages: messageIds.length,
       importedCount,
+      scannedPages: pageCount,
+      lookback: INITIAL_GMAIL_LOOKBACK,
     };
   }
 );
