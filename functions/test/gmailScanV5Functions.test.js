@@ -2,12 +2,12 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { getApps, initializeApp } = require("firebase-admin/app");
 
-if (getApps().length === 0) initializeApp({ projectId: "clickandsaveai-test" });
-
-const v5 = require("../src/gmailScanV5Functions");
+// entry.js loads the production bootstrap first; index.js initializes the default
+// Firebase Admin app. Requiring v5 afterwards avoids creating a second default app
+// with a different test-only configuration.
 const entry = require("../src/entry");
+const v5 = require("../src/gmailScanV5Functions");
 
 test("public scanGmailInvoices export is routed to parser v5", () => {
   assert.equal(v5.GMAIL_PARSER_VERSION_V5, 5);
