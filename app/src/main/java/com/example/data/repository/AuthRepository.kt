@@ -140,13 +140,12 @@ class AuthRepository(private val applicationContext: Context) {
         runCatching { getFirebaseAuthSafe()?.signOut() }
             .onFailure { Log.e("AuthRepository", "Sign-out failed", it) }
 
-        // Invoice data can originate from the signed-in Gmail account. Purge it before another
-        // account can be used on the same device. Android backup is disabled, so this also keeps
-        // account-derived invoice metadata from lingering locally after sign-out.
+        // Remove only Gmail-derived data before another account can be used on this device.
+        // Manually entered invoices belong to the local app state and must survive sign-out.
         runCatching {
-            AppDatabase.getDatabase(applicationContext).invoiceDao().deleteAllInvoices()
+            AppDatabase.getDatabase(applicationContext).invoiceDao().deleteGmailInvoices()
         }.onFailure {
-            Log.e("AuthRepository", "Local invoice purge on sign-out failed", it)
+            Log.e("AuthRepository", "Local Gmail invoice purge on sign-out failed", it)
         }
 
         _userSession.value = UserSession()
