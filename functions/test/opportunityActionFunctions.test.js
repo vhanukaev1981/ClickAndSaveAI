@@ -2,6 +2,10 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { getApps, initializeApp } = require("firebase-admin/app");
+
+if (getApps().length === 0) initializeApp({ projectId: "clickandsaveai-test" });
+
 const {
   _validateOpportunityActionInput: validateOpportunityActionInput,
   _verifiedActionSnapshot: verifiedActionSnapshot,
