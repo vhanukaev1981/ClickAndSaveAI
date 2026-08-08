@@ -1,7 +1,7 @@
 {
   "name": "click-and-save-functions",
   "private": true,
-  "main": "src/index.js",
+  "main": "src/entry.js",
   "engines": {
     "node": "22"
   },
