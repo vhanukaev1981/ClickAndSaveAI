@@ -166,12 +166,14 @@ fun ProvidersScreen(viewModel: MainViewModel) {
             defaultEmail = session.email,
             onDismiss = { selectedOpportunity = null },
             onSubmit = { name, phone, email ->
+                val displayedOfferId = opportunity.matchedOffer?.offerId.orEmpty()
                 selectedOpportunity = null
                 loading = true
                 scope.launch {
                     runCatching {
                         actionRepository.acceptSavingsOpportunity(
                             opportunityId = opportunity.id,
+                            expectedOfferId = displayedOfferId,
                             contactName = name,
                             phone = phone,
                             contactEmail = email
