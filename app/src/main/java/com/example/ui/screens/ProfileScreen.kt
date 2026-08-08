@@ -14,13 +14,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -37,6 +38,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.ui.MainViewModel
+import com.example.ui.theme.TechBluePrimary
 
 @Composable
 fun ProfileScreen(
@@ -51,9 +53,8 @@ fun ProfileScreen(
     }
 
     val session by viewModel.userSession.collectAsState()
-    val isGmailConnected by viewModel.isGmailConnected.collectAsState()
-    val connectedEmail by viewModel.connectedEmail.collectAsState()
-    val isSyncing by viewModel.isSyncingGmail.collectAsState()
+    val monthlyGoal by viewModel.monthlySavingsGoal.collectAsState()
+    val minSavingsThreshold by viewModel.minSavingsThreshold.collectAsState()
 
     LazyColumn(
         modifier = Modifier
@@ -63,34 +64,56 @@ fun ProfileScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text(
-                "הפרופיל שלי",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    "הפרופיל שלי",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "החשבון והעדפות החיסכון שלך במקום אחד.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         item {
-            Card(shape = RoundedCornerShape(18.dp)) {
-                Column(modifier = Modifier.padding(16.dp)) {
+            Card(shape = RoundedCornerShape(20.dp)) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.AccountCircle, contentDescription = null)
+                        Icon(Icons.Default.AccountCircle, contentDescription = null, tint = TechBluePrimary)
                         Spacer(modifier = Modifier.size(8.dp))
-                        Text("חשבון", fontWeight = FontWeight.Bold)
+                        Text("החשבון שלך", fontWeight = FontWeight.Bold)
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
+
                     if (session.isAuthenticated) {
-                        Text(session.displayName.ifBlank { "משתמש מחובר" }, fontWeight = FontWeight.Bold)
-                        Text(session.email.ifBlank { "כתובת דוא״ל לא זמינה" })
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedButton(onClick = viewModel::signOut, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            session.displayName.ifBlank { "משתמש מחובר" },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            session.email.ifBlank { "כתובת דוא״ל לא זמינה" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedButton(
+                            onClick = viewModel::signOut,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Icon(Icons.Default.Logout, contentDescription = null)
                             Spacer(modifier = Modifier.size(6.dp))
                             Text("התנתק")
                         }
                     } else {
-                        Text("עדיין לא התחברת")
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            "התחבר כדי לשמור את החוויה האישית שלך ולהמשיך מאותו חשבון.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                         Button(onClick = onGoogleSignIn, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Login, contentDescription = null)
                             Spacer(modifier = Modifier.size(6.dp))
@@ -102,82 +125,60 @@ fun ProfileScreen(
         }
 
         item {
-            Card(shape = RoundedCornerShape(18.dp)) {
-                Column(modifier = Modifier.padding(16.dp)) {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Email, contentDescription = null)
+                        Icon(Icons.Default.Savings, contentDescription = null, tint = TechBluePrimary)
                         Spacer(modifier = Modifier.size(8.dp))
-                        Text("חיבור Gmail", fontWeight = FontWeight.Bold)
+                        Text("העדפות החיסכון שלי", fontWeight = FontWeight.Bold)
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        if (isGmailConnected) {
-                            "מחובר: ${connectedEmail.ifBlank { session.email }}"
-                        } else {
-                            "Gmail עדיין לא מחובר"
-                        }
+                        if (monthlyGoal > 0.0) "יעד חיסכון חודשי: ₪${monthlyGoal.toInt()}" else "עדיין לא הוגדר יעד חיסכון חודשי",
+                        style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        if (isGmailConnected) {
-                            "חשבוניות חדשות נקלטות אוטומטית. אין צורך לבצע סריקה ידנית."
-                        } else {
-                            "בחיבור הראשון נבדוק עד 6 חודשים אחורה. ההרשאה היא לקריאה בלבד."
-                        },
+                        if (minSavingsThreshold > 0.0) "סף חיסכון מועדף: ₪${minSavingsThreshold.toInt()} בחודש" else "אפשר להגדיר מאיזה סכום חיסכון תרצה להתמקד",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    when {
-                        !session.isAuthenticated -> {
-                            Button(onClick = onGoogleSignIn, modifier = Modifier.fillMaxWidth()) {
-                                Text("התחבר לפני חיבור Gmail")
-                            }
-                        }
-                        !isGmailConnected -> {
-                            Button(
-                                onClick = onRequestGmailAuthorization,
-                                enabled = !isSyncing,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(Icons.Default.Security, contentDescription = null)
-                                Spacer(modifier = Modifier.size(6.dp))
-                                Text("חבר Gmail")
-                            }
-                        }
-                        else -> {
-                            OutlinedButton(
-                                onClick = viewModel::disconnectGmail,
-                                enabled = !isSyncing,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("נתק Gmail")
-                            }
-                        }
+                    Button(
+                        onClick = { showSettings = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = null)
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text("ערוך העדפות")
                     }
                 }
             }
         }
 
         item {
-            Card(shape = RoundedCornerShape(18.dp)) {
-                Column(modifier = Modifier.padding(16.dp)) {
+            Card(shape = RoundedCornerShape(20.dp)) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Settings, contentDescription = null)
+                        Icon(Icons.Default.PrivacyTip, contentDescription = null, tint = TechBluePrimary)
                         Spacer(modifier = Modifier.size(8.dp))
-                        Text("העדפות", fontWeight = FontWeight.Bold)
+                        Text("פרטיות ושליטה", fontWeight = FontWeight.Bold)
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "הגדר את יעדי החיסכון והעדפות השירות שלך.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        "Click&SaveAI מציגה המלצות רק כשיש מספיק מידע כדי לאמת אותן. פעולה מול ספק מתבצעת רק לאחר אישור מפורש שלך.",
+                        style = MaterialTheme.typography.bodyMedium
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Button(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth()) {
-                        Text("פתח הגדרות")
-                    }
                 }
             }
         }
     }
+
+    @Suppress("UNUSED_VARIABLE")
+    val gmailAuthorizationKeptForNavigationCompatibility = onRequestGmailAuthorization
 }
