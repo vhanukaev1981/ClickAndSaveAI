@@ -38,7 +38,7 @@ class GmailInvoiceMergeTest {
 
         val merged = mergeObservedGmailInvoice(existing, upgraded)
 
-        assertEquals(42, merged.id)
+        assertEquals(42L, merged.id)
         assertEquals("הראל", merged.providerName)
         assertEquals(599.0, merged.monthlyCost, 0.0)
         assertEquals("2026-08-01", merged.billDate)
