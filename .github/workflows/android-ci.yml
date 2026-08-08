@@ -45,10 +45,41 @@ jobs:
     env:
       STAGING_DEBUG_KEYSTORE_B64: ${{ secrets.STAGING_DEBUG_KEYSTORE_B64 }}
       STAGING_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.STAGING_DEBUG_KEYSTORE_PASSWORD }}
+      STAGING_GOOGLE_SERVICES_JSON_B64: ${{ secrets.STAGING_GOOGLE_SERVICES_JSON_B64 }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+
+      - name: Restore and verify staging Firebase config
+        shell: bash
+        run: |
+          if [[ -z "$STAGING_GOOGLE_SERVICES_JSON_B64" ]]; then
+            echo 'STAGING_FIREBASE_READY=false' >> "$GITHUB_ENV"
+            if [[ -n "$STAGING_DEBUG_KEYSTORE_B64" && -n "$STAGING_DEBUG_KEYSTORE_PASSWORD" ]]; then
+              echo 'A certificate-verified OAuth E2E APK also requires STAGING_GOOGLE_SERVICES_JSON_B64.' >&2
+              exit 1
+            fi
+            echo '::notice::Staging Firebase config is not configured. CI can compile, but will not publish an OAuth E2E-ready APK.'
+            exit 0
+          fi
+
+          printf '%s' "$STAGING_GOOGLE_SERVICES_JSON_B64" | base64 --decode > app/google-services.json
+          node <<'NODE'
+          const fs = require('fs');
+          const config = JSON.parse(fs.readFileSync('app/google-services.json', 'utf8'));
+          if (config?.project_info?.project_id !== 'clickandsaveai-staging') {
+            throw new Error('google-services.json does not target clickandsaveai-staging');
+          }
+          const clients = Array.isArray(config.client) ? config.client : [];
+          const hasPackage = clients.some(
+            (client) => client?.client_info?.android_client_info?.package_name === 'com.aistudio.clickandsaveai.app'
+          );
+          if (!hasPackage) {
+            throw new Error('google-services.json does not contain com.aistudio.clickandsaveai.app');
+          }
+          NODE
+          echo 'STAGING_FIREBASE_READY=true' >> "$GITHUB_ENV"
 
       - name: Verify staging OAuth isolation
         shell: bash
@@ -110,7 +141,7 @@ jobs:
         run: gradle --no-daemon assembleDebug --stacktrace
 
       - name: Verify staging debug APK signing certificate
-        if: ${{ env.STAGING_SIGNING_READY == 'true' }}
+        if: ${{ env.STAGING_SIGNING_READY == 'true' && env.STAGING_FIREBASE_READY == 'true' }}
         shell: bash
         run: |
           APK="$(find app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
@@ -128,7 +159,7 @@ jobs:
           fi
 
       - name: Upload OAuth E2E-ready staging debug APK
-        if: ${{ env.STAGING_SIGNING_READY == 'true' }}
+        if: ${{ env.STAGING_SIGNING_READY == 'true' && env.STAGING_FIREBASE_READY == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: clickandsaveai-staging-debug-${{ github.sha }}
