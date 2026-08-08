@@ -6,6 +6,7 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const { MONETIZABLE_CATEGORIES } = require("./financialIntelligence");
 const { _runSweep: runFinancialAgentSweep } = require("./financialAgentFunctions");
+const { normalizeServiceType } = require("./serviceProfile");
 const { requiredString, optionalString } = require("./validation");
 
 const db = getFirestore();
@@ -70,7 +71,12 @@ function validateProviderOfferInput(data, nowMs = Date.now()) {
   const country = requiredString(data.country || "IL", "country", 2).toUpperCase();
   if (country !== "IL") throw new TypeError("only IL offers are currently supported");
 
-  const serviceType = requiredString(data.serviceType, "serviceType", 160);
+  const rawServiceType = requiredString(data.serviceType, "serviceType", 160);
+  const serviceType = normalizeServiceType(category, rawServiceType);
+  if (!serviceType) {
+    throw new TypeError("serviceType is not a supported explicit service profile");
+  }
+
   const monthlyPrice = Number(data.monthlyPrice);
   if (!Number.isFinite(monthlyPrice) || monthlyPrice <= 0 || monthlyPrice >= 100_000) {
     throw new TypeError("monthlyPrice is invalid");
@@ -115,6 +121,9 @@ function validateProviderOfferInput(data, nowMs = Date.now()) {
     if (!Number.isFinite(commissionValue) || commissionValue < 0 || commissionValue > 1_000_000) {
       throw new TypeError("commissionValue is invalid");
     }
+  }
+  if (commissionType === "NONE" && commissionValue !== null) {
+    throw new TypeError("commissionValue must be empty when commissionType is NONE");
   }
   if (commercialAgreementActive && commissionType !== "NONE" && commissionValue === null) {
     throw new TypeError("commissionValue is required for an active commission model");
@@ -172,7 +181,7 @@ exports.upsertProviderOffer = onCall(
       updatedByOperatorUid: operatorUid,
       updatedAt: FieldValue.serverTimestamp(),
       ...(existing.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
-      catalogVersion: 1,
+      catalogVersion: 2,
     }, { merge: true });
 
     logger.info("Provider offer catalog entry upserted", {
@@ -180,12 +189,14 @@ exports.upsertProviderOffer = onCall(
       offerId: offer.offerId,
       providerName: offer.providerName,
       category: offer.category,
+      serviceType: offer.serviceType,
       availabilityStatus: offer.availabilityStatus,
       commercialAgreementActive: offer.commercialAgreementActive,
     });
 
     return {
       offerId: offer.offerId,
+      serviceType: offer.serviceType,
       saved: true,
       availabilityStatus: offer.availabilityStatus,
       officialSourceVerified: true,
@@ -197,7 +208,12 @@ exports.disableProviderOffer = onCall(
   { enforceAppCheck: true },
   async (request) => {
     const operatorUid = requireCatalogOperator(request);
-    const offerId = requiredString(request.data?.offerId, "offerId", 128);
+    let offerId;
+    try {
+      offerId = requiredString(request.data?.offerId, "offerId", 128);
+    } catch (error) {
+      throw new HttpsError("invalid-argument", error instanceof Error ? error.message : "Invalid offer id");
+    }
     const ref = db.collection("providerOffers").doc(offerId);
     const snapshot = await ref.get();
     if (!snapshot.exists) throw new HttpsError("not-found", "Provider offer was not found.");
