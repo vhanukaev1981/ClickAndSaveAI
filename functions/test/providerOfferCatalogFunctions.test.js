@@ -34,11 +34,12 @@ function validOffer(overrides = {}) {
   };
 }
 
-test("catalog accepts a current Israeli offer with official HTTPS evidence", () => {
+test("catalog accepts a current Israeli offer and stores a canonical service profile", () => {
   const result = validateProviderOfferInput(validOffer(), nowMs);
   assert.equal(result.offerId, "internet-provider-a-1g-202608");
   assert.equal(result.monthlyPrice, 89);
   assert.equal(result.category, "אינטרנט");
+  assert.equal(result.serviceType, "INTERNET_1000_MBPS");
   assert.equal(result.commissionType, "CPA");
 });
 
@@ -64,7 +65,14 @@ test("catalog rejects expired and implausibly long-lived offers", () => {
   );
 });
 
-test("commission data cannot be attached without an active commercial agreement", () => {
+test("catalog rejects service wording that cannot be normalized safely", () => {
+  assert.throws(
+    () => validateProviderOfferInput(validOffer({ serviceType: "fast premium internet" }), nowMs),
+    /serviceType/i
+  );
+});
+
+test("commission data cannot be attached without a valid active commission model", () => {
   assert.throws(
     () => validateProviderOfferInput(validOffer({
       commercialAgreementActive: false,
@@ -72,6 +80,14 @@ test("commission data cannot be attached without an active commercial agreement"
       commissionValue: 180,
     }), nowMs),
     /must be NONE/i
+  );
+  assert.throws(
+    () => validateProviderOfferInput(validOffer({
+      commercialAgreementActive: false,
+      commissionType: "NONE",
+      commissionValue: 180,
+    }), nowMs),
+    /must be empty/i
   );
 
   const nonPartner = validateProviderOfferInput(validOffer({
@@ -81,6 +97,7 @@ test("commission data cannot be attached without an active commercial agreement"
   }), nowMs);
   assert.equal(nonPartner.commercialAgreementActive, false);
   assert.equal(nonPartner.commissionType, "NONE");
+  assert.equal(nonPartner.commissionValue, null);
 });
 
 test("catalog only accepts supported household savings categories and IL offers", () => {
