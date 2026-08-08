@@ -8,6 +8,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.Transaction
 import androidx.room.Update
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -78,8 +79,40 @@ interface InvoiceDao {
     @Update
     suspend fun updateInvoice(invoice: InvoiceItem)
 
+    @Query("SELECT * FROM invoice_items WHERE sourceMessageId = :sourceMessageId LIMIT 1")
+    suspend fun findBySourceMessageId(sourceMessageId: String): InvoiceItem?
+
+    /**
+     * Refresh fields sourced from Gmail without erasing later user/business enrichment.
+     * The unique sourceMessageId index remains the deduplication boundary.
+     */
+    @Transaction
+    suspend fun upsertGmailInvoice(invoice: InvoiceItem): Long {
+        val sourceMessageId = invoice.sourceMessageId
+            ?: throw IllegalArgumentException("Gmail invoice requires sourceMessageId")
+        val existing = findBySourceMessageId(sourceMessageId)
+        if (existing == null) return insertInvoice(invoice)
+
+        updateInvoice(
+            invoice.copy(
+                id = existing.id,
+                recommendedAlternative = existing.recommendedAlternative,
+                alternativeMonthlyCost = existing.alternativeMonthlyCost,
+                potentialMonthlySavings = existing.potentialMonthlySavings,
+                status = existing.status,
+                isSwitchRequested = existing.isSwitchRequested,
+                dateAdded = existing.dateAdded,
+                accountNumber = existing.accountNumber
+            )
+        )
+        return existing.id
+    }
+
     @Query("DELETE FROM invoice_items WHERE id = :id")
     suspend fun deleteInvoice(id: Long)
+
+    @Query("DELETE FROM invoice_items WHERE sourceType = 'GMAIL_READONLY'")
+    suspend fun deleteGmailInvoices()
 
     @Query("DELETE FROM invoice_items")
     suspend fun deleteAllInvoices()
