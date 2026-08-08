@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.PrivacyTip
@@ -23,6 +25,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -47,8 +50,14 @@ fun ProfileScreen(
     onRequestGmailAuthorization: () -> Unit
 ) {
     var showSettings by remember { mutableStateOf(false) }
+    var showPrivacy by remember { mutableStateOf(false) }
+
     if (showSettings) {
         SettingsScreen(viewModel = viewModel, onBackClick = { showSettings = false })
+        return
+    }
+    if (showPrivacy) {
+        PrivacyConnectionsScreen(viewModel = viewModel, onBackClick = { showPrivacy = false })
         return
     }
 
@@ -174,6 +183,14 @@ fun ProfileScreen(
                         "Click&SaveAI מציגה המלצות רק כשיש מספיק מידע כדי לאמת אותן. פעולה מול ספק מתבצעת רק לאחר אישור מפורש שלך.",
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    OutlinedButton(
+                        onClick = { showPrivacy = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Link, contentDescription = null)
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text("ניהול פרטיות וחיבורים")
+                    }
                 }
             }
         }
@@ -181,4 +198,100 @@ fun ProfileScreen(
 
     @Suppress("UNUSED_VARIABLE")
     val gmailAuthorizationKeptForNavigationCompatibility = onRequestGmailAuthorization
+}
+
+@Composable
+private fun PrivacyConnectionsScreen(
+    viewModel: MainViewModel,
+    onBackClick: () -> Unit
+) {
+    val isGmailConnected by viewModel.isGmailConnected.collectAsState()
+    val connectedEmail by viewModel.connectedEmail.collectAsState()
+    val isSyncing by viewModel.isSyncingGmail.collectAsState()
+    val session by viewModel.userSession.collectAsState()
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("privacy_connections_screen"),
+        contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 100.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBackClick) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "חזרה")
+                }
+                Spacer(modifier = Modifier.size(6.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        "פרטיות וחיבורים",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "כאן אפשר לראות ולבטל חיבורים פעילים.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        item {
+            Card(shape = RoundedCornerShape(20.dp)) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Link, contentDescription = null, tint = TechBluePrimary)
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text("מקור מסמכים", fontWeight = FontWeight.Bold)
+                    }
+                    Text(
+                        if (isGmailConnected) "מחובר${connectedEmail.ifBlank { session.email }.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ""}" else "לא מחובר",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        if (isGmailConnected) {
+                            "הגישה היא לקריאה בלבד ומשמשת לאיתור מסמכים פיננסיים רלוונטיים. אפשר לבטל אותה בכל עת."
+                        } else {
+                            "חיבור חדש מתבצע רק מתהליך ההצטרפות במסך הבית, כדי לשמור על חוויה פשוטה וברורה."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (isGmailConnected) {
+                        OutlinedButton(
+                            onClick = viewModel::disconnectGmail,
+                            enabled = !isSyncing,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (isSyncing) "מנתק…" else "בטל את החיבור")
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text("השליטה נשארת אצלך", fontWeight = FontWeight.Bold)
+                    Text(
+                        "המערכת אינה מבצעת מעבר ספק או פעולה כספית ללא אישור מפורש שלך, ואינה שולחת לספק את תוכן ה-Gmail או את תמונת ההוצאות שלך.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
+    }
 }
