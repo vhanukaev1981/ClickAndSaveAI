@@ -2,6 +2,14 @@
 
 const { normalizeServiceType } = require("./serviceProfile");
 
+const FIXED_MONTHLY_CATEGORIES = new Set([
+  "אינטרנט",
+  "סלולר",
+  "טלוויזיה",
+  "תקשורת",
+]);
+const SUPPORTED_PRICING_MODEL = "FIXED_MONTHLY";
+
 function normalizeText(value) {
   return String(value || "").trim();
 }
@@ -28,11 +36,14 @@ function normalizeOffer(offer, nowMs = Date.now()) {
   const providerName = normalizeText(offer.providerName);
   const category = normalizeText(offer.category);
   const country = normalizeText(offer.country || "IL").toUpperCase();
+  const pricingModel = normalizeText(offer.pricingModel || SUPPORTED_PRICING_MODEL).toUpperCase();
   const monthlyPrice = Number(offer.monthlyPrice);
   const verifiedAtMs = toMillis(offer.verifiedAt);
   const validUntilMs = toMillis(offer.validUntil);
 
   if (!offerId || !providerName || !category) return null;
+  if (pricingModel !== SUPPORTED_PRICING_MODEL) return null;
+  if (!FIXED_MONTHLY_CATEGORIES.has(category)) return null;
   if (!Number.isFinite(monthlyPrice) || monthlyPrice <= 0 || monthlyPrice >= 1_000_000) return null;
   if (!Number.isFinite(verifiedAtMs) || !Number.isFinite(validUntilMs)) return null;
   if (verifiedAtMs > nowMs) return null;
@@ -49,6 +60,7 @@ function normalizeOffer(offer, nowMs = Date.now()) {
     providerName,
     category,
     country,
+    pricingModel,
     monthlyPrice,
     serviceType,
     verifiedAt: new Date(verifiedAtMs).toISOString(),
@@ -81,6 +93,7 @@ function matchVerifiedOffers(opportunity, offers, options = {}) {
   const country = normalizeText(options.country || opportunity.country || "IL").toUpperCase();
   const nowMs = Number.isFinite(Number(options.nowMs)) ? Number(options.nowMs) : Date.now();
   if (!Number.isFinite(currentMonthlyCost) || currentMonthlyCost <= 0 || !category) return [];
+  if (!FIXED_MONTHLY_CATEGORIES.has(category)) return [];
 
   const matches = [];
   for (const rawOffer of Array.isArray(offers) ? offers : []) {
@@ -125,7 +138,9 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
       truthfulness: {
         ...(opportunity.truthfulness || {}),
         savingsClaimAvailable: false,
-        reason: "No verified compatible current offer is available.",
+        reason: FIXED_MONTHLY_CATEGORIES.has(String(opportunity?.category || "").trim())
+          ? "No verified compatible current offer is available."
+          : "This category requires a category-specific pricing model before a savings amount can be claimed.",
       },
     };
   }
@@ -136,6 +151,7 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
     matchedOffer: {
       offerId: best.offerId,
       providerName: best.providerName,
+      pricingModel: best.pricingModel,
       monthlyPrice: best.monthlyPrice,
       serviceType: best.serviceType,
       verifiedAt: best.verifiedAt,
@@ -148,12 +164,14 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
     truthfulness: {
       ...(opportunity.truthfulness || {}),
       savingsClaimAvailable: true,
-      reason: "Savings are calculated from a verified compatible current offer.",
+      reason: "Savings are calculated from a verified compatible fixed-monthly current offer.",
     },
   };
 }
 
 module.exports = {
+  FIXED_MONTHLY_CATEGORIES,
+  SUPPORTED_PRICING_MODEL,
   toMillis,
   normalizeOffer,
   serviceCompatible,
