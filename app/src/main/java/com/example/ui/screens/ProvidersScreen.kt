@@ -48,6 +48,7 @@ import com.example.ui.MainViewModel
 import com.example.ui.theme.TechBluePrimary
 import kotlinx.coroutines.launch
 
+private const val IN_APP_PROVIDER_REQUEST = "IN_APP_PROVIDER_REQUEST"
 private val lockedOpportunityStatuses = setOf(
     "USER_ACCEPTED",
     "PROVIDER_PROCESSING",
@@ -115,7 +116,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                             )
                         }
                         Text(
-                            "אין כאן קטלוג דמו. המערכת מציגה צורך שזוהה מהנתונים שלך, ורק חיסכון שמגובה בהצעה עדכנית ומאומתת.",
+                            "המערכת מדרגת לפי הערך עבורך. מעבר מתוך Click&SaveAI זמין רק כשקיים מסלול ספק מאומת שניתן לעקוב אחריו עד להשלמת העסקה.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -151,7 +152,11 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                     items(opportunities, key = { it.id }) { opportunity ->
                         OpportunityCard(
                             opportunity = opportunity,
-                            onAccept = { selectedOpportunity = opportunity }
+                            onAccept = {
+                                if (opportunity.actionMode == IN_APP_PROVIDER_REQUEST) {
+                                    selectedOpportunity = opportunity
+                                }
+                            }
                         )
                     }
                 }
@@ -167,35 +172,39 @@ fun ProvidersScreen(viewModel: MainViewModel) {
     }
 
     selectedOpportunity?.let { opportunity ->
-        SavingsActionDialog(
-            opportunity = opportunity,
-            defaultName = session.displayName,
-            defaultEmail = session.email,
-            onDismiss = { selectedOpportunity = null },
-            onSubmit = { name, phone, email ->
-                val displayedOfferId = opportunity.matchedOffer?.offerId.orEmpty()
-                selectedOpportunity = null
-                loading = true
-                scope.launch {
-                    runCatching {
-                        actionRepository.acceptSavingsOpportunity(
-                            opportunityId = opportunity.id,
-                            expectedOfferId = displayedOfferId,
-                            contactName = name,
-                            phone = phone,
-                            contactEmail = email
-                        )
-                    }.onSuccess { result ->
-                        actionMessage = "יצרנו בקשה מאומתת ל-${opportunity.matchedOffer?.providerName.orEmpty()}. החיסכון שנבדק: ${money(result.potentialMonthlySaving)} בחודש."
-                        error = ""
-                        refreshKey += 1
-                    }.onFailure { throwable ->
-                        error = throwable.localizedMessage ?: "ההצעה השתנתה או שאינה זמינה כרגע."
+        if (opportunity.actionMode == IN_APP_PROVIDER_REQUEST) {
+            SavingsActionDialog(
+                opportunity = opportunity,
+                defaultName = session.displayName,
+                defaultEmail = session.email,
+                onDismiss = { selectedOpportunity = null },
+                onSubmit = { name, phone, email ->
+                    val displayedOfferId = opportunity.matchedOffer?.offerId.orEmpty()
+                    selectedOpportunity = null
+                    loading = true
+                    scope.launch {
+                        runCatching {
+                            actionRepository.acceptSavingsOpportunity(
+                                opportunityId = opportunity.id,
+                                expectedOfferId = displayedOfferId,
+                                contactName = name,
+                                phone = phone,
+                                contactEmail = email
+                            )
+                        }.onSuccess { result ->
+                            actionMessage = "יצרנו בקשה מאומתת ל-${opportunity.matchedOffer?.providerName.orEmpty()}. החיסכון שנבדק: ${money(result.potentialMonthlySaving)} בחודש."
+                            error = ""
+                            refreshKey += 1
+                        }.onFailure { throwable ->
+                            error = throwable.localizedMessage ?: "ההצעה השתנתה, אינה זמינה או שאין כרגע מסלול מעבר מאומת."
+                        }
+                        loading = false
                     }
-                    loading = false
                 }
-            }
-        )
+            )
+        } else {
+            selectedOpportunity = null
+        }
     }
 }
 
@@ -206,8 +215,9 @@ private fun OpportunityCard(
 ) {
     val matched = opportunity.matchedOffer
     val monthlySaving = opportunity.potentialMonthlySaving
-    val actionable = matched != null && monthlySaving != null && monthlySaving > 0.0
+    val verifiedSaving = matched != null && monthlySaving != null && monthlySaving > 0.0
     val lifecycleLocked = opportunity.status.uppercase() in lockedOpportunityStatuses
+    val inAppActionAvailable = opportunity.actionMode == IN_APP_PROVIDER_REQUEST
 
     Card(shape = RoundedCornerShape(20.dp)) {
         Column(
@@ -216,7 +226,7 @@ private fun OpportunityCard(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    if (actionable) Icons.Default.Verified else Icons.Default.Savings,
+                    if (verifiedSaving) Icons.Default.Verified else Icons.Default.Savings,
                     contentDescription = null,
                     tint = TechBluePrimary
                 )
@@ -234,35 +244,60 @@ private fun OpportunityCard(
                 }
             }
 
-            if (actionable) {
+            if (verifiedSaving && matched != null) {
+                val effectiveMonthly = matched.effectiveMonthlyPrice ?: matched.monthlyPrice
+                if (effectiveMonthly != null) {
+                    Text(
+                        "מצאנו ${matched.providerName} בעלות חודשית אפקטיבית של ${money(effectiveMonthly)}.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
                 Text(
-                    "מצאנו ${matched.providerName} ב-${money(matched.monthlyPrice)} לחודש.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    "חיסכון מאומת: ${money(monthlySaving)} בחודש • ${money(opportunity.potentialAnnualSaving ?: 0.0)} בשנה",
+                    "חיסכון מאומת: ${money(monthlySaving ?: 0.0)} בחודש • ${money(opportunity.potentialAnnualSaving ?: 0.0)} בשנה",
                     color = TechBluePrimary,
                     fontWeight = FontWeight.SemiBold
                 )
+                matched.firstYearCost?.let {
+                    Text(
+                        "עלות שנה ראשונה: ${money(it)}${matched.oneTimeFees?.takeIf { fee -> fee > 0.0 }?.let { fee -> " • כולל ${money(fee)} עלויות חד-פעמיות" } ?: ""}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                matched.requiredRecurringFees?.takeIf { it > 0.0 }?.let { recurringFee ->
+                    Text(
+                        "העלות כוללת ${money(recurringFee)} לחודש דמי חובה${matched.requiredRecurringFeesDescription.takeIf { it.isNotBlank() }?.let { description -> " ($description)" } ?: ""}.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    "ההצעה אומתה ונבדקה להתאמה לפני הצגתה. האפליקציה בודקת אותה שוב לפני יצירת בקשה לספק.",
+                    "החיסכון חושב לפי מחיר צרכני מלא לשנה הראשונה וההצעה נבדקת מחדש לפני כל פעולה.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 val lifecycleMessage = opportunityLifecycleMessage(opportunity.status)
-                if (lifecycleLocked) {
-                    Text(lifecycleMessage, fontWeight = FontWeight.Bold)
-                } else {
-                    if (opportunity.status.equals("PROVIDER_REJECTED", ignoreCase = true)) {
-                        Text(
-                            "הפנייה הקודמת לא הושלמה. אם ההצעה עדיין בתוקף אפשר לנסות שוב.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                when {
+                    lifecycleLocked -> Text(lifecycleMessage, fontWeight = FontWeight.Bold)
+                    inAppActionAvailable -> {
+                        if (opportunity.status.equals("PROVIDER_REJECTED", ignoreCase = true)) {
+                            Text(
+                                "הפנייה הקודמת לא הושלמה. אם ההצעה עדיין בתוקף אפשר לנסות שוב.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Button(onClick = onAccept, modifier = Modifier.fillMaxWidth()) {
+                            Text("אני רוצה לחסוך ${money(monthlySaving ?: 0.0)} בחודש")
+                        }
                     }
-                    Button(onClick = onAccept, modifier = Modifier.fillMaxWidth()) {
-                        Text("אני רוצה לחסוך ${money(monthlySaving)} בחודש")
+                    else -> {
+                        Text(
+                            "זו ההצעה הטובה ביותר שמצאנו כרגע. מעבר ישיר דרך Click&SaveAI עדיין לא זמין להצעה הזו, ולכן לא נשלח את פרטיך לספק.",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             } else {
