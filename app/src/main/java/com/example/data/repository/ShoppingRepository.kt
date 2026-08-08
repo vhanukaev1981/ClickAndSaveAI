@@ -21,6 +21,7 @@ class ShoppingRepository(private val db: AppDatabase) {
     suspend fun updateWatchlistItem(item: WatchlistItem) = db.watchlistDao().updateItem(item)
 
     suspend fun addInvoice(invoice: InvoiceItem) = db.invoiceDao().insertInvoice(invoice)
+    suspend fun upsertGmailInvoice(invoice: InvoiceItem) = db.invoiceDao().upsertGmailInvoice(invoice)
     suspend fun updateInvoice(invoice: InvoiceItem) = db.invoiceDao().updateInvoice(invoice)
     suspend fun deleteInvoice(id: Long) = db.invoiceDao().deleteInvoice(id)
 
