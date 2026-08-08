@@ -23,8 +23,20 @@ android {
 
   val keystorePath = System.getenv("KEYSTORE_PATH")
   val releaseKeystore = keystorePath?.let(::file)?.takeIf { it.exists() }
+  val stagingDebugKeystorePath = System.getenv("STAGING_DEBUG_KEYSTORE_PATH")
+  val stagingDebugKeystore = stagingDebugKeystorePath?.let(::file)?.takeIf { it.exists() }
+  val stagingDebugKeystorePassword = System.getenv("STAGING_DEBUG_KEYSTORE_PASSWORD")
 
   signingConfigs {
+    if (stagingDebugKeystore != null && !stagingDebugKeystorePassword.isNullOrBlank()) {
+      create("stagingDebug") {
+        storeFile = stagingDebugKeystore
+        storePassword = stagingDebugKeystorePassword
+        keyAlias = "clickandsaveai-staging"
+        keyPassword = stagingDebugKeystorePassword
+      }
+    }
+
     if (releaseKeystore != null) {
       create("release") {
         storeFile = releaseKeystore
@@ -36,6 +48,12 @@ android {
   }
 
   buildTypes {
+    debug {
+      if (stagingDebugKeystore != null && !stagingDebugKeystorePassword.isNullOrBlank()) {
+        signingConfig = signingConfigs.getByName("stagingDebug")
+      }
+    }
+
     release {
       isCrunchPngs = false
       isMinifyEnabled = true
