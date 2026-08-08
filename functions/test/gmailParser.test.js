@@ -4,6 +4,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   collectMessageText,
+  collectPdfAttachments,
+  normalizePdfInvoiceCandidate,
   parseAmount,
   parseGmailMessage,
 } = require("../src/gmailParser");
@@ -44,6 +46,27 @@ test("extracts text from nested HTML Gmail bodies", () => {
   }).payload;
 
   assert.match(collectMessageText(payload), /321\.45 ₪/);
+});
+
+test("collects PDF attachment metadata without retaining document content", () => {
+  const payload = {
+    mimeType: "multipart/mixed",
+    parts: [
+      { mimeType: "text/plain", body: { data: b64url("hello") } },
+      {
+        mimeType: "application/pdf",
+        filename: "invoice-august.pdf",
+        body: { attachmentId: "att-1", size: 12345 },
+      },
+    ],
+  };
+
+  assert.deepEqual(collectPdfAttachments(payload), [{
+    attachmentId: "att-1",
+    inlineData: "",
+    size: 12345,
+    filename: "invoice-august.pdf",
+  }]);
 });
 
 test("billing label amount is preferred over an earlier promotional price", () => {
@@ -119,6 +142,40 @@ test("does not import generic receipts without a supported category/provider", (
     from: "store@example.test",
     body: "תודה על הקנייה. סה\"כ 79.90 ₪",
   }));
+
+  assert.equal(parsed, null);
+});
+
+test("normalizes a verified PDF invoice candidate into the existing invoice shape", () => {
+  const parsed = normalizePdfInvoiceCandidate({
+    isInvoice: true,
+    providerName: "בזק",
+    category: "internet",
+    monthlyCost: 149.9,
+    receivedDate: "2026-08-01",
+  }, message({
+    id: "pdf-message-1",
+    subject: "החשבונית שלך",
+    from: "Bezeq <billing@example.test>",
+  }));
+
+  assert.deepEqual(parsed, {
+    sourceMessageId: "pdf-message-1",
+    providerName: "בזק",
+    category: "אינטרנט",
+    monthlyCost: 149.9,
+    receivedDate: "2026-08-01",
+    verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
+  });
+});
+
+test("rejects uncertain PDF document extraction results", () => {
+  const parsed = normalizePdfInvoiceCandidate({
+    isInvoice: false,
+    providerName: "בזק",
+    category: "internet",
+    monthlyCost: 149.9,
+  }, message({ id: "pdf-message-2" }));
 
   assert.equal(parsed, null);
 });
