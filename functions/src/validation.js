@@ -2,6 +2,16 @@
 
 const PHONE_PATTERN = /^[+]?[-()\s\d]{7,20}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LEAD_CONSENT_VERSION = "provider-lead-v1";
+const ALLOWED_LEAD_CATEGORIES = new Set([
+  "חשמל",
+  "סלולר",
+  "אינטרנט",
+  "תקשורת",
+  "ביטוח",
+  "טלוויזיה",
+  "טלוויזיה ומנויים",
+]);
 
 function requiredString(value, field, maxLength) {
   if (typeof value !== "string") {
@@ -47,16 +57,26 @@ function validateLeadInput(data) {
     throw new TypeError("explicit lead consent is required");
   }
 
+  const consentVersion = requiredString(data.consentVersion, "consentVersion", 40);
+  if (consentVersion !== LEAD_CONSENT_VERSION) {
+    throw new TypeError("unsupported lead consent version");
+  }
+
+  const category = requiredString(data.category, "category", 60);
+  if (!ALLOWED_LEAD_CATEGORIES.has(category)) {
+    throw new TypeError("category is unsupported");
+  }
+
   return {
     contactName: requiredString(data.contactName, "contactName", 120),
     phone: validatePhone(data.phone),
     contactEmail: validateEmail(data.contactEmail),
     currentProvider: requiredString(data.currentProvider, "currentProvider", 120),
     requestedProvider: optionalString(data.requestedProvider, "requestedProvider", 120),
-    category: requiredString(data.category, "category", 60),
+    category,
     invoiceLocalId: optionalString(String(data.invoiceLocalId ?? ""), "invoiceLocalId", 64),
     idempotencyKey: requiredString(data.idempotencyKey, "idempotencyKey", 128),
-    consentVersion: requiredString(data.consentVersion, "consentVersion", 40),
+    consentVersion,
     notes: optionalString(data.notes, "notes", 1000),
   };
 }
@@ -69,6 +89,8 @@ function validateDealQuery(data) {
 }
 
 module.exports = {
+  LEAD_CONSENT_VERSION,
+  ALLOWED_LEAD_CATEGORIES,
   requiredString,
   optionalString,
   validateEmail,
