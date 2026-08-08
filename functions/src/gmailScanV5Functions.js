@@ -25,7 +25,7 @@ const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const INITIAL_GMAIL_LOOKBACK = "6m";
 const GMAIL_LIST_PAGE_SIZE = 100;
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
-const GMAIL_PARSER_VERSION = 5;
+const GMAIL_PARSER_VERSION = 6;
 
 function requireAuth(request) {
   const uid = request.auth?.uid;
@@ -47,7 +47,7 @@ async function refreshAccessToken(encryptedRefreshToken) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload.access_token) {
-    logger.error("Google token refresh failed for Gmail v5 scan", { status: response.status });
+    logger.error("Google token refresh failed for Gmail scan", { status: response.status });
     throw new HttpsError("failed-precondition", "Google authorization could not be refreshed.");
   }
   return String(payload.access_token);
@@ -155,7 +155,7 @@ function storedInvoices(data) {
 }
 
 async function listGmailCandidateMessageIds(accessToken) {
-  const query = `newer_than:${INITIAL_GMAIL_LOOKBACK} {חשבונית קבלה "הודעת תשלום" "פירוט חיוב" "חשבון חודשי" invoice receipt bill statement סלקום cellcom פרטנר partner פלאפון pelephone בזק bezeq "חברת החשמל" HOT yes filename:pdf}`;
+  const query = `newer_than:${INITIAL_GMAIL_LOOKBACK} {חשבונית קבלה "הודעת תשלום" "פירוט חיוב" "חשבון חודשי" invoice receipt bill statement סלקום cellcom פרטנר partner פלאפון pelephone בזק bezeq "חברת החשמל" HOT yes הראל harel הפניקס phoenix fnx מגדל migdal כלל clal מנורה menora AIG "ביטוח ישיר" ליברה libra weSure filename:pdf}`;
   const messageIds = [];
   const seen = new Set();
   let pageToken = "";
@@ -172,7 +172,7 @@ async function listGmailCandidateMessageIds(accessToken) {
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     if (!response.ok) {
-      logger.error("Gmail v5 messages.list failed", { status: response.status, pageCount });
+      logger.error("Gmail messages.list failed", { status: response.status, pageCount });
       throw new HttpsError("unavailable", "Gmail could not be scanned right now.");
     }
     const payload = await response.json().catch(() => ({}));
@@ -242,7 +242,7 @@ async function processMessage(uid, accessToken, messageId) {
       if (invoice) pdfInvoices.push(invoice);
     } catch (error) {
       allPdfsAnalyzed = false;
-      logger.warn("Gmail v5 PDF analysis failed and will be retried", {
+      logger.warn("Gmail PDF analysis failed and will be retried", {
         uid,
         messageId,
         attachmentIndex: index,
@@ -334,8 +334,9 @@ exports.scanGmailInvoices = onCall(
       });
     }
 
-    logger.info("Gmail parser-v5 scan completed", {
+    logger.info("Gmail parser scan completed", {
       uid,
+      parserVersion: GMAIL_PARSER_VERSION,
       lookback: INITIAL_GMAIL_LOOKBACK,
       pages: pageCount,
       candidates: messageIds.length,
@@ -361,3 +362,4 @@ exports.scanGmailInvoices = onCall(
 exports._v5NormalizeStoredInvoice = normalizeStoredInvoice;
 exports._v5ProcessMessage = processMessage;
 exports.GMAIL_PARSER_VERSION_V5 = GMAIL_PARSER_VERSION;
+exports.GMAIL_PARSER_VERSION_ACTIVE = GMAIL_PARSER_VERSION;
