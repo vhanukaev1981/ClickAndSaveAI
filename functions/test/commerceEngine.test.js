@@ -29,6 +29,10 @@ function offer(overrides) {
     validUntil: "2026-09-08T08:00:00Z",
     officialSourceVerified: true,
     availabilityStatus: "AVAILABLE",
+    availabilityMode: "NATIONWIDE",
+    consumerPriceIncludesVat: true,
+    requiredRecurringFees: 0,
+    requiredRecurringFeesDescription: "",
     userFitScore: 0.9,
     commercialAgreementActive: true,
     commissionType: "CPA",
@@ -63,12 +67,60 @@ test("first-year fees can make a higher headline price the better user deal", ()
   assert.equal(matches[1].annualSaving, 240);
 });
 
+test("mandatory recurring fees are included in effective monthly and first-year cost", () => {
+  const matches = matchVerifiedOffers(opportunity, [
+    offer({
+      offerId: "router-fee",
+      monthlyPrice: 89,
+      requiredRecurringFees: 20,
+      requiredRecurringFeesDescription: "required router rental",
+    }),
+  ], { nowMs });
+
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].effectiveMonthlyPrice, 109);
+  assert.equal(matches[0].firstYearCost, 1308);
+  assert.equal(matches[0].annualSaving, 240);
+  assert.equal(matches[0].monthlySaving, 20);
+});
+
 test("short promotional price guarantees are rejected from automatic savings claims", () => {
   const matches = matchVerifiedOffers(opportunity, [
     offer({ offerId: "three-month-promo", monthlyPrice: 49, priceGuaranteedMonths: 3 }),
     offer({ offerId: "twelve-month-price", monthlyPrice: 99, priceGuaranteedMonths: 12 }),
   ], { nowMs });
   assert.deepEqual(matches.map((item) => item.offerId), ["twelve-month-price"]);
+});
+
+test("availability-dependent offers match only after explicit user eligibility verification", () => {
+  const offers = [
+    offer({ offerId: "nationwide", monthlyPrice: 99, availabilityMode: "NATIONWIDE" }),
+    offer({ offerId: "user-only", monthlyPrice: 89, availabilityMode: "USER_VERIFIED" }),
+    offer({ offerId: "needs-check", monthlyPrice: 79, availabilityMode: "ELIGIBILITY_REQUIRED" }),
+  ];
+
+  const beforeVerification = matchVerifiedOffers(opportunity, offers, { nowMs });
+  assert.deepEqual(beforeVerification.map((item) => item.offerId), ["nationwide"]);
+
+  const afterVerification = matchVerifiedOffers({
+    ...opportunity,
+    availabilityVerifiedOfferIds: ["user-only"],
+  }, offers, { nowMs });
+  assert.deepEqual(afterVerification.map((item) => item.offerId), ["user-only", "nationwide"]);
+});
+
+test("non-VAT consumer prices and undisclosed mandatory fees are rejected", () => {
+  const matches = matchVerifiedOffers(opportunity, [
+    offer({ offerId: "no-vat", consumerPriceIncludesVat: false }),
+    offer({
+      offerId: "hidden-fee",
+      requiredRecurringFees: 20,
+      requiredRecurringFeesDescription: "",
+    }),
+    offer({ offerId: "valid", monthlyPrice: 95 }),
+  ], { nowMs });
+
+  assert.deepEqual(matches.map((item) => item.offerId), ["valid"]);
 });
 
 test("unverified, expired, wrong-model and incompatible offers are rejected", () => {
