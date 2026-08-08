@@ -7,6 +7,7 @@ const gmailWatchRenewal = require("./gmailWatchRenewal");
 const financialAgentFunctions = require("./financialAgentFunctions");
 const opportunityNotificationFunctions = require("./opportunityNotificationFunctions");
 const opportunityActionFunctions = require("./opportunityActionFunctions");
+const opportunityEngagementFunctions = require("./opportunityEngagementFunctions");
 const commerceOperationsFunctions = require("./commerceOperationsFunctions");
 const providerOfferCatalogFunctions = require("./providerOfferCatalogFunctions");
 const providerDispatchFunctions = require("./providerDispatchFunctions");
@@ -21,6 +22,7 @@ module.exports = {
   ...financialAgentFunctions,
   ...opportunityNotificationFunctions,
   ...opportunityActionFunctions,
+  ...opportunityEngagementFunctions,
   ...commerceOperationsFunctions,
   ...providerOfferCatalogFunctions,
   ...providerDispatchFunctions,
