@@ -15,15 +15,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -57,7 +54,6 @@ fun ProfileScreen(
     val isGmailConnected by viewModel.isGmailConnected.collectAsState()
     val connectedEmail by viewModel.connectedEmail.collectAsState()
     val isSyncing by viewModel.isSyncingGmail.collectAsState()
-    val syncMessage by viewModel.gmailSyncStep.collectAsState()
 
     LazyColumn(
         modifier = Modifier
@@ -67,22 +63,11 @@ fun ProfileScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Default.Info, contentDescription = null)
-                    Spacer(modifier = Modifier.size(10.dp))
-                    Column {
-                        Text("חשבון והרשאות", fontWeight = FontWeight.Bold)
-                        Text(
-                            "זהות המשתמש מאומתת ב-Firebase. הרשאת Gmail נפרדת, מוגבלת לקריאה וניתנת לביטול.",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            }
+            Text(
+                "הפרופיל שלי",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
         }
 
         item {
@@ -91,7 +76,7 @@ fun ProfileScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.AccountCircle, contentDescription = null)
                         Spacer(modifier = Modifier.size(8.dp))
-                        Text("חשבון משתמש", fontWeight = FontWeight.Bold)
+                        Text("חשבון", fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.height(10.dp))
                     if (session.isAuthenticated) {
@@ -104,12 +89,12 @@ fun ProfileScreen(
                             Text("התנתק")
                         }
                     } else {
-                        Text("לא מחובר ל-Google/Firebase")
+                        Text("עדיין לא התחברת")
                         Spacer(modifier = Modifier.height(10.dp))
                         Button(onClick = onGoogleSignIn, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Login, contentDescription = null)
                             Spacer(modifier = Modifier.size(6.dp))
-                            Text("התחבר ל-Google")
+                            Text("התחבר עם Google")
                         }
                     }
                 }
@@ -122,24 +107,25 @@ fun ProfileScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Email, contentDescription = null)
                         Spacer(modifier = Modifier.size(8.dp))
-                        Text("Gmail read-only", fontWeight = FontWeight.Bold)
+                        Text("חיבור Gmail", fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         if (isGmailConnected) {
                             "מחובר: ${connectedEmail.ifBlank { session.email }}"
                         } else {
-                            "לא מחובר להרשאת Gmail"
+                            "Gmail עדיין לא מחובר"
                         }
                     )
                     Text(
-                        "אין הרשאה לשליחה, מחיקה או עריכת הודעות.",
-                        style = MaterialTheme.typography.bodySmall
+                        if (isGmailConnected) {
+                            "חשבוניות חדשות נקלטות אוטומטית. אין צורך לבצע סריקה ידנית."
+                        } else {
+                            "בחיבור הראשון נבדוק עד 6 חודשים אחורה. ההרשאה היא לקריאה בלבד."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (syncMessage.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(syncMessage, style = MaterialTheme.typography.bodySmall)
-                    }
                     Spacer(modifier = Modifier.height(10.dp))
                     when {
                         !session.isAuthenticated -> {
@@ -155,27 +141,16 @@ fun ProfileScreen(
                             ) {
                                 Icon(Icons.Default.Security, contentDescription = null)
                                 Spacer(modifier = Modifier.size(6.dp))
-                                Text("אשר הרשאת קריאה")
+                                Text("חבר Gmail")
                             }
                         }
                         else -> {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(
-                                    onClick = viewModel::triggerGmailSync,
-                                    enabled = !isSyncing,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null)
-                                    Spacer(modifier = Modifier.size(6.dp))
-                                    Text("סרוק")
-                                }
-                                OutlinedButton(
-                                    onClick = viewModel::disconnectGmail,
-                                    enabled = !isSyncing,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("נתק")
-                                }
+                            OutlinedButton(
+                                onClick = viewModel::disconnectGmail,
+                                enabled = !isSyncing,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("נתק Gmail")
                             }
                         }
                     }
@@ -191,10 +166,11 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.size(8.dp))
                         Text("העדפות", fontWeight = FontWeight.Bold)
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "העדפות עדיין נשמרות בזיכרון המקומי בלבד.",
-                        style = MaterialTheme.typography.bodySmall
+                        "הגדר את יעדי החיסכון והעדפות השירות שלך.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Button(onClick = { showSettings = true }, modifier = Modifier.fillMaxWidth()) {
