@@ -9,6 +9,7 @@ const { _runSweep: runFinancialAgentSweep } = require("./financialAgentFunctions
 const {
   FIXED_MONTHLY_CATEGORIES,
   SUPPORTED_PRICING_MODEL,
+  MIN_PRICE_GUARANTEE_MONTHS,
 } = require("./commerceEngine");
 const { normalizeServiceType } = require("./serviceProfile");
 const { requiredString, optionalString } = require("./validation");
@@ -100,6 +101,26 @@ function validateProviderOfferInput(data, nowMs = Date.now()) {
     throw new TypeError("monthlyPrice is invalid");
   }
 
+  if (data.priceGuaranteedMonths === undefined || data.priceGuaranteedMonths === null) {
+    throw new TypeError("priceGuaranteedMonths must be verified explicitly");
+  }
+  const priceGuaranteedMonths = Number(data.priceGuaranteedMonths);
+  if (
+    !Number.isInteger(priceGuaranteedMonths) ||
+    priceGuaranteedMonths < MIN_PRICE_GUARANTEE_MONTHS ||
+    priceGuaranteedMonths > 120
+  ) {
+    throw new TypeError(`priceGuaranteedMonths must be between ${MIN_PRICE_GUARANTEE_MONTHS} and 120`);
+  }
+
+  if (data.oneTimeFees === undefined || data.oneTimeFees === null || data.oneTimeFees === "") {
+    throw new TypeError("oneTimeFees must be stated explicitly, including zero");
+  }
+  const oneTimeFees = Number(data.oneTimeFees);
+  if (!Number.isFinite(oneTimeFees) || oneTimeFees < 0 || oneTimeFees >= 1_000_000) {
+    throw new TypeError("oneTimeFees is invalid");
+  }
+
   const availabilityStatus = requiredString(
     data.availabilityStatus || "AVAILABLE",
     "availabilityStatus",
@@ -155,6 +176,8 @@ function validateProviderOfferInput(data, nowMs = Date.now()) {
     country,
     serviceType,
     monthlyPrice: Math.round(monthlyPrice * 100) / 100,
+    priceGuaranteedMonths,
+    oneTimeFees: Math.round(oneTimeFees * 100) / 100,
     availabilityStatus,
     officialSourceUrl: parseHttpsUrl(data.officialSourceUrl, "officialSourceUrl"),
     officialSourceName: requiredString(data.officialSourceName, "officialSourceName", 200),
@@ -188,6 +211,8 @@ exports.upsertProviderOffer = onCall(
       country: offer.country,
       serviceType: offer.serviceType,
       monthlyPrice: offer.monthlyPrice,
+      priceGuaranteedMonths: offer.priceGuaranteedMonths,
+      oneTimeFees: offer.oneTimeFees,
       availabilityStatus: offer.availabilityStatus,
       officialSourceVerified: true,
       officialSourceUrl: offer.officialSourceUrl,
@@ -201,7 +226,7 @@ exports.upsertProviderOffer = onCall(
       updatedByOperatorUid: operatorUid,
       updatedAt: FieldValue.serverTimestamp(),
       ...(existing.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
-      catalogVersion: 3,
+      catalogVersion: 4,
     }, { merge: true });
 
     logger.info("Provider offer catalog entry upserted", {
@@ -211,6 +236,9 @@ exports.upsertProviderOffer = onCall(
       category: offer.category,
       pricingModel: offer.pricingModel,
       serviceType: offer.serviceType,
+      monthlyPrice: offer.monthlyPrice,
+      priceGuaranteedMonths: offer.priceGuaranteedMonths,
+      oneTimeFees: offer.oneTimeFees,
       availabilityStatus: offer.availabilityStatus,
       commercialAgreementActive: offer.commercialAgreementActive,
     });
@@ -219,6 +247,9 @@ exports.upsertProviderOffer = onCall(
       offerId: offer.offerId,
       pricingModel: offer.pricingModel,
       serviceType: offer.serviceType,
+      monthlyPrice: offer.monthlyPrice,
+      priceGuaranteedMonths: offer.priceGuaranteedMonths,
+      oneTimeFees: offer.oneTimeFees,
       saved: true,
       availabilityStatus: offer.availabilityStatus,
       officialSourceVerified: true,
