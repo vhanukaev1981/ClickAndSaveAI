@@ -154,7 +154,25 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                             opportunity = opportunity,
                             onAccept = {
                                 if (opportunity.actionMode == IN_APP_PROVIDER_REQUEST) {
-                                    selectedOpportunity = opportunity
+                                    val displayedOfferId = opportunity.matchedOffer?.offerId.orEmpty()
+                                    if (displayedOfferId.isBlank()) {
+                                        error = "ההצעה השתנתה או אינה זמינה כרגע."
+                                    } else {
+                                        scope.launch {
+                                            runCatching {
+                                                actionRepository.recordSavingsActionStarted(
+                                                    opportunityId = opportunity.id,
+                                                    expectedOfferId = displayedOfferId
+                                                )
+                                            }.onSuccess {
+                                                error = ""
+                                                selectedOpportunity = opportunity
+                                            }.onFailure { throwable ->
+                                                error = throwable.localizedMessage
+                                                    ?: "לא ניתן להתחיל את בקשת החיסכון כרגע. ההצעה תיבדק מחדש לפני ניסיון נוסף."
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         )
@@ -246,12 +264,10 @@ private fun OpportunityCard(
 
             if (verifiedSaving && matched != null) {
                 val effectiveMonthly = matched.effectiveMonthlyPrice ?: matched.monthlyPrice
-                if (effectiveMonthly != null) {
-                    Text(
-                        "מצאנו ${matched.providerName} בעלות חודשית אפקטיבית של ${money(effectiveMonthly)}.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
+                Text(
+                    "מצאנו ${matched.providerName} בעלות חודשית אפקטיבית של ${money(effectiveMonthly)}.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
                 Text(
                     "חיסכון מאומת: ${money(monthlySaving ?: 0.0)} בחודש • ${money(opportunity.potentialAnnualSaving ?: 0.0)} בשנה",
                     color = TechBluePrimary,
