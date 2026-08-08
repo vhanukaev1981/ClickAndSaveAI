@@ -181,7 +181,7 @@ fun MainAppStructure(
                 color = MaterialTheme.colorScheme.secondaryContainer
             ) {
                 Text(
-                    text = "Backend הוגדר בקוד; נדרשת פריסת Firebase והשלמת OAuth לפני שימוש אמיתי",
+                    text = "Firebase Auth + App Check פעילים • Gmail בקריאה בלבד • AI דרך השרת",
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
