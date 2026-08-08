@@ -51,8 +51,12 @@ data class BackendDealAnalysis(
 )
 
 class BackendRepository(
-    private val functions: FirebaseFunctions = FirebaseFunctions.getInstance("europe-west1")
+    private val functionsProvider: () -> FirebaseFunctions = {
+        FirebaseFunctions.getInstance("europe-west1")
+    }
 ) {
+    private val functions: FirebaseFunctions by lazy(functionsProvider)
+
     suspend fun getGmailConnectionStatus(): GmailConnectionResult {
         val response = functions.getHttpsCallable("getGmailConnectionStatus")
             .call()
