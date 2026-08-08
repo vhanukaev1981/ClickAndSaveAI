@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.example.ui.MainViewModel
 import com.example.ui.components.BottomNavBar
-import com.example.ui.screens.AiAssistantScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.InvoicesScreen
 import com.example.ui.screens.ProfileScreen
@@ -231,7 +230,7 @@ fun MainAppStructure(
                 color = MaterialTheme.colorScheme.secondaryContainer
             ) {
                 Text(
-                    text = "Firebase Auth + App Check פעילים • Gmail בקריאה בלבד • AI דרך השרת",
+                    text = "Click&SaveAI עובדת ברקע ומחפשת התייעלויות עבורך",
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
@@ -241,7 +240,7 @@ fun MainAppStructure(
         },
         bottomBar = {
             BottomNavBar(
-                selectedTab = selectedTab,
+                selectedTab = selectedTab.coerceIn(0, 3),
                 onTabSelected = viewModel::setTab
             )
         }
@@ -260,8 +259,7 @@ fun MainAppStructure(
                     onOpenReceiptScan = viewModel::reportReceiptScanUnavailable
                 )
                 2 -> ProvidersScreen(viewModel)
-                3 -> AiAssistantScreen(viewModel)
-                4 -> ProfileScreen(
+                3, 4 -> ProfileScreen(
                     viewModel = viewModel,
                     onGoogleSignIn = onGoogleSignIn,
                     onRequestGmailAuthorization = onRequestGmailAuthorization
