@@ -180,8 +180,11 @@ function validateProviderOfferInput(data, nowMs = Date.now()) {
   if (commissionType === "NONE" && commissionValue !== null) {
     throw new TypeError("commissionValue must be empty when commissionType is NONE");
   }
-  if (commercialAgreementActive && commissionType !== "NONE" && commissionValue === null) {
-    throw new TypeError("commissionValue is required for an active commission model");
+  if (commercialAgreementActive && commissionType === "NONE") {
+    throw new TypeError("an active commercial agreement requires a commission model");
+  }
+  if (commercialAgreementActive && commissionType !== "NONE" && !(commissionValue > 0)) {
+    throw new TypeError("a positive commissionValue is required for an active commission model");
   }
 
   return {
