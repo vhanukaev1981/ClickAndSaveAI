@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const { buildProviderDispatchPayload } = require("./providerDispatch");
 
 const QUEUE_STATES = Object.freeze({
   READY: "READY",
@@ -9,6 +10,18 @@ const QUEUE_STATES = Object.freeze({
   RETRY_WAIT: "RETRY_WAIT",
   DEAD_LETTER: "DEAD_LETTER",
 });
+
+const ALLOWED_PROVIDER_PAYLOAD_KEYS = new Set([
+  "leadId",
+  "contactName",
+  "phone",
+  "contactEmail",
+  "requestedProvider",
+  "category",
+  "offerId",
+  "consentVersion",
+  "source",
+]);
 
 function required(value, field, maxLength = 200) {
   const text = typeof value === "string" ? value.trim() : "";
@@ -27,6 +40,32 @@ function dispatchId({ leadId, providerId, offerId, contractId }) {
   return crypto.createHash("sha256").update(material).digest("hex");
 }
 
+function normalizeMinimalProviderPayload(rawPayload, { leadId, offerId }) {
+  if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) {
+    throw new TypeError("payload is required");
+  }
+
+  for (const key of Object.keys(rawPayload)) {
+    if (!ALLOWED_PROVIDER_PAYLOAD_KEYS.has(key)) {
+      throw new TypeError(`provider payload contains unsupported field: ${key}`);
+    }
+  }
+
+  const payload = buildProviderDispatchPayload(rawPayload);
+  if (!payload) throw new TypeError("provider payload is incomplete");
+  if (payload.leadId !== leadId) {
+    throw new TypeError("provider payload leadId does not match dispatch leadId");
+  }
+  if (payload.offerId !== offerId) {
+    throw new TypeError("provider payload offerId does not match dispatch offerId");
+  }
+  if (rawPayload.source && rawPayload.source !== payload.source) {
+    throw new TypeError("provider payload source is unsupported");
+  }
+
+  return payload;
+}
+
 function buildDispatchEnvelope(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new TypeError("dispatch input must be an object");
@@ -36,17 +75,7 @@ function buildDispatchEnvelope(input) {
   const offerId = required(input.offerId, "offerId", 128);
   const contractId = required(input.contractId, "contractId", 128);
   const adapterKey = required(input.adapterKey, "adapterKey", 128);
-
-  const payload = input.payload && typeof input.payload === "object" && !Array.isArray(input.payload)
-    ? { ...input.payload }
-    : null;
-  if (!payload) throw new TypeError("payload is required");
-
-  for (const forbidden of ["uid", "gmail", "gmailContent", "currentMonthlyCost", "potentialMonthlySaving", "commissionAmount"]) {
-    if (Object.prototype.hasOwnProperty.call(payload, forbidden)) {
-      throw new TypeError(`provider payload contains forbidden field: ${forbidden}`);
-    }
-  }
+  const payload = normalizeMinimalProviderPayload(input.payload, { leadId, offerId });
 
   return {
     dispatchId: dispatchId({ leadId, providerId, offerId, contractId }),
