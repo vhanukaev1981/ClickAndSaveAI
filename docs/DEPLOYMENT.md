@@ -76,14 +76,30 @@ openssl rand -base64 32
 
 Never reuse the Firebase service-account key, Android signing key or Gemini key as the encryption key. Do not paste secret values into GitHub issues, PR comments or source files.
 
-## 5. App Check
+## 5. Stable staging debug signing in CI
+
+Google/Firebase sign-in validates the Android package together with its signing certificate. A debug APK built with a transient CI runner key is therefore not suitable for staging OAuth end-to-end validation when Firebase is registered against the dedicated staging certificate.
+
+The Android build supports an optional dedicated staging debug signing key through these environment variables:
+
+- `STAGING_DEBUG_KEYSTORE_PATH`
+- `STAGING_DEBUG_KEYSTORE_PASSWORD`
+
+The staging key alias is fixed to `clickandsaveai-staging`. The GitHub Actions workflow restores the keystore only from encrypted repository secrets:
+
+- `STAGING_DEBUG_KEYSTORE_B64`
+- `STAGING_DEBUG_KEYSTORE_PASSWORD`
+
+The keystore itself must remain outside Git. CI verifies that the restored keystore and the built APK match the SHA-256 fingerprint already registered in Firebase before publishing an OAuth E2E-ready debug APK artifact. If the signing secrets are absent, CI may still build with the runner debug key for compile/test coverage, but it does not publish that APK as an OAuth E2E artifact.
+
+## 6. App Check
 
 - Debug builds use the Firebase App Check debug provider. Register only developer/CI debug tokens.
 - Release builds use Play Integrity.
 - Register the release SHA-256 certificate in Firebase App Check when the release key exists.
 - Confirm callable-function traffic is valid before enforcing App Check for Cloud Functions.
 
-## 6. Firestore data model
+## 7. Firestore data model
 
 Backend-owned collections are denied to direct Android clients:
 
@@ -93,7 +109,7 @@ Backend-owned collections are denied to direct Android clients:
 
 Cloud Functions access these collections with Admin SDK. Review data retention, deletion requests and administrator access before launch. Configure a Firestore TTL policy for CRM leads if a fixed retention period is adopted.
 
-## 7. Deploy and verify
+## 8. Deploy and verify
 
 Before deployment, create the local Firebase alias file and Functions env file:
 
@@ -129,6 +145,6 @@ Verify in staging:
 8. AI failures return an error and never a fabricated result.
 9. Disconnect revokes Google access when possible and deletes the backend connection.
 
-## 8. CRM handoff
+## 9. CRM handoff
 
 `providerLeads` is the phase-one CRM intake queue. Before external launch, choose the operational CRM destination and add a server-side dispatcher or managed integration. Do not expose Firestore write access to the Android app and do not mark a lead as contacted or completed until the downstream CRM confirms it.
