@@ -51,19 +51,50 @@ test("price increase creates a comparison opportunity but no invented savings", 
   assert.equal(opportunities[0].commercial.userIntent, "SYSTEM_DETECTED_SAVINGS_NEED");
 });
 
-test("small price noise does not create a proactive opportunity", () => {
-  const { opportunities } = detectFinancialSignals([
+test("stable recurring household service is proactively optimized even without a price increase", () => {
+  const { insights, opportunities } = detectFinancialSignals([
+    invoice({ id: "old", cost: 100, date: "2026-07-01T08:00:00Z" }),
+    invoice({ id: "new", cost: 100, date: "2026-08-01T08:00:00Z" }),
+  ]);
+
+  assert.equal(
+    insights.filter((item) => item.type === "PRICE_INCREASE_DETECTED").length,
+    0
+  );
+  assert.equal(opportunities.length, 1);
+  assert.equal(opportunities[0].type, "OPTIMIZE_RECURRING_SERVICE");
+  assert.equal(opportunities[0].currentMonthlyCost, 100);
+  assert.equal(opportunities[0].potentialMonthlySaving, null);
+});
+
+test("small price noise does not create a price-hike alert but recurring optimization stays active", () => {
+  const { insights, opportunities } = detectFinancialSignals([
     invoice({ id: "old", cost: 100, date: "2026-07-01T08:00:00Z" }),
     invoice({ id: "new", cost: 103, date: "2026-08-01T08:00:00Z" }),
   ]);
 
+  assert.equal(
+    insights.filter((item) => item.type === "PRICE_INCREASE_DETECTED").length,
+    0
+  );
+  assert.equal(opportunities.length, 1);
+  assert.equal(opportunities[0].type, "OPTIMIZE_RECURRING_SERVICE");
+});
+
+test("non-monetizable recurring category is understood but not converted into a provider opportunity", () => {
+  const { insights, opportunities } = detectFinancialSignals([
+    invoice({ id: "old", provider: "Local Gym", category: "כושר", cost: 200, date: "2026-07-01T08:00:00Z" }),
+    invoice({ id: "new", provider: "Local Gym", category: "כושר", cost: 200, date: "2026-08-01T08:00:00Z" }),
+  ]);
+
+  assert.equal(insights.some((item) => item.type === "RECURRING_SERVICE_OBSERVED"), true);
   assert.equal(opportunities.length, 0);
 });
 
-test("known household-service categories are marked as potentially monetizable without claiming a partner", () => {
+test("known household-service categories are marked as monetizable without claiming a partner", () => {
   const { opportunities } = detectFinancialSignals([
     invoice({ id: "old", category: "סלולר", cost: 120, date: "2026-07-01T08:00:00Z" }),
-    invoice({ id: "new", category: "סלולר", cost: 150, date: "2026-08-01T08:00:00Z" }),
+    invoice({ id: "new", category: "סלולר", cost: 120, date: "2026-08-01T08:00:00Z" }),
   ]);
 
   assert.equal(opportunities[0].commercial.monetizableCategory, true);
