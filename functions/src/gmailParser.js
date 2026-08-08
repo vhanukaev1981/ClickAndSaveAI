@@ -33,6 +33,18 @@ const SUPPORTED_CATEGORIES = new Map([
   ["other", "אחר"],
 ]);
 
+const INSURANCE_PROVIDERS = new Set([
+  "הראל",
+  "הפניקס",
+  "מגדל",
+  "כלל",
+  "מנורה מבטחים",
+  "AIG",
+  "ביטוח ישיר",
+  "ליברה",
+  "weSure",
+]);
+
 function firstHeader(headers, name) {
   if (!Array.isArray(headers)) return "";
   return headers.find((header) =>
@@ -163,11 +175,27 @@ function matchProvider(text, includeGenericPartner = false) {
   return providers.find(([, pattern]) => pattern.test(text))?.[0] || null;
 }
 
+function matchStrongProvider(text) {
+  const providers = [
+    ["הראל", /(harel|הראל)/i],
+    ["הפניקס", /(^|\W)(phoenix|fnx)(\W|$)|הפניקס/i],
+    ["מגדל", /(migdal|מגדל)/i],
+    ["כלל", /(clal|כלל\s*(?:ביטוח|insurance))/i],
+    ["מנורה מבטחים", /(menora|מנורה\s*מבטחים|מנורה)/i],
+    ["AIG", /(^|\W)aig(\W|$)/i],
+    ["ביטוח ישיר", /(ביטוח\s*ישיר|direct\s*insurance|555\.co\.il)/i],
+    ["ליברה", /(^|\W)libra(\W|$)|ליברה/i],
+    ["weSure", /(^|\W)wesure(\W|$)|ווישור/i],
+  ];
+  return providers.find(([, pattern]) => pattern.test(text))?.[0] || null;
+}
+
 function identifyProvider(from, subject, searchableText) {
-  // Sender/subject are strong brand signals. Body text is a weaker fallback because words such
-  // as the English "partner" can occur generically in unrelated receipts.
+  // Sender/subject are strong brand signals. Insurance brands are intentionally matched only
+  // here so a brand word in arbitrary receipt body text cannot turn an unrelated receipt into
+  // an insurance invoice.
   const strongText = `${from} ${subject}`.toLowerCase();
-  const strongMatch = matchProvider(strongText, true);
+  const strongMatch = matchProvider(strongText, true) || matchStrongProvider(strongText);
   if (strongMatch) return strongMatch;
 
   const bodyText = String(searchableText || "").toLowerCase();
@@ -176,6 +204,7 @@ function identifyProvider(from, subject, searchableText) {
 
 function fallbackCategoryForProvider(providerName) {
   if (["סלקום", "פרטנר", "HOT"].includes(providerName)) return "תקשורת";
+  if (INSURANCE_PROVIDERS.has(providerName)) return "ביטוח";
   return null;
 }
 
