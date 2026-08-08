@@ -48,6 +48,13 @@ import com.example.ui.MainViewModel
 import com.example.ui.theme.TechBluePrimary
 import kotlinx.coroutines.launch
 
+private val lockedOpportunityStatuses = setOf(
+    "USER_ACCEPTED",
+    "PROVIDER_PROCESSING",
+    "ACTIVATED",
+    "COMPLETED"
+)
+
 @Composable
 fun ProvidersScreen(viewModel: MainViewModel) {
     val session by viewModel.userSession.collectAsState()
@@ -108,7 +115,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                             )
                         }
                         Text(
-                            "אין כאן קטלוג דמו. המערכת מציגה רק צורך שזוהה מהנתונים שלך, ורק חיסכון שמגובה בהצעה עדכנית ומאומתת.",
+                            "אין כאן קטלוג דמו. המערכת מציגה צורך שזוהה מהנתונים שלך, ורק חיסכון שמגובה בהצעה עדכנית ומאומתת.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -137,7 +144,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                     item {
                         MessageCard(
                             title = "ה-AI ממשיך לבדוק",
-                            body = "כרגע אין צורך לחפש ידנית. אם יזוהה שינוי במחיר או תימצא הצעה מתאימה, היא תופיע כאן אוטומטית."
+                            body = "כרגע אין צורך לחפש ידנית. אם יזוהה שירות שניתן לייעל או תימצא הצעה מתאימה, היא תופיע כאן אוטומטית."
                         )
                     }
                 } else {
@@ -200,6 +207,7 @@ private fun OpportunityCard(
     val matched = opportunity.matchedOffer
     val monthlySaving = opportunity.potentialMonthlySaving
     val actionable = matched != null && monthlySaving != null && monthlySaving > 0.0
+    val lifecycleLocked = opportunity.status.uppercase() in lockedOpportunityStatuses
 
     Card(shape = RoundedCornerShape(20.dp)) {
         Column(
@@ -241,26 +249,45 @@ private fun OpportunityCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (opportunity.status == "USER_ACCEPTED") {
-                    Text("הבקשה כבר נשלחה לספק.", fontWeight = FontWeight.Bold)
+
+                val lifecycleMessage = opportunityLifecycleMessage(opportunity.status)
+                if (lifecycleLocked) {
+                    Text(lifecycleMessage, fontWeight = FontWeight.Bold)
                 } else {
+                    if (opportunity.status.equals("PROVIDER_REJECTED", ignoreCase = true)) {
+                        Text(
+                            "הפנייה הקודמת לא הושלמה. אם ההצעה עדיין בתוקף אפשר לנסות שוב.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Button(onClick = onAccept, modifier = Modifier.fillMaxWidth()) {
                         Text("אני רוצה לחסוך ${money(monthlySaving)} בחודש")
                     }
                 }
             } else {
+                val detectionText = if (opportunity.type == "COMPARE_AFTER_PRICE_INCREASE") {
+                    "זוהתה עליית מחיר של ${String.format("%.1f", opportunity.percentIncrease)}%. Click&SaveAI מחפשת עבורך חלופה מתאימה."
+                } else {
+                    "זהו שירות חודשי חוזר. Click&SaveAI בודקת באופן יזום אם קיימת חלופה טובה ומתאימה יותר."
+                }
+                Text(detectionText, style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "זוהתה עליית מחיר של ${String.format("%.1f", opportunity.percentIncrease)}%. Click&SaveAI מחפשת עבורך חלופה מתאימה.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    "לא נציג סכום חיסכון ולא נפנה לספק עד שתימצא הצעה שניתן לאמת.",
+                    "לא נציג סכום חיסכון ולא נפנה לספק עד שתימצא הצעה שניתן לאמת ולהתאים לשירות שלך.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
+}
+
+private fun opportunityLifecycleMessage(status: String): String = when (status.uppercase()) {
+    "USER_ACCEPTED" -> "הבקשה נשלחה וננעלה להצעה שאישרת."
+    "PROVIDER_PROCESSING" -> "הספק מטפל בבקשה שלך."
+    "ACTIVATED" -> "השירות החדש הופעל. אנחנו ממתינים לאישור סופי של העסקה."
+    "COMPLETED" -> "המעבר הושלם והחיסכון נרשם."
+    else -> ""
 }
 
 @Composable
