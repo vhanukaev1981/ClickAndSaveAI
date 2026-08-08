@@ -150,4 +150,7 @@ exports.sendTestPush = onCall(
   }
 );
 
-exports.sendPushToUser = sendPushToUser;
+Object.defineProperty(module.exports, "_sendPushToUser", {
+  value: sendPushToUser,
+  enumerable: false,
+});
