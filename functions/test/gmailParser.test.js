@@ -69,6 +69,23 @@ test("collects PDF attachment metadata without retaining document content", () =
   }]);
 });
 
+test("collects every PDF attachment instead of stopping at three", () => {
+  const payload = {
+    mimeType: "multipart/mixed",
+    parts: Array.from({ length: 5 }, (_, index) => ({
+      mimeType: "application/pdf",
+      filename: `invoice-${index}.pdf`,
+      body: { attachmentId: `att-${index}`, size: 1000 + index },
+    })),
+  };
+
+  const attachments = collectPdfAttachments(payload);
+  assert.equal(attachments.length, 5);
+  assert.deepEqual(attachments.map((item) => item.attachmentId), [
+    "att-0", "att-1", "att-2", "att-3", "att-4",
+  ]);
+});
+
 test("billing label amount is preferred over an earlier promotional price", () => {
   const amount = parseAmount("מבצע חדש רק 29.90 ₪. סה\"כ לתשלום: 169.90 ₪");
   assert.equal(amount, 169.9);
@@ -136,7 +153,7 @@ test("Partner sender is recognized as telecom even without explicit service type
   assert.equal(parsed.monthlyCost, 119.9);
 });
 
-test("does not import generic receipts without a supported category/provider", () => {
+test("does not import generic receipts from email body without a supported category/provider", () => {
   const parsed = parseGmailMessage(message({
     subject: "קבלה",
     from: "store@example.test",
@@ -167,6 +184,45 @@ test("normalizes a verified PDF invoice candidate into the existing invoice shap
     receivedDate: "2026-08-01",
     verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
   });
+});
+
+test("accepts a real PDF invoice outside the predefined service categories", () => {
+  const parsed = normalizePdfInvoiceCandidate({
+    isInvoice: true,
+    providerName: "Supabase Pte. Ltd.",
+    category: "software subscription",
+    monthlyCost: 25,
+    receivedDate: "2026-08-02",
+  }, message({ id: "pdf-message-generic" }), "pdf-message-generic:pdf:abc123");
+
+  assert.deepEqual(parsed, {
+    sourceMessageId: "pdf-message-generic:pdf:abc123",
+    providerName: "Supabase Pte. Ltd.",
+    category: "אחר",
+    monthlyCost: 25,
+    receivedDate: "2026-08-02",
+    verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
+  });
+});
+
+test("keeps each PDF invoice independently addressable within one Gmail message", () => {
+  const gmailMessage = message({ id: "message-with-two-pdfs" });
+  const first = normalizePdfInvoiceCandidate({
+    isInvoice: true,
+    providerName: "Vendor A",
+    category: "other",
+    monthlyCost: 10,
+  }, gmailMessage, "message-with-two-pdfs:pdf:first");
+  const second = normalizePdfInvoiceCandidate({
+    isInvoice: true,
+    providerName: "Vendor B",
+    category: "other",
+    monthlyCost: 20,
+  }, gmailMessage, "message-with-two-pdfs:pdf:second");
+
+  assert.notEqual(first.sourceMessageId, second.sourceMessageId);
+  assert.equal(first.monthlyCost, 10);
+  assert.equal(second.monthlyCost, 20);
 });
 
 test("rejects uncertain PDF document extraction results", () => {
