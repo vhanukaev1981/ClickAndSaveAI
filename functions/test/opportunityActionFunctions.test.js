@@ -36,7 +36,7 @@ function providerOffer(overrides = {}) {
     category: "אינטרנט",
     country: "IL",
     monthlyPrice: 89,
-    serviceType: "",
+    serviceType: "ANY",
     verifiedAt: "2026-08-08T08:00:00Z",
     validUntil: "2027-09-08T08:00:00Z",
     officialSourceVerified: true,
@@ -82,6 +82,25 @@ test("verified action snapshot carries user saving and commercial attribution se
   assert.equal(snapshot.commissionType, "CPA");
   assert.equal(snapshot.commissionValue, 180);
   assert.equal(snapshot.commercialAgreementActive, true);
+});
+
+test("specific provider offer cannot be accepted when user service type is unknown", () => {
+  const snapshot = verifiedActionSnapshot(
+    opportunity(),
+    providerOffer({ serviceType: "1Gbps fiber" }),
+    "offer-1"
+  );
+  assert.equal(snapshot, null);
+});
+
+test("specific provider offer can be accepted when the observed service type matches", () => {
+  const snapshot = verifiedActionSnapshot(
+    opportunity({ serviceType: "1Gbps fiber" }),
+    providerOffer({ serviceType: "1Gbps fiber" }),
+    "offer-1"
+  );
+  assert.ok(snapshot);
+  assert.equal(snapshot.offerId, "offer-1");
 });
 
 test("action is rejected when the opportunity no longer points to the offer the user saw", () => {
