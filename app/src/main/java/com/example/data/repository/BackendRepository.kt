@@ -18,6 +18,14 @@ data class GmailConnectionResult(
     val consentVersion: String
 )
 
+data class GmailSyncStatusResult(
+    val connected: Boolean,
+    val storedParserVersion: Int,
+    val activeParserVersion: Int,
+    val upgradeRequired: Boolean,
+    val lookback: String
+)
+
 data class GmailWatchResult(
     val watching: Boolean,
     val historyId: String = "",
@@ -153,6 +161,21 @@ class BackendRepository(
             connected = response["connected"] as? Boolean ?: false,
             email = response["email"] as? String ?: "",
             consentVersion = response["consentVersion"] as? String ?: ""
+        )
+    }
+
+    suspend fun getGmailSyncStatus(): GmailSyncStatusResult {
+        val response = functions.getHttpsCallable("getGmailSyncStatus")
+            .call()
+            .await()
+            .data
+            .asStringMap()
+        return GmailSyncStatusResult(
+            connected = response["connected"] as? Boolean ?: false,
+            storedParserVersion = (response["storedParserVersion"] as? Number)?.toInt() ?: 0,
+            activeParserVersion = (response["activeParserVersion"] as? Number)?.toInt() ?: 0,
+            upgradeRequired = response["upgradeRequired"] as? Boolean ?: false,
+            lookback = response["lookback"] as? String ?: ""
         )
     }
 
