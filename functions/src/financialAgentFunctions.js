@@ -15,6 +15,7 @@ const {
   isOpportunityLifecycleLocked,
   shouldRefreshCommerceMatch,
 } = require("./opportunityLifecycle");
+const { shouldRunAgentForImport } = require("./agentTriggerPolicy");
 
 const db = getFirestore();
 const MAX_SOURCE_DOCS_PER_AGENT_RUN = 500;
@@ -312,6 +313,14 @@ exports.onGmailFinancialDataChanged = onDocumentWritten(
   async (event) => {
     const uid = String(event.params.uid || "").trim();
     if (!uid) return;
+    const afterData = event.data?.after?.exists ? event.data.after.data() : null;
+    if (!shouldRunAgentForImport(afterData)) {
+      logger.info("Financial agent trigger coalesced into Gmail backfill batch", {
+        uid,
+        messageId: String(event.params.messageId || ""),
+      });
+      return;
+    }
     await runFinancialAgentForUser(uid);
   }
 );
