@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const { normalizeServiceType } = require("./serviceProfile");
 
 const MONETIZABLE_CATEGORIES = new Set([
   "אינטרנט",
@@ -30,6 +31,7 @@ function normalizeInvoice(invoice) {
     receivedDate,
     receivedAtMs: Number.isFinite(parsedDate) ? parsedDate : 0,
     verificationStatus: String(invoice.verificationStatus || "UNVERIFIED_GMAIL_IMPORT"),
+    serviceType: normalizeServiceType(category, invoice.serviceType) || "",
   };
 }
 
@@ -94,6 +96,7 @@ function buildFinancialContext(invoices) {
       observedMonths,
       latestSourceMessageId: latest.sourceMessageId,
       verificationStatus: latest.verificationStatus,
+      ...(latest.serviceType ? { serviceType: latest.serviceType } : {}),
     });
 
     observedRecurringMonthlySpend += latest.monthlyCost;
@@ -145,6 +148,7 @@ function detectFinancialSignals(invoices) {
         observationCount: group.length,
         sourceMessageId: latest.sourceMessageId,
         severity: "INFO",
+        ...(latest.serviceType ? { serviceType: latest.serviceType } : {}),
       });
     }
 
@@ -168,6 +172,7 @@ function detectFinancialSignals(invoices) {
           sourceMessageId: latest.sourceMessageId,
           previousSourceMessageId: previous.sourceMessageId,
           severity: roundedPercent >= 20 ? "HIGH" : "MEDIUM",
+          ...(latest.serviceType ? { serviceType: latest.serviceType } : {}),
         });
       }
     }
@@ -191,6 +196,7 @@ function detectFinancialSignals(invoices) {
       evidenceSourceMessageIds: previous
         ? [previous.sourceMessageId, latest.sourceMessageId]
         : [latest.sourceMessageId],
+      ...(latest.serviceType ? { serviceType: latest.serviceType } : {}),
       commercial: {
         monetizableCategory: true,
         partnerMatchStatus: "NOT_CHECKED",
