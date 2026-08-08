@@ -1,6 +1,11 @@
 "use strict";
 
 const { normalizeServiceType } = require("./serviceProfile");
+const {
+  normalizeAvailabilityMode,
+  offerAvailabilityEligible,
+  normalizeConsumerPricingEvidence,
+} = require("./offerEligibilityPolicy");
 
 const FIXED_MONTHLY_CATEGORIES = new Set([
   "אינטרנט",
@@ -47,6 +52,8 @@ function normalizeOffer(offer, nowMs = Date.now()) {
   const oneTimeFees = Number(offer.oneTimeFees);
   const verifiedAtMs = toMillis(offer.verifiedAt);
   const validUntilMs = toMillis(offer.validUntil);
+  const availabilityMode = normalizeAvailabilityMode(offer.availabilityMode);
+  const pricingEvidence = normalizeConsumerPricingEvidence(offer);
 
   if (!offerId || !providerName || !category) return null;
   if (pricingModel !== SUPPORTED_PRICING_MODEL) return null;
@@ -59,12 +66,14 @@ function normalizeOffer(offer, nowMs = Date.now()) {
   if (validUntilMs <= nowMs) return null;
   if (offer.officialSourceVerified !== true) return null;
   if (offer.availabilityStatus !== "AVAILABLE") return null;
+  if (!availabilityMode || !pricingEvidence) return null;
 
   const serviceType = normalizeServiceType(category, offer.serviceType);
   if (!serviceType) return null;
 
   const userFitScore = Number(offer.userFitScore);
-  const firstYearCost = roundMoney((monthlyPrice * 12) + oneTimeFees);
+  const effectiveMonthlyPrice = roundMoney(monthlyPrice + pricingEvidence.requiredRecurringFees);
+  const firstYearCost = roundMoney((effectiveMonthlyPrice * 12) + oneTimeFees);
   return {
     offerId,
     providerName,
@@ -72,10 +81,15 @@ function normalizeOffer(offer, nowMs = Date.now()) {
     country,
     pricingModel,
     monthlyPrice: roundMoney(monthlyPrice),
+    effectiveMonthlyPrice,
     priceGuaranteedMonths,
     oneTimeFees: roundMoney(oneTimeFees),
     firstYearCost,
     serviceType,
+    availabilityMode,
+    consumerPriceIncludesVat: pricingEvidence.consumerPriceIncludesVat,
+    requiredRecurringFees: pricingEvidence.requiredRecurringFees,
+    requiredRecurringFeesDescription: pricingEvidence.requiredRecurringFeesDescription,
     verifiedAt: new Date(verifiedAtMs).toISOString(),
     validUntil: new Date(validUntilMs).toISOString(),
     userFitScore: Number.isFinite(userFitScore)
@@ -116,6 +130,7 @@ function matchVerifiedOffers(opportunity, offers, options = {}) {
     if (offer.country !== country) continue;
     if (offer.category !== category) continue;
     if (!serviceCompatible(opportunity, offer)) continue;
+    if (!offerAvailabilityEligible(opportunity, offer)) continue;
 
     const annualSaving = roundMoney(currentFirstYearCost - offer.firstYearCost);
     if (annualSaving <= 0) continue;
@@ -157,7 +172,7 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
         ...(opportunity.truthfulness || {}),
         savingsClaimAvailable: false,
         reason: FIXED_MONTHLY_CATEGORIES.has(String(opportunity?.category || "").trim())
-          ? "No verified compatible current offer with a trustworthy first-year cost is available."
+          ? "No verified compatible current offer with trustworthy consumer pricing and availability is available."
           : "This category requires a category-specific pricing model before a savings amount can be claimed.",
       },
     };
@@ -171,10 +186,15 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
       providerName: best.providerName,
       pricingModel: best.pricingModel,
       monthlyPrice: best.monthlyPrice,
+      effectiveMonthlyPrice: best.effectiveMonthlyPrice,
       priceGuaranteedMonths: best.priceGuaranteedMonths,
       oneTimeFees: best.oneTimeFees,
       firstYearCost: best.firstYearCost,
       serviceType: best.serviceType,
+      availabilityMode: best.availabilityMode,
+      consumerPriceIncludesVat: best.consumerPriceIncludesVat,
+      requiredRecurringFees: best.requiredRecurringFees,
+      requiredRecurringFeesDescription: best.requiredRecurringFeesDescription,
       verifiedAt: best.verifiedAt,
       validUntil: best.validUntil,
       userFitScore: best.userFitScore,
@@ -185,7 +205,7 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
     truthfulness: {
       ...(opportunity.truthfulness || {}),
       savingsClaimAvailable: true,
-      reason: "Savings are calculated from verified first-year cost, including declared one-time fees.",
+      reason: "Savings are calculated from verified VAT-inclusive first-year cost, including declared mandatory recurring and one-time fees, after availability eligibility.",
     },
   };
 }
