@@ -35,7 +35,7 @@ const CONSENT_VERSION = "gmail-readonly-v1";
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const INITIAL_GMAIL_LOOKBACK = "6m";
 const GMAIL_LIST_PAGE_SIZE = 100;
-const GMAIL_PARSER_VERSION = 5;
+const GMAIL_PARSER_VERSION = 4;
 
 function requireAuth(request) {
   if (!request.auth?.uid) {
@@ -217,7 +217,7 @@ async function analyzePdfInvoice(message, pdfBase64, filename, sourceDocumentId)
 }
 
 async function listGmailCandidateMessageIds(accessToken) {
-  const query = `newer_than:${INITIAL_GMAIL_LOOKBACK} {חשבונית קבלה "הודעת תשלום" "פירוט חיוב" "חשבון חודשי" invoice receipt bill statement סלקום cellcom פרטנר partner פלאפון pelephone בזק bezeq "חברת החשמל" HOT yes הראל harel הפניקס phoenix fnx מגדל migdal כלל clal מנורה menora AIG "ביטוח ישיר" ליברה libra weSure filename:pdf}`;
+  const query = `newer_than:${INITIAL_GMAIL_LOOKBACK} {חשבונית קבלה "הודעת תשלום" "פירוט חיוב" "חשבון חודשי" invoice receipt bill statement סלקום cellcom פרטנר partner פלאפון pelephone בזק bezeq "חברת החשמל" HOT yes filename:pdf}`;
   const messageIds = [];
   const seen = new Set();
   let pageToken = "";
