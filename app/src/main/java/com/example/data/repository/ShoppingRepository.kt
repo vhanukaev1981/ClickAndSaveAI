@@ -7,6 +7,23 @@ import com.example.data.local.SavingsRecord
 import com.example.data.local.WatchlistItem
 import kotlinx.coroutines.flow.Flow
 
+internal fun mergeObservedGmailInvoice(existing: InvoiceItem, incoming: InvoiceItem): InvoiceItem {
+    val existingSourceId = existing.sourceMessageId?.trim().orEmpty()
+    val incomingSourceId = incoming.sourceMessageId?.trim().orEmpty()
+    require(existingSourceId.isNotEmpty() && existingSourceId == incomingSourceId) {
+        "Gmail invoice merge requires the same non-empty sourceMessageId"
+    }
+
+    return existing.copy(
+        providerName = incoming.providerName,
+        category = incoming.category,
+        monthlyCost = incoming.monthlyCost,
+        billDate = incoming.billDate,
+        sourceType = incoming.sourceType,
+        verificationStatus = incoming.verificationStatus
+    )
+}
+
 class ShoppingRepository(private val db: AppDatabase) {
     val watchlistItems: Flow<List<WatchlistItem>> = db.watchlistDao().getAllWatchlistItems()
     val coupons: Flow<List<CouponItem>> = db.couponDao().getAllCoupons()
@@ -21,6 +38,30 @@ class ShoppingRepository(private val db: AppDatabase) {
     suspend fun updateWatchlistItem(item: WatchlistItem) = db.watchlistDao().updateItem(item)
 
     suspend fun addInvoice(invoice: InvoiceItem) = db.invoiceDao().insertInvoice(invoice)
+
+    suspend fun upsertObservedGmailInvoice(invoice: InvoiceItem) {
+        val sourceMessageId = invoice.sourceMessageId?.trim().orEmpty()
+        if (sourceMessageId.isEmpty()) {
+            db.invoiceDao().insertInvoice(invoice)
+            return
+        }
+
+        val existing = db.invoiceDao().findBySourceMessageId(sourceMessageId)
+        if (existing != null) {
+            db.invoiceDao().updateInvoice(mergeObservedGmailInvoice(existing, invoice))
+            return
+        }
+
+        val insertedId = db.invoiceDao().insertInvoice(invoice)
+        if (insertedId == -1L) {
+            // Defensive race recovery: another coroutine may have inserted the same Gmail
+            // source between the lookup and INSERT IGNORE.
+            db.invoiceDao().findBySourceMessageId(sourceMessageId)?.let { concurrent ->
+                db.invoiceDao().updateInvoice(mergeObservedGmailInvoice(concurrent, invoice))
+            }
+        }
+    }
+
     suspend fun updateInvoice(invoice: InvoiceItem) = db.invoiceDao().updateInvoice(invoice)
     suspend fun deleteInvoice(id: Long) = db.invoiceDao().deleteInvoice(id)
 
