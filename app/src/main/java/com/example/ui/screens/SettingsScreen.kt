@@ -147,7 +147,7 @@ fun SettingsScreen(
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("ספקים מועדפים", fontWeight = FontWeight.Bold)
                     Text(
-                        "אפשר לציין העדפות, אבל ההמלצה הסופית עדיין מבוססת על התאמה, מחיר ותנאים מאומתים — לא על העמלה של Click&SaveAI.",
+                        "אפשר לציין העדפות. ההמלצה הסופית מבוססת על התאמה לשירות שלך, מחיר ותנאים שניתן לאמת.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
