@@ -70,6 +70,11 @@ function distinctObservedMonths(group) {
   return months.size;
 }
 
+function isRecurringGroup(group) {
+  const observedMonths = distinctObservedMonths(group);
+  return group.length >= 2 && (observedMonths >= 2 || group.length >= 3);
+}
+
 function buildFinancialContext(invoices) {
   const groups = groupInvoices(invoices);
   const recurringServices = [];
@@ -79,8 +84,7 @@ function buildFinancialContext(invoices) {
   for (const group of groups.values()) {
     const latest = group[group.length - 1];
     const observedMonths = distinctObservedMonths(group);
-    const recurring = group.length >= 2 && (observedMonths >= 2 || group.length >= 3);
-    if (!recurring) continue;
+    if (!isRecurringGroup(group)) continue;
 
     recurringServices.push({
       providerName: latest.providerName,
@@ -126,9 +130,12 @@ function detectFinancialSignals(invoices) {
   for (const group of groups.values()) {
     const latest = group[group.length - 1];
     const previous = group.length >= 2 ? group[group.length - 2] : null;
-    const observedMonths = distinctObservedMonths(group);
+    const recurring = isRecurringGroup(group);
+    let materialIncrease = false;
+    let roundedDelta = 0;
+    let roundedPercent = 0;
 
-    if (group.length >= 2 && (observedMonths >= 2 || group.length >= 3)) {
+    if (recurring) {
       insights.push({
         id: stableId(["recurring", serviceKey(latest)]),
         type: "RECURRING_SERVICE_OBSERVED",
@@ -141,44 +148,51 @@ function detectFinancialSignals(invoices) {
       });
     }
 
-    if (!previous) continue;
-    const delta = latest.monthlyCost - previous.monthlyCost;
-    const percent = previous.monthlyCost > 0 ? (delta / previous.monthlyCost) * 100 : 0;
-    const materialIncrease = delta >= 5 && percent >= 5;
-    if (!materialIncrease) continue;
+    if (previous) {
+      const delta = latest.monthlyCost - previous.monthlyCost;
+      const percent = previous.monthlyCost > 0 ? (delta / previous.monthlyCost) * 100 : 0;
+      materialIncrease = delta >= 5 && percent >= 5;
+      roundedDelta = roundMoney(delta);
+      roundedPercent = roundMoney(percent);
 
-    const roundedDelta = roundMoney(delta);
-    const roundedPercent = roundMoney(percent);
-    insights.push({
-      id: stableId(["price-increase", serviceKey(latest), latest.sourceMessageId]),
-      type: "PRICE_INCREASE_DETECTED",
-      providerName: latest.providerName,
-      category: latest.category,
-      previousMonthlyCost: roundMoney(previous.monthlyCost),
-      currentMonthlyCost: roundMoney(latest.monthlyCost),
-      monthlyIncrease: roundedDelta,
-      percentIncrease: roundedPercent,
-      sourceMessageId: latest.sourceMessageId,
-      previousSourceMessageId: previous.sourceMessageId,
-      severity: roundedPercent >= 20 ? "HIGH" : "MEDIUM",
-    });
+      if (materialIncrease) {
+        insights.push({
+          id: stableId(["price-increase", serviceKey(latest), latest.sourceMessageId]),
+          type: "PRICE_INCREASE_DETECTED",
+          providerName: latest.providerName,
+          category: latest.category,
+          previousMonthlyCost: roundMoney(previous.monthlyCost),
+          currentMonthlyCost: roundMoney(latest.monthlyCost),
+          monthlyIncrease: roundedDelta,
+          percentIncrease: roundedPercent,
+          sourceMessageId: latest.sourceMessageId,
+          previousSourceMessageId: previous.sourceMessageId,
+          severity: roundedPercent >= 20 ? "HIGH" : "MEDIUM",
+        });
+      }
+    }
+
+    const monetizable = MONETIZABLE_CATEGORIES.has(latest.category);
+    const shouldOptimize = monetizable && (recurring || materialIncrease);
+    if (!shouldOptimize) continue;
 
     opportunities.push({
-      id: stableId(["compare-after-increase", serviceKey(latest), latest.sourceMessageId]),
-      type: "COMPARE_AFTER_PRICE_INCREASE",
-      status: "OPEN",
+      id: stableId(["optimize-service", serviceKey(latest)]),
+      type: materialIncrease ? "COMPARE_AFTER_PRICE_INCREASE" : "OPTIMIZE_RECURRING_SERVICE",
       providerName: latest.providerName,
       category: latest.category,
       currentMonthlyCost: roundMoney(latest.monthlyCost),
-      previousMonthlyCost: roundMoney(previous.monthlyCost),
-      monthlyIncrease: roundedDelta,
-      percentIncrease: roundedPercent,
+      previousMonthlyCost: previous ? roundMoney(previous.monthlyCost) : 0,
+      monthlyIncrease: materialIncrease ? roundedDelta : 0,
+      percentIncrease: materialIncrease ? roundedPercent : 0,
       potentialMonthlySaving: null,
       potentialAnnualSaving: null,
       recommendationAction: "FIND_VERIFIED_ALTERNATIVES",
-      evidenceSourceMessageIds: [previous.sourceMessageId, latest.sourceMessageId],
+      evidenceSourceMessageIds: previous
+        ? [previous.sourceMessageId, latest.sourceMessageId]
+        : [latest.sourceMessageId],
       commercial: {
-        monetizableCategory: MONETIZABLE_CATEGORIES.has(latest.category),
+        monetizableCategory: true,
         partnerMatchStatus: "NOT_CHECKED",
         commissionStatus: "UNKNOWN",
         userIntent: "SYSTEM_DETECTED_SAVINGS_NEED",
