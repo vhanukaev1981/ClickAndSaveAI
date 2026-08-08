@@ -57,6 +57,26 @@ test("unverified, expired and incompatible offers are rejected", () => {
   assert.deepEqual(matches.map((item) => item.offerId), ["valid"]);
 });
 
+test("specific service offer is rejected when user service type is unknown", () => {
+  const unknownServiceOpportunity = {
+    category: "אינטרנט",
+    currentMonthlyCost: 129,
+  };
+  const matches = matchVerifiedOffers(unknownServiceOpportunity, [
+    offer({ offerId: "specific", serviceType: "1Gbps fiber", monthlyPrice: 89 }),
+    offer({ offerId: "universal", serviceType: "ANY", monthlyPrice: 99 }),
+  ], { nowMs });
+
+  assert.deepEqual(matches.map((item) => item.offerId), ["universal"]);
+});
+
+test("offer without a declared service type is rejected", () => {
+  const matches = matchVerifiedOffers(opportunity, [
+    offer({ offerId: "missing-service", serviceType: "" }),
+  ], { nowMs });
+  assert.equal(matches.length, 0);
+});
+
 test("savings claim appears only after a verified compatible offer is matched", () => {
   const noMatch = enrichOpportunityWithBestOffer(opportunity, [], { nowMs });
   assert.equal(noMatch.potentialMonthlySaving, null);
