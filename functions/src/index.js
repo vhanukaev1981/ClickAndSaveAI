@@ -35,6 +35,7 @@ const CONSENT_VERSION = "gmail-readonly-v1";
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const INITIAL_GMAIL_LOOKBACK = "6m";
 const GMAIL_LIST_PAGE_SIZE = 100;
+const GMAIL_PARSER_VERSION = 4;
 
 function requireAuth(request) {
   if (!request.auth?.uid) {
@@ -48,8 +49,7 @@ function invalidArgument(error) {
   return new HttpsError("invalid-argument", message);
 }
 
-function storedInvoiceOrNull(data) {
-  const invoice = data?.invoice;
+function normalizeStoredInvoice(invoice) {
   if (!invoice || typeof invoice !== "object") return null;
   if (!invoice.sourceMessageId || !invoice.providerName || !invoice.category) return null;
   const monthlyCost = Number(invoice.monthlyCost);
@@ -62,6 +62,13 @@ function storedInvoiceOrNull(data) {
     receivedDate: String(invoice.receivedDate || ""),
     verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
   };
+}
+
+function storedInvoices(data) {
+  const raw = Array.isArray(data?.invoices)
+    ? data.invoices
+    : (data?.invoice ? [data.invoice] : []);
+  return raw.map(normalizeStoredInvoice).filter(Boolean);
 }
 
 async function postForm(url, values) {
@@ -158,7 +165,16 @@ async function loadPdfAttachmentBase64(accessToken, messageId, attachment) {
   return data;
 }
 
-async function analyzePdfInvoice(message, pdfBase64, filename) {
+function pdfSourceDocumentId(messageId, attachment, index) {
+  const fingerprint = crypto
+    .createHash("sha256")
+    .update(`${messageId}:${attachment.attachmentId || attachment.filename || "inline"}:${index}`)
+    .digest("hex")
+    .slice(0, 20);
+  return `${messageId}:pdf:${fingerprint}`;
+}
+
+async function analyzePdfInvoice(message, pdfBase64, filename, sourceDocumentId) {
   const headers = message?.payload?.headers || [];
   const subject = firstHeader(headers, "Subject").slice(0, 300);
   const from = firstHeader(headers, "From").slice(0, 300);
@@ -166,17 +182,18 @@ async function analyzePdfInvoice(message, pdfBase64, filename) {
   const safeFilename = String(filename || "").slice(0, 180);
 
   const prompt = [
-    "Analyze the attached PDF strictly as a document extractor, not as a recommendation engine.",
+    "Analyze this PDF independently of the email body.",
     "Return JSON only with keys: isInvoice, providerName, category, monthlyCost, receivedDate.",
-    "Set isInvoice=true only when the PDF itself clearly represents a bill, invoice, monthly statement or receipt for a recurring household service.",
-    "Supported categories are only: חשמל, אינטרנט, סלולר, טלוויזיה, ביטוח, תקשורת.",
-    "monthlyCost must be the actual total/current amount due for this billing document, not a promotional price, subtotal, previous balance or savings figure.",
-    "Do not infer or invent missing provider, category or amount. If any required field is uncertain, set isInvoice=false.",
-    "Do not return account numbers, addresses, IDs, phone numbers, payment details or any other personal data.",
-    `Email subject context: ${subject}`,
-    `Email sender context: ${from}`,
-    `Email date context: ${date}`,
-    `Attachment filename context: ${safeFilename}`,
+    "Set isInvoice=true when the PDF itself is clearly an invoice, tax invoice, receipt, bill, charge statement or equivalent billing document.",
+    "The document does not need to belong to a predefined household-service category.",
+    "For category, use a short useful category when clear; otherwise use other.",
+    "monthlyCost must be the actual document total, amount charged, amount paid or current amount due represented by this billing document, not a promotional price or savings figure.",
+    "Do not invent an amount. If the PDF is not a billing document or no reliable monetary total can be extracted, set isInvoice=false.",
+    "Extract providerName when visible. Do not return account numbers, addresses, IDs, phone numbers, payment details or other personal data.",
+    `Email subject context only: ${subject}`,
+    `Email sender context only: ${from}`,
+    `Email date context only: ${date}`,
+    `Attachment filename context only: ${safeFilename}`,
   ].join("\n");
 
   const { GoogleGenAI } = await import("@google/genai");
@@ -196,7 +213,7 @@ async function analyzePdfInvoice(message, pdfBase64, filename) {
   });
 
   const candidate = JSON.parse(response.text || "{}");
-  return normalizePdfInvoiceCandidate(candidate, message);
+  return normalizePdfInvoiceCandidate(candidate, message, sourceDocumentId);
 }
 
 async function listGmailCandidateMessageIds(accessToken) {
@@ -363,6 +380,7 @@ exports.scanGmailInvoices = onCall(
     let importedCount = 0;
     let pdfCandidates = 0;
     let pdfAnalyzed = 0;
+    let pdfIncomplete = 0;
 
     for (const messageId of messageIds) {
       const auditRef = db
@@ -371,9 +389,12 @@ exports.scanGmailInvoices = onCall(
         .collection("gmailMessageImports")
         .doc(String(messageId));
       const existingSnapshot = await auditRef.get();
-      const existingInvoice = storedInvoiceOrNull(existingSnapshot.data());
-      if (existingInvoice) {
-        invoices.push(existingInvoice);
+      const existingData = existingSnapshot.data() || {};
+      const existingInvoices = storedInvoices(existingData);
+      const alreadyFullyAnalyzed = Number(existingData.parserVersion || 0) >= GMAIL_PARSER_VERSION &&
+        existingData.pdfAnalysisComplete === true;
+      if (alreadyFullyAnalyzed) {
+        invoices.push(...existingInvoices);
         continue;
       }
 
@@ -387,49 +408,79 @@ exports.scanGmailInvoices = onCall(
       }
 
       const message = await detailResponse.json();
-      let parsed = parseGmailMessage(message);
+      const bodyInvoice = parseGmailMessage(message);
+      const pdfAttachments = collectPdfAttachments(message.payload);
+      pdfCandidates += pdfAttachments.length;
+      const pdfInvoices = [];
+      let allPdfsAnalyzed = true;
 
-      if (!parsed) {
-        const pdfAttachments = collectPdfAttachments(message.payload, 3);
-        pdfCandidates += pdfAttachments.length;
-        for (const attachment of pdfAttachments) {
-          try {
-            const pdfBase64 = await loadPdfAttachmentBase64(accessToken, messageId, attachment);
-            if (!pdfBase64) continue;
-            pdfAnalyzed += 1;
-            parsed = await analyzePdfInvoice(message, pdfBase64, attachment.filename);
-            if (parsed) break;
-          } catch (error) {
-            logger.warn("PDF invoice analysis skipped", {
-              uid,
-              messageId,
-              errorName: error instanceof Error ? error.name : typeof error,
-            });
+      for (let index = 0; index < pdfAttachments.length; index += 1) {
+        const attachment = pdfAttachments[index];
+        try {
+          const pdfBase64 = await loadPdfAttachmentBase64(accessToken, messageId, attachment);
+          if (!pdfBase64) {
+            allPdfsAnalyzed = false;
+            pdfIncomplete += 1;
+            continue;
           }
+          pdfAnalyzed += 1;
+          const sourceDocumentId = pdfSourceDocumentId(messageId, attachment, index);
+          const pdfInvoice = await analyzePdfInvoice(
+            message,
+            pdfBase64,
+            attachment.filename,
+            sourceDocumentId
+          );
+          if (pdfInvoice) pdfInvoices.push(pdfInvoice);
+        } catch (error) {
+          allPdfsAnalyzed = false;
+          pdfIncomplete += 1;
+          logger.warn("PDF invoice analysis failed and will be retried", {
+            uid,
+            messageId,
+            attachmentIndex: index,
+            errorName: error instanceof Error ? error.name : typeof error,
+          });
         }
       }
 
-      if (!parsed) continue;
+      // Every PDF is authoritative as its own document. If at least one PDF is a billing
+      // document, do not also add the email-body representation of the same bill.
+      const parsedInvoices = pdfInvoices.length > 0
+        ? pdfInvoices
+        : (bodyInvoice ? [bodyInvoice] : []);
 
-      let resolvedInvoice = parsed;
-      let wasCreated = false;
+      let resolvedInvoices = parsedInvoices;
+      let newlyImportedCount = 0;
       await db.runTransaction(async (transaction) => {
         const current = await transaction.get(auditRef);
-        const transactionInvoice = storedInvoiceOrNull(current.data());
-        if (transactionInvoice) {
-          resolvedInvoice = transactionInvoice;
+        const currentData = current.data() || {};
+        const currentInvoices = storedInvoices(currentData);
+        const currentComplete = Number(currentData.parserVersion || 0) >= GMAIL_PARSER_VERSION &&
+          currentData.pdfAnalysisComplete === true;
+        if (currentComplete) {
+          resolvedInvoices = currentInvoices;
           return;
         }
+
+        const existingIds = new Set(currentInvoices.map((invoice) => invoice.sourceMessageId));
+        newlyImportedCount = parsedInvoices.filter(
+          (invoice) => !existingIds.has(invoice.sourceMessageId)
+        ).length;
+
         transaction.set(auditRef, {
-          sourceMessageId: parsed.sourceMessageId,
-          invoice: parsed,
+          sourceMessageId: String(messageId),
+          invoices: parsedInvoices,
           importedAt: FieldValue.serverTimestamp(),
-          parserVersion: 3,
-        });
-        wasCreated = true;
+          parserVersion: GMAIL_PARSER_VERSION,
+          pdfAttachmentCount: pdfAttachments.length,
+          pdfAnalysisComplete: allPdfsAnalyzed,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
       });
-      if (wasCreated) importedCount += 1;
-      invoices.push(resolvedInvoice);
+
+      importedCount += newlyImportedCount;
+      invoices.push(...resolvedInvoices);
     }
 
     await connectionRef.set({
@@ -448,6 +499,7 @@ exports.scanGmailInvoices = onCall(
       imported: importedCount,
       pdfCandidates,
       pdfAnalyzed,
+      pdfIncomplete,
     });
     return {
       invoices,
@@ -455,6 +507,9 @@ exports.scanGmailInvoices = onCall(
       importedCount,
       scannedPages: pageCount,
       lookback: INITIAL_GMAIL_LOOKBACK,
+      pdfCandidates,
+      pdfAnalyzed,
+      pdfIncomplete,
     };
   }
 );
