@@ -100,7 +100,7 @@ class GmailRepository(
         return runCatching {
             val result = backendRepository.scanGmailInvoices()
             result.invoices.forEach { invoice ->
-                shoppingRepository.addInvoice(
+                shoppingRepository.upsertObservedGmailInvoice(
                     InvoiceItem(
                         providerName = invoice.providerName,
                         category = invoice.category,
@@ -129,7 +129,7 @@ class GmailRepository(
                     result.importedCount > 0 ->
                         "יובאו ${result.importedCount} חשבוניות חדשות ללא המלצת חיסכון עד לאימות."
                     recoveredCount > 0 ->
-                        "לא נמצאו חשבוניות חדשות; שוחזרו $recoveredCount רשומות שכבר נקלטו בשרת."
+                        "לא נמצאו חשבוניות חדשות; עודכנו $recoveredCount רשומות שכבר נקלטו בשרת."
                     result.scannedMessages > 0 ->
                         "נבדקו ${result.scannedMessages} הודעות מועמדות, אך לא נמצא חיוב שניתן לזהות באופן דטרמיניסטי."
                     else ->
