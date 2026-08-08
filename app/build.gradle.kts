@@ -104,6 +104,7 @@ dependencies {
   implementation(libs.androidx.room.runtime)
   implementation(libs.firebase.auth)
   implementation("com.google.firebase:firebase-functions")
+  implementation("com.google.firebase:firebase-messaging")
   implementation("com.google.firebase:firebase-appcheck-playintegrity")
   debugImplementation("com.google.firebase:firebase-appcheck-debug")
   implementation(libs.androidx.credentials)
