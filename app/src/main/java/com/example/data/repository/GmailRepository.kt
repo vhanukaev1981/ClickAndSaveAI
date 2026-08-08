@@ -33,11 +33,20 @@ class GmailRepository(
     private val _lastScanTime = MutableStateFlow("טרם בוצעה סריקה")
     val lastScanTime: StateFlow<String> = _lastScanTime.asStateFlow()
 
+    private suspend fun ensureGmailWatch() {
+        runCatching { backendRepository.startGmailWatch() }
+            .onFailure { error ->
+                // Gmail read-only access and manual scans remain usable while Pub/Sub is being configured.
+                Log.w("GmailRepository", "Gmail push watch is not active yet", error)
+            }
+    }
+
     suspend fun refreshConnectionStatus(): Result<GmailConnectionResult> {
         return runCatching {
             val connection = backendRepository.getGmailConnectionStatus()
             _isConnected.value = connection.connected
             _connectedEmail.value = if (connection.connected) connection.email else ""
+            if (connection.connected) ensureGmailWatch()
             connection
         }.onFailure { error ->
             Log.e("GmailRepository", "Gmail status refresh failed", error)
@@ -60,10 +69,11 @@ class GmailRepository(
             val connection = backendRepository.connectGmail(serverAuthCode)
             _isConnected.value = connection.connected
             _connectedEmail.value = connection.email.ifBlank { userEmail }
+            if (connection.connected) ensureGmailWatch()
             _syncState.value = GmailSyncState.Success(
                 invoicesFound = 0,
                 totalSavingsPotential = 0.0,
-                message = "Gmail חובר בהרשאת קריאה בלבד. טרם בוצעה סריקה."
+                message = "Gmail חובר בהרשאת קריאה בלבד. מתחיל סריקה ראשונית של 6 חודשים."
             )
             connection
         }.onFailure { error ->
@@ -138,6 +148,8 @@ class GmailRepository(
 
     suspend fun disconnectGmail(): Result<Unit> {
         return runCatching {
+            runCatching { backendRepository.stopGmailWatch() }
+                .onFailure { error -> Log.w("GmailRepository", "Stopping Gmail watch failed", error) }
             backendRepository.disconnectGmail()
             _isConnected.value = false
             _connectedEmail.value = ""
