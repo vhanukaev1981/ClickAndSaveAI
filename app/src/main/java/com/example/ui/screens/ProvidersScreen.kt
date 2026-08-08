@@ -7,26 +7,29 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,19 +39,56 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.data.local.IsraeliMarketData
-import com.example.data.local.MarketProviderOption
+import com.example.data.repository.BackendRepository
+import com.example.data.repository.FinancialHomeResult
+import com.example.data.repository.FinancialOpportunity
+import com.example.data.repository.OpportunityActionRepository
 import com.example.ui.MainViewModel
+import com.example.ui.theme.TechBluePrimary
 
 @Composable
 fun ProvidersScreen(viewModel: MainViewModel) {
-    var selectedCategory by remember { mutableStateOf("הכל") }
-    var searchQuery by remember { mutableStateOf("") }
+    val session by viewModel.userSession.collectAsState()
+    val isGmailConnected by viewModel.isGmailConnected.collectAsState()
+    val backendRepository = remember { BackendRepository() }
+    val actionRepository = remember { OpportunityActionRepository() }
+    var financialHome by remember { mutableStateOf<FinancialHomeResult?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
+    var selectedOpportunity by remember { mutableStateOf<FinancialOpportunity?>(null) }
+    var actionMessage by remember { mutableStateOf("") }
+    var refreshKey by remember { mutableStateOf(0) }
 
-    val options = IsraeliMarketData.getOptionsForCategory(selectedCategory).filter { option ->
-        searchQuery.isBlank() ||
-            option.providerName.contains(searchQuery, ignoreCase = true) ||
-            option.planName.contains(searchQuery, ignoreCase = true)
+    LaunchedEffect(session.isAuthenticated, isGmailConnected, refreshKey) {
+        if (!session.isAuthenticated || !isGmailConnected) {
+            financialHome = null
+            return@LaunchedEffect
+        }
+        loading = true
+        runCatching { backendRepository.getFinancialHome() }
+            .onSuccess {
+                financialHome = it
+                error = ""
+            }
+            .onFailure {
+                error = it.localizedMessage ?: "לא ניתן לטעון כרגע את הזדמנויות החיסכון."
+            }
+        loading = false
+    }
+
+    selectedOpportunity?.let { opportunity ->
+        SavingsActionDialog(
+            opportunity = opportunity,
+            defaultName = session.displayName,
+            defaultEmail = session.email,
+            onDismiss = { selectedOpportunity = null },
+            onSubmit = { name, phone, email ->
+                loading = true
+                actionMessage = ""
+                kotlinx.coroutines.GlobalScope
+                selectedOpportunity = null
+            }
+        )
     }
 
     Column(
@@ -56,77 +96,254 @@ fun ProvidersScreen(viewModel: MainViewModel) {
             .fillMaxSize()
             .testTag("providers_screen")
     ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            shape = RoundedCornerShape(18.dp)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Info, contentDescription = null)
-                    Spacer(modifier = Modifier.size(8.dp))
-                    Text("קטלוג ספקים להדגמה בלבד", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                }
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    "המחירים והתנאים בקוד אינם מקור מסחרי מאומת ואינם מעודכנים בזמן אמת. ליד נוצר רק ממסך חשבוניות ובאישור מפורש.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("חיפוש בקטלוג") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(IsraeliMarketData.allCategories) { category ->
-                        FilterChip(
-                            selected = selectedCategory == category,
-                            onClick = { selectedCategory = category },
-                            label = { Text(category) }
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    shape = RoundedCornerShape(22.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = TechBluePrimary)
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text(
+                                "הזדמנויות ש-Click&SaveAI מצאה",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Text(
+                            "אין כאן קטלוג דמו. המערכת מציגה רק צורך שזוהה מהנתונים שלך, ורק חיסכון שמגובה בהצעה עדכנית ומאומתת.",
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
             }
-        }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 100.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            if (!session.isAuthenticated || !isGmailConnected) {
+                item {
+                    MessageCard(
+                        title = "המערכת עדיין לא יכולה לעבוד ברקע",
+                        body = "התחבר וחבר Gmail פעם אחת. לאחר מכן Click&SaveAI תזהה ותבדוק הזדמנויות עבורך אוטומטית."
+                    )
+                }
+            } else if (loading && financialHome == null) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+            } else {
+                val opportunities = financialHome?.opportunities.orEmpty()
+                if (opportunities.isEmpty()) {
+                    item {
+                        MessageCard(
+                            title = "ה-AI ממשיך לבדוק",
+                            body = "כרגע אין צורך לחפש ידנית. אם יזוהה שינוי במחיר או תימצא הצעה מתאימה, היא תופיע כאן אוטומטית."
+                        )
+                    }
+                } else {
+                    items(opportunities, key = { it.id }) { opportunity ->
+                        OpportunityCard(
+                            opportunity = opportunity,
+                            onAccept = { selectedOpportunity = opportunity }
+                        )
+                    }
+                }
+            }
+
+            if (actionMessage.isNotBlank()) {
+                item { MessageCard(title = "הבקשה נקלטה", body = actionMessage) }
+            }
+            if (error.isNotBlank()) {
+                item { MessageCard(title = "לא ניתן להשלים את הבדיקה", body = error) }
+            }
+        }
+    }
+
+    selectedOpportunity?.let { opportunity ->
+        SavingsActionDialog(
+            opportunity = opportunity,
+            defaultName = session.displayName,
+            defaultEmail = session.email,
+            onDismiss = { selectedOpportunity = null },
+            onSubmit = { name, phone, email ->
+                selectedOpportunity = null
+                loading = true
+                viewModel.viewModelScope.launch {
+                    runCatching {
+                        actionRepository.acceptSavingsOpportunity(
+                            opportunityId = opportunity.id,
+                            contactName = name,
+                            phone = phone,
+                            contactEmail = email
+                        )
+                    }.onSuccess { result ->
+                        actionMessage = "יצרנו בקשה מאומתת ל-${opportunity.matchedOffer?.providerName.orEmpty()}. החיסכון שנבדק: ${money(result.potentialMonthlySaving)} בחודש."
+                        error = ""
+                        refreshKey += 1
+                    }.onFailure { throwable ->
+                        error = throwable.localizedMessage ?: "ההצעה השתנתה או שאינה זמינה כרגע."
+                    }
+                    loading = false
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun OpportunityCard(
+    opportunity: FinancialOpportunity,
+    onAccept: () -> Unit
+) {
+    val matched = opportunity.matchedOffer
+    val monthlySaving = opportunity.potentialMonthlySaving
+    val actionable = matched != null && monthlySaving != null && monthlySaving > 0.0
+
+    Card(shape = RoundedCornerShape(20.dp)) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(options) { option ->
-                ReadOnlyProviderCard(option = option, onOpenInvoices = { viewModel.setTab(1) })
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (actionable) Icons.Default.Verified else Icons.Default.Savings,
+                    contentDescription = null,
+                    tint = TechBluePrimary
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "${opportunity.providerName} • ${opportunity.category}",
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "החיוב שנצפה: ${money(opportunity.currentMonthlyCost)} לחודש",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (actionable) {
+                Text(
+                    "מצאנו ${matched.providerName} ב-${money(matched.monthlyPrice)} לחודש.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "חיסכון מאומת: ${money(monthlySaving)} בחודש • ${money(opportunity.potentialAnnualSaving ?: 0.0)} בשנה",
+                    color = TechBluePrimary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "ההצעה אומתה ונבדקה להתאמה לפני הצגתה. האפליקציה בודקת אותה שוב לפני יצירת בקשה לספק.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (opportunity.status == "USER_ACCEPTED") {
+                    Text("הבקשה כבר נשלחה לספק.", fontWeight = FontWeight.Bold)
+                } else {
+                    Button(onClick = onAccept, modifier = Modifier.fillMaxWidth()) {
+                        Text("אני רוצה לחסוך ${money(monthlySaving)} בחודש")
+                    }
+                }
+            } else {
+                Text(
+                    "זוהתה עליית מחיר של ${String.format("%.1f", opportunity.percentIncrease)}%. Click&SaveAI מחפשת עבורך חלופה מתאימה.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "לא נציג סכום חיסכון ולא נפנה לספק עד שתימצא הצעה שניתן לאמת.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
 }
 
 @Composable
-private fun ReadOnlyProviderCard(option: MarketProviderOption, onOpenInvoices: () -> Unit) {
-    Card(shape = RoundedCornerShape(16.dp)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(option.providerName, fontWeight = FontWeight.Bold)
-            Text(option.planName, style = MaterialTheme.typography.bodyMedium)
-            Spacer(modifier = Modifier.height(6.dp))
-            Text("טווח שמור בקוד: ${option.priceRange}", fontWeight = FontWeight.SemiBold)
-            Text(
-                option.highlights,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            Button(onClick = onOpenInvoices, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.ArrowForward, contentDescription = null)
-                Spacer(modifier = Modifier.size(6.dp))
-                Text("עבור לחשבוניות וליד מאומת")
+private fun SavingsActionDialog(
+    opportunity: FinancialOpportunity,
+    defaultName: String,
+    defaultEmail: String,
+    onDismiss: () -> Unit,
+    onSubmit: (String, String, String) -> Unit
+) {
+    var name by remember(opportunity.id) { mutableStateOf(defaultName) }
+    var phone by remember(opportunity.id) { mutableStateOf("") }
+    var email by remember(opportunity.id) { mutableStateOf(defaultEmail) }
+    var accepted by remember(opportunity.id) { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("אישור פנייה לספק") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text(
+                    "Click&SaveAI תעביר לספק רק את פרטי הקשר הדרושים ואת ההצעה שבחרת. לא נשלח תוכן Gmail."
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("שם") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it },
+                    label = { Text("טלפון") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("אימייל") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = accepted, onCheckedChange = { accepted = it })
+                    Text("אני מאשר/ת להעביר לספק את פרטי הקשר לצורך קבלת ההצעה.")
+                }
             }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSubmit(name.trim(), phone.trim(), email.trim()) },
+                enabled = accepted && name.isNotBlank() && phone.isNotBlank() && email.isNotBlank()
+            ) {
+                Text("שלח בקשה")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("ביטול") } }
+    )
+}
+
+@Composable
+private fun MessageCard(title: String, body: String) {
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(title, fontWeight = FontWeight.Bold)
+            Text(body, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
+
+private fun money(value: Double): String = "₪${String.format("%.2f", value)}"
