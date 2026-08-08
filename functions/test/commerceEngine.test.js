@@ -22,6 +22,8 @@ function offer(overrides) {
     pricingModel: "FIXED_MONTHLY",
     country: "IL",
     monthlyPrice: 99,
+    priceGuaranteedMonths: 12,
+    oneTimeFees: 0,
     serviceType: "1Gbps fiber",
     verifiedAt: "2026-08-08T08:00:00Z",
     validUntil: "2026-09-08T08:00:00Z",
@@ -43,7 +45,30 @@ test("ranking chooses the highest user saving even when another provider pays a 
 
   assert.equal(matches[0].offerId, "best-user");
   assert.equal(matches[0].monthlySaving, 40);
+  assert.equal(matches[0].annualSaving, 480);
   assert.equal(matches[1].offerId, "best-commission");
+});
+
+test("first-year fees can make a higher headline price the better user deal", () => {
+  const matches = matchVerifiedOffers(opportunity, [
+    offer({ offerId: "cheap-headline-high-fee", monthlyPrice: 89, oneTimeFees: 240 }),
+    offer({ offerId: "higher-headline-no-fee", monthlyPrice: 99, oneTimeFees: 0 }),
+  ], { nowMs });
+
+  assert.deepEqual(matches.map((item) => item.offerId), [
+    "higher-headline-no-fee",
+    "cheap-headline-high-fee",
+  ]);
+  assert.equal(matches[0].annualSaving, 360);
+  assert.equal(matches[1].annualSaving, 240);
+});
+
+test("short promotional price guarantees are rejected from automatic savings claims", () => {
+  const matches = matchVerifiedOffers(opportunity, [
+    offer({ offerId: "three-month-promo", monthlyPrice: 49, priceGuaranteedMonths: 3 }),
+    offer({ offerId: "twelve-month-price", monthlyPrice: 99, priceGuaranteedMonths: 12 }),
+  ], { nowMs });
+  assert.deepEqual(matches.map((item) => item.offerId), ["twelve-month-price"]);
 });
 
 test("unverified, expired, wrong-model and incompatible offers are rejected", () => {
@@ -108,7 +133,7 @@ test("insurance and electricity never receive a fixed-monthly savings claim", ()
   assert.equal(electricity.potentialAnnualSaving, null);
 });
 
-test("savings claim appears only after a verified compatible offer is matched", () => {
+test("savings claim appears only after a verified compatible first-year offer is matched", () => {
   const noMatch = enrichOpportunityWithBestOffer(opportunity, [], { nowMs });
   assert.equal(noMatch.potentialMonthlySaving, null);
   assert.equal(noMatch.truthfulness.savingsClaimAvailable, false);
@@ -118,6 +143,8 @@ test("savings claim appears only after a verified compatible offer is matched", 
   ], { nowMs });
   assert.equal(matched.potentialMonthlySaving, 40);
   assert.equal(matched.potentialAnnualSaving, 480);
+  assert.equal(matched.matchedOffer.firstYearCost, 1068);
+  assert.equal(matched.matchedOffer.oneTimeFees, 0);
   assert.equal(matched.truthfulness.savingsClaimAvailable, true);
 });
 
