@@ -6,23 +6,50 @@ const { validateDealQuery, validateLeadInput } = require("../src/validation");
 const { decryptToken, encryptToken } = require("../src/tokenCrypto");
 const { parseGmailMessage } = require("../src/gmailParser");
 
-test("lead validation requires explicit consent", () => {
-  assert.throws(() => validateLeadInput({}), /explicit lead consent/);
-});
-
-test("lead validation normalizes valid contact data", () => {
-  const lead = validateLeadInput({
+function validLead(overrides = {}) {
+  return {
     consentAccepted: true,
-    contactName: "  ישראל ישראלי ",
+    contactName: "ישראל ישראלי",
     phone: "+972 50-123-4567",
-    contactEmail: "USER@EXAMPLE.COM",
+    contactEmail: "user@example.com",
     currentProvider: "ספק קיים",
     requestedProvider: "ספק חדש",
     category: "סלולר",
     invoiceLocalId: "42",
     idempotencyKey: "lead-42-abc",
     consentVersion: "provider-lead-v1",
-  });
+    ...overrides,
+  };
+}
+
+test("lead validation requires explicit consent", () => {
+  assert.throws(() => validateLeadInput({}), /explicit lead consent/);
+});
+
+test("lead validation rejects unknown consent versions", () => {
+  assert.throws(
+    () => validateLeadInput(validLead({ consentVersion: "provider-lead-v999" })),
+    /unsupported lead consent version/
+  );
+});
+
+test("lead validation rejects unsupported categories", () => {
+  assert.throws(
+    () => validateLeadInput(validLead({ category: "אחר" })),
+    /category is unsupported/
+  );
+});
+
+test("lead validation accepts ambiguous telecom category", () => {
+  const lead = validateLeadInput(validLead({ category: "תקשורת" }));
+  assert.equal(lead.category, "תקשורת");
+});
+
+test("lead validation normalizes valid contact data", () => {
+  const lead = validateLeadInput(validLead({
+    contactName: "  ישראל ישראלי ",
+    contactEmail: "USER@EXAMPLE.COM",
+  }));
   assert.equal(lead.contactName, "ישראל ישראלי");
   assert.equal(lead.contactEmail, "user@example.com");
 });
