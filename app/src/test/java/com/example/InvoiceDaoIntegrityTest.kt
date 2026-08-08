@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.example.data.local.AppDatabase
 import com.example.data.local.InvoiceItem
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -13,8 +14,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36])
 class InvoiceDaoIntegrityTest {
     private lateinit var database: AppDatabase
 
@@ -100,11 +103,9 @@ class InvoiceDaoIntegrityTest {
 
         dao.deleteGmailInvoices()
 
-        val remaining = dao.getAllInvoices()
-        kotlinx.coroutines.flow.first(remaining).also { invoices ->
-            assertEquals(1, invoices.size)
-            assertEquals("ידני", invoices.single().providerName)
-            assertEquals("MANUAL", invoices.single().sourceType)
-        }
+        val invoices = dao.getAllInvoices().first()
+        assertEquals(1, invoices.size)
+        assertEquals("ידני", invoices.single().providerName)
+        assertEquals("MANUAL", invoices.single().sourceType)
     }
 }
