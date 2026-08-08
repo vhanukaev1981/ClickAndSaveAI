@@ -33,6 +33,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +46,7 @@ import com.example.data.repository.FinancialOpportunity
 import com.example.data.repository.OpportunityActionRepository
 import com.example.ui.MainViewModel
 import com.example.ui.theme.TechBluePrimary
+import kotlinx.coroutines.launch
 
 @Composable
 fun ProvidersScreen(viewModel: MainViewModel) {
@@ -52,6 +54,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
     val isGmailConnected by viewModel.isGmailConnected.collectAsState()
     val backendRepository = remember { BackendRepository() }
     val actionRepository = remember { OpportunityActionRepository() }
+    val scope = rememberCoroutineScope()
     var financialHome by remember { mutableStateOf<FinancialHomeResult?>(null) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
@@ -74,21 +77,6 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                 error = it.localizedMessage ?: "לא ניתן לטעון כרגע את הזדמנויות החיסכון."
             }
         loading = false
-    }
-
-    selectedOpportunity?.let { opportunity ->
-        SavingsActionDialog(
-            opportunity = opportunity,
-            defaultName = session.displayName,
-            defaultEmail = session.email,
-            onDismiss = { selectedOpportunity = null },
-            onSubmit = { name, phone, email ->
-                loading = true
-                actionMessage = ""
-                kotlinx.coroutines.GlobalScope
-                selectedOpportunity = null
-            }
-        )
     }
 
     Column(
@@ -180,7 +168,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
             onSubmit = { name, phone, email ->
                 selectedOpportunity = null
                 loading = true
-                viewModel.viewModelScope.launch {
+                scope.launch {
                     runCatching {
                         actionRepository.acceptSavingsOpportunity(
                             opportunityId = opportunity.id,
