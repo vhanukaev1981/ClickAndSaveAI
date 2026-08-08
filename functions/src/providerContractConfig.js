@@ -18,6 +18,15 @@ function optional(value, maxLength = 200) {
   return text;
 }
 
+function validateTimestamp(value, field, { optional: allowEmpty = false } = {}) {
+  const text = allowEmpty ? optional(value, 64) : required(value, field, 64);
+  if (!text && allowEmpty) return "";
+  if (!Number.isFinite(Date.parse(text))) {
+    throw new TypeError(`${field} must be a valid timestamp`);
+  }
+  return text;
+}
+
 function normalizeProviderContract(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new TypeError("provider contract must be an object");
@@ -45,8 +54,8 @@ function normalizeProviderContract(input) {
     throw new TypeError("attributable commercial model requires attributionField");
   }
 
-  const activeFrom = required(input.activeFrom, "activeFrom", 64);
-  const activeUntil = optional(input.activeUntil, 64);
+  const activeFrom = validateTimestamp(input.activeFrom, "activeFrom");
+  const activeUntil = validateTimestamp(input.activeUntil, "activeUntil", { optional: true });
   if (activeUntil && Date.parse(activeUntil) <= Date.parse(activeFrom)) {
     throw new TypeError("activeUntil must be after activeFrom");
   }
@@ -72,7 +81,6 @@ function isContractActive(contractInput, nowMs = Date.now()) {
   if (!contract.enabled) return false;
   const start = Date.parse(contract.activeFrom);
   const end = contract.activeUntil ? Date.parse(contract.activeUntil) : Number.POSITIVE_INFINITY;
-  if (!Number.isFinite(start)) return false;
   return nowMs >= start && nowMs < end;
 }
 

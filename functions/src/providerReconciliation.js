@@ -20,6 +20,15 @@ function money(value, field) {
   return Math.round(amount * 100) / 100;
 }
 
+function normalizeEvidenceTimestamp(value) {
+  if (value == null || value === "") return "";
+  const normalized = String(value).trim().slice(0, 64);
+  if (!Number.isFinite(Date.parse(normalized))) {
+    throw new TypeError("evidenceObservedAt must be a valid timestamp");
+  }
+  return normalized;
+}
+
 function normalizeCommissionRecord(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new TypeError("commission record must be an object");
@@ -40,9 +49,7 @@ function normalizeCommissionRecord(input) {
     evidenceSource: typeof input.evidenceSource === "string"
       ? input.evidenceSource.trim().slice(0, 80)
       : "",
-    evidenceObservedAt: typeof input.evidenceObservedAt === "string"
-      ? input.evidenceObservedAt.trim().slice(0, 64)
-      : "",
+    evidenceObservedAt: normalizeEvidenceTimestamp(input.evidenceObservedAt),
   };
 
   if ([COMMISSION_STATES.CONFIRMED, COMMISSION_STATES.PAID, COMMISSION_STATES.REJECTED].includes(state)) {
@@ -50,8 +57,10 @@ function normalizeCommissionRecord(input) {
       throw new TypeError("resolved commission state requires provider evidence");
     }
   }
-  if ([COMMISSION_STATES.CONFIRMED, COMMISSION_STATES.PAID].includes(state) && record.confirmedAmount == null) {
-    throw new TypeError("confirmed or paid commission requires confirmedAmount");
+  if ([COMMISSION_STATES.CONFIRMED, COMMISSION_STATES.PAID].includes(state)) {
+    if (record.confirmedAmount == null || record.confirmedAmount <= 0) {
+      throw new TypeError("confirmed or paid commission requires a positive confirmedAmount");
+    }
   }
   return record;
 }

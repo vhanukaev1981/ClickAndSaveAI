@@ -86,13 +86,30 @@ test("provider lifecycle advancement requires attributable external evidence", (
   assert.equal(evidence.evidenceSource, "PROVIDER_POSTBACK");
 });
 
-test("commission confirmation requires explicit amount evidence", () => {
+test("lifecycle evidence requires a valid observedAt timestamp", () => {
+  assert.throws(() => normalizeLifecycleEvidence({
+    stage: "ACTIVATED",
+    providerReference: "activation-789",
+    evidenceSource: "PROVIDER_POSTBACK",
+    observedAt: "not-a-timestamp",
+  }), /valid timestamp/);
+});
+
+test("commission confirmation requires explicit positive amount evidence", () => {
   assert.throws(() => normalizeLifecycleEvidence({
     stage: "COMMISSION_CONFIRMED",
     providerReference: "commission-1",
     evidenceSource: "PROVIDER_REPORT",
     observedAt: "2026-08-08T19:00:00Z",
-  }), /amount/);
+  }), /positive amount/);
+
+  assert.throws(() => normalizeLifecycleEvidence({
+    stage: "COMMISSION_CONFIRMED",
+    providerReference: "commission-1",
+    evidenceSource: "PROVIDER_REPORT",
+    observedAt: "2026-08-08T19:00:00Z",
+    amount: 0,
+  }), /positive amount/);
 
   const evidence = normalizeLifecycleEvidence({
     stage: "COMMISSION_CONFIRMED",

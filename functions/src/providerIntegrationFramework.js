@@ -22,6 +22,14 @@ function requiredText(value, field, maxLength = 200) {
   return normalized;
 }
 
+function requiredTimestamp(value, field) {
+  const normalized = requiredText(value, field, 64);
+  if (!Number.isFinite(Date.parse(normalized))) {
+    throw new TypeError(`${field} must be a valid timestamp`);
+  }
+  return normalized;
+}
+
 function normalizeProviderConfig(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new TypeError("provider config must be an object");
@@ -115,11 +123,11 @@ function normalizeLifecycleEvidence(input) {
 
   const providerReference = requiredText(input.providerReference, "providerReference", 200);
   const evidenceSource = requiredText(input.evidenceSource, "evidenceSource", 80);
-  const observedAt = requiredText(input.observedAt, "observedAt", 64);
+  const observedAt = requiredTimestamp(input.observedAt, "observedAt");
 
   const amount = input.amount == null ? null : Number(input.amount);
-  if (stage === "COMMISSION_CONFIRMED" && (!Number.isFinite(amount) || amount < 0)) {
-    throw new TypeError("commission confirmation requires a non-negative amount");
+  if (stage === "COMMISSION_CONFIRMED" && (!Number.isFinite(amount) || amount <= 0)) {
+    throw new TypeError("commission confirmation requires a positive amount");
   }
 
   return {

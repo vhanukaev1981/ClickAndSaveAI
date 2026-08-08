@@ -27,7 +27,7 @@ test("expected commission does not require fabricated provider evidence", () => 
   assert.equal(record.confirmedAmount, null);
 });
 
-test("confirmed commission requires provider evidence and confirmed amount", () => {
+test("confirmed commission requires provider evidence and positive confirmed amount", () => {
   assert.throws(() => normalizeCommissionRecord(expected({
     state: COMMISSION_STATES.CONFIRMED,
   })), /evidence/);
@@ -36,7 +36,22 @@ test("confirmed commission requires provider evidence and confirmed amount", () 
     state: COMMISSION_STATES.CONFIRMED,
     evidenceSource: "PARTNER_REPORT",
     evidenceObservedAt: "2026-08-08T20:00:00Z",
-  })), /confirmedAmount/);
+  })), /positive confirmedAmount/);
+
+  assert.throws(() => normalizeCommissionRecord(expected({
+    state: COMMISSION_STATES.CONFIRMED,
+    confirmedAmount: 0,
+    evidenceSource: "PARTNER_REPORT",
+    evidenceObservedAt: "2026-08-08T20:00:00Z",
+  })), /positive confirmedAmount/);
+});
+
+test("resolved commission evidence requires a valid timestamp", () => {
+  assert.throws(() => normalizeCommissionRecord(expected({
+    state: COMMISSION_STATES.REJECTED,
+    evidenceSource: "PARTNER_REPORT",
+    evidenceObservedAt: "not-a-timestamp",
+  })), /valid timestamp/);
 });
 
 test("reconciliation upgrades expected commission only from explicit evidence", () => {
