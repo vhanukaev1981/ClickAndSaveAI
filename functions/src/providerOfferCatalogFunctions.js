@@ -11,6 +11,10 @@ const {
   SUPPORTED_PRICING_MODEL,
   MIN_PRICE_GUARANTEE_MONTHS,
 } = require("./commerceEngine");
+const {
+  normalizeAvailabilityMode,
+  normalizeConsumerPricingEvidence,
+} = require("./offerEligibilityPolicy");
 const { normalizeServiceType } = require("./serviceProfile");
 const { requiredString, optionalString } = require("./validation");
 
@@ -121,6 +125,18 @@ function validateProviderOfferInput(data, nowMs = Date.now()) {
     throw new TypeError("oneTimeFees is invalid");
   }
 
+  const pricingEvidence = normalizeConsumerPricingEvidence(data);
+  if (!pricingEvidence) {
+    throw new TypeError(
+      "consumer pricing must be VAT-inclusive and all mandatory recurring fees must be stated explicitly"
+    );
+  }
+
+  const availabilityMode = normalizeAvailabilityMode(data.availabilityMode);
+  if (!availabilityMode) {
+    throw new TypeError("availabilityMode must be NATIONWIDE, USER_VERIFIED or ELIGIBILITY_REQUIRED");
+  }
+
   const availabilityStatus = requiredString(
     data.availabilityStatus || "AVAILABLE",
     "availabilityStatus",
@@ -178,6 +194,10 @@ function validateProviderOfferInput(data, nowMs = Date.now()) {
     monthlyPrice: Math.round(monthlyPrice * 100) / 100,
     priceGuaranteedMonths,
     oneTimeFees: Math.round(oneTimeFees * 100) / 100,
+    consumerPriceIncludesVat: pricingEvidence.consumerPriceIncludesVat,
+    requiredRecurringFees: pricingEvidence.requiredRecurringFees,
+    requiredRecurringFeesDescription: pricingEvidence.requiredRecurringFeesDescription,
+    availabilityMode,
     availabilityStatus,
     officialSourceUrl: parseHttpsUrl(data.officialSourceUrl, "officialSourceUrl"),
     officialSourceName: requiredString(data.officialSourceName, "officialSourceName", 200),
@@ -213,6 +233,10 @@ exports.upsertProviderOffer = onCall(
       monthlyPrice: offer.monthlyPrice,
       priceGuaranteedMonths: offer.priceGuaranteedMonths,
       oneTimeFees: offer.oneTimeFees,
+      consumerPriceIncludesVat: offer.consumerPriceIncludesVat,
+      requiredRecurringFees: offer.requiredRecurringFees,
+      requiredRecurringFeesDescription: offer.requiredRecurringFeesDescription,
+      availabilityMode: offer.availabilityMode,
       availabilityStatus: offer.availabilityStatus,
       officialSourceVerified: true,
       officialSourceUrl: offer.officialSourceUrl,
@@ -226,7 +250,7 @@ exports.upsertProviderOffer = onCall(
       updatedByOperatorUid: operatorUid,
       updatedAt: FieldValue.serverTimestamp(),
       ...(existing.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
-      catalogVersion: 4,
+      catalogVersion: 5,
     }, { merge: true });
 
     logger.info("Provider offer catalog entry upserted", {
@@ -237,8 +261,10 @@ exports.upsertProviderOffer = onCall(
       pricingModel: offer.pricingModel,
       serviceType: offer.serviceType,
       monthlyPrice: offer.monthlyPrice,
+      requiredRecurringFees: offer.requiredRecurringFees,
       priceGuaranteedMonths: offer.priceGuaranteedMonths,
       oneTimeFees: offer.oneTimeFees,
+      availabilityMode: offer.availabilityMode,
       availabilityStatus: offer.availabilityStatus,
       commercialAgreementActive: offer.commercialAgreementActive,
     });
@@ -248,8 +274,10 @@ exports.upsertProviderOffer = onCall(
       pricingModel: offer.pricingModel,
       serviceType: offer.serviceType,
       monthlyPrice: offer.monthlyPrice,
+      requiredRecurringFees: offer.requiredRecurringFees,
       priceGuaranteedMonths: offer.priceGuaranteedMonths,
       oneTimeFees: offer.oneTimeFees,
+      availabilityMode: offer.availabilityMode,
       saved: true,
       availabilityStatus: offer.availabilityStatus,
       officialSourceVerified: true,
