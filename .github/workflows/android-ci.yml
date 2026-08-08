@@ -84,7 +84,7 @@ jobs:
           KEYSTORE="$RUNNER_TEMP/clickandsaveai-staging.jks"
           printf '%s' "$STAGING_DEBUG_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
 
-          EXPECTED_SHA256='6174F51669193851CD037BDE87574122157ECFA4AFDDE0DCD513A91605F3A6AA'
+          EXPECTED_SHA256='E7275C2B8BB8FD1559CB2A4439F44DEF5257C101EC8B7FF91587023A9D3F9AD2'
           CERT_OUTPUT="$(keytool -list -v -keystore "$KEYSTORE" -storepass "$STAGING_DEBUG_KEYSTORE_PASSWORD" -alias clickandsaveai-staging)"
           NORMALIZED_CERT_OUTPUT="$(printf '%s' "$CERT_OUTPUT" | tr '[:lower:]' '[:upper:]' | tr -d ':')"
           if ! printf '%s' "$NORMALIZED_CERT_OUTPUT" | grep -q "$EXPECTED_SHA256"; then
@@ -120,7 +120,7 @@ jobs:
           fi
 
           CERT_OUTPUT="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK")"
-          EXPECTED_SHA256='6174f51669193851cd037bde87574122157ecfa4afdde0dcd513a91605f3a6aa'
+          EXPECTED_SHA256='e7275c2b8bb8fd1559cb2a4439f44def5257c101ec8b7ff91587023a9d3f9ad2'
           NORMALIZED_CERT_OUTPUT="$(printf '%s' "$CERT_OUTPUT" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
           if ! printf '%s' "$NORMALIZED_CERT_OUTPUT" | grep -q "$EXPECTED_SHA256"; then
             echo 'Built debug APK is not signed with the Firebase-registered staging certificate.' >&2
