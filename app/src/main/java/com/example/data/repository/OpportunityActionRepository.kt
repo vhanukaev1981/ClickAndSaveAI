@@ -20,6 +20,20 @@ class OpportunityActionRepository(
 ) {
     private val functions: FirebaseFunctions by lazy(functionsProvider)
 
+    suspend fun recordSavingsActionStarted(
+        opportunityId: String,
+        expectedOfferId: String
+    ) {
+        functions.getHttpsCallable("recordSavingsActionStarted")
+            .call(
+                mapOf(
+                    "opportunityId" to opportunityId,
+                    "expectedOfferId" to expectedOfferId
+                )
+            )
+            .await()
+    }
+
     suspend fun acceptSavingsOpportunity(
         opportunityId: String,
         expectedOfferId: String,
