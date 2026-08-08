@@ -6,6 +6,10 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const { MONETIZABLE_CATEGORIES } = require("./financialIntelligence");
 const { _runSweep: runFinancialAgentSweep } = require("./financialAgentFunctions");
+const {
+  FIXED_MONTHLY_CATEGORIES,
+  SUPPORTED_PRICING_MODEL,
+} = require("./commerceEngine");
 const { normalizeServiceType } = require("./serviceProfile");
 const { requiredString, optionalString } = require("./validation");
 
@@ -66,6 +70,20 @@ function validateProviderOfferInput(data, nowMs = Date.now()) {
   const category = requiredString(data.category, "category", 80);
   if (!MONETIZABLE_CATEGORIES.has(category)) {
     throw new TypeError("category is not a supported monetizable household service");
+  }
+
+  const pricingModel = requiredString(
+    data.pricingModel || SUPPORTED_PRICING_MODEL,
+    "pricingModel",
+    40
+  ).toUpperCase();
+  if (pricingModel !== SUPPORTED_PRICING_MODEL) {
+    throw new TypeError("pricingModel is not implemented yet");
+  }
+  if (!FIXED_MONTHLY_CATEGORIES.has(category)) {
+    throw new TypeError(
+      "this category requires a category-specific pricing model before automatic savings can be claimed"
+    );
   }
 
   const country = requiredString(data.country || "IL", "country", 2).toUpperCase();
@@ -133,6 +151,7 @@ function validateProviderOfferInput(data, nowMs = Date.now()) {
     offerId,
     providerName,
     category,
+    pricingModel,
     country,
     serviceType,
     monthlyPrice: Math.round(monthlyPrice * 100) / 100,
@@ -165,6 +184,7 @@ exports.upsertProviderOffer = onCall(
       offerId: offer.offerId,
       providerName: offer.providerName,
       category: offer.category,
+      pricingModel: offer.pricingModel,
       country: offer.country,
       serviceType: offer.serviceType,
       monthlyPrice: offer.monthlyPrice,
@@ -181,7 +201,7 @@ exports.upsertProviderOffer = onCall(
       updatedByOperatorUid: operatorUid,
       updatedAt: FieldValue.serverTimestamp(),
       ...(existing.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
-      catalogVersion: 2,
+      catalogVersion: 3,
     }, { merge: true });
 
     logger.info("Provider offer catalog entry upserted", {
@@ -189,6 +209,7 @@ exports.upsertProviderOffer = onCall(
       offerId: offer.offerId,
       providerName: offer.providerName,
       category: offer.category,
+      pricingModel: offer.pricingModel,
       serviceType: offer.serviceType,
       availabilityStatus: offer.availabilityStatus,
       commercialAgreementActive: offer.commercialAgreementActive,
@@ -196,6 +217,7 @@ exports.upsertProviderOffer = onCall(
 
     return {
       offerId: offer.offerId,
+      pricingModel: offer.pricingModel,
       serviceType: offer.serviceType,
       saved: true,
       availabilityStatus: offer.availabilityStatus,
