@@ -7,6 +7,11 @@ const logger = require("firebase-functions/logger");
 const { normalizeOffer, serviceCompatible, roundMoney } = require("./commerceEngine");
 const { offerAvailabilityEligible } = require("./offerEligibilityPolicy");
 const {
+  IN_APP_PROVIDER_REQUEST,
+  commercialActionMode,
+  isTrackableCommercialOffer,
+} = require("./commercialPolicy");
+const {
   requiredString,
   validateEmail,
   validatePhone,
@@ -94,6 +99,7 @@ function verifiedActionSnapshot(opportunity, currentOffer, expectedOfferId = "")
     commissionType: normalizedOffer.commissionType,
     commissionValue: normalizedOffer.commissionValue,
     commercialAgreementActive: normalizedOffer.commercialAgreementActive,
+    actionMode: commercialActionMode(normalizedOffer),
   };
 }
 
@@ -154,6 +160,16 @@ exports.acceptSavingsOpportunity = onCall(
           "The provider offer changed, is not eligible, or can no longer be verified."
         );
       }
+      if (action.actionMode !== IN_APP_PROVIDER_REQUEST || !isTrackableCommercialOffer({
+        commercialAgreementActive: action.commercialAgreementActive,
+        commissionType: action.commissionType,
+        commissionValue: action.commissionValue,
+      })) {
+        throw new HttpsError(
+          "failed-precondition",
+          "This verified offer is view-only because an attributable in-app provider agreement is not active."
+        );
+      }
 
       if (existingLead.exists) {
         duplicate = true;
@@ -201,8 +217,8 @@ exports.acceptSavingsOpportunity = onCall(
         potentialMonthlySaving: action.potentialMonthlySaving,
         potentialAnnualSaving: action.potentialAnnualSaving,
         agreementActive: action.commercialAgreementActive,
-        commissionType: action.commissionType || "NONE",
-        commissionValue: action.commissionValue ?? null,
+        commissionType: action.commissionType,
+        commissionValue: action.commissionValue,
         leadId,
         attributionStatus: "LEAD_CREATED",
         leadCreatedAt: FieldValue.serverTimestamp(),
@@ -220,7 +236,7 @@ exports.acceptSavingsOpportunity = onCall(
       offerId: action.offerId,
       leadId,
       duplicate,
-      trackable: action.commercialAgreementActive,
+      trackable: true,
     });
 
     return {
