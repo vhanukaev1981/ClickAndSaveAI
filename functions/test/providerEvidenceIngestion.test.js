@@ -4,9 +4,12 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   EVIDENCE_KINDS,
+  MAX_FUTURE_SKEW_MS,
   normalizeProviderEvidence,
   dedupeProviderEvidence,
 } = require("../src/providerEvidenceIngestion");
+
+const NOW_MS = Date.parse("2026-08-08T20:10:00Z");
 
 function evidence(overrides = {}) {
   return {
@@ -21,35 +24,39 @@ function evidence(overrides = {}) {
   };
 }
 
+function normalize(input) {
+  return normalizeProviderEvidence(input, { nowMs: NOW_MS });
+}
+
 test("normalizes externally attributable provider evidence", () => {
-  const normalized = normalizeProviderEvidence(evidence());
+  const normalized = normalize(evidence());
   assert.equal(normalized.providerReference, "crm-123");
   assert.equal(normalized.observedAt, "2026-08-08T20:00:00.000Z");
   assert.equal(normalized.evidenceEventId.length, 64);
 });
 
 test("same external provider event derives the same evidence id", () => {
-  const first = normalizeProviderEvidence(evidence());
-  const second = normalizeProviderEvidence(evidence());
+  const first = normalize(evidence());
+  const second = normalize(evidence());
   assert.equal(first.evidenceEventId, second.evidenceEventId);
 });
 
 test("different external event id produces a different evidence id", () => {
-  const first = normalizeProviderEvidence(evidence());
-  const second = normalizeProviderEvidence(evidence({ externalEventId: "evt-2" }));
+  const first = normalize(evidence());
+  const second = normalize(evidence({ externalEventId: "evt-2" }));
   assert.notEqual(first.evidenceEventId, second.evidenceEventId);
 });
 
 test("unsupported source cannot masquerade as verified provider evidence", () => {
-  assert.throws(() => normalizeProviderEvidence(evidence({ source: "INTERNAL_GUESS" })), /unsupported evidence source/);
+  assert.throws(() => normalize(evidence({ source: "INTERNAL_GUESS" })), /unsupported evidence source/);
 });
 
 test("invalid or missing provider reference is rejected", () => {
-  assert.throws(() => normalizeProviderEvidence(evidence({ providerReference: "" })), /providerReference is required/);
+  assert.throws(() => normalize(evidence({ providerReference: "" })), /providerReference is required/);
 });
 
 test("commission evidence may carry non-negative monetary evidence", () => {
-  const normalized = normalizeProviderEvidence(evidence({
+  const normalized = normalize(evidence({
     kind: EVIDENCE_KINDS.COMMISSION,
     amount: 75.5,
     currency: "ils",
@@ -59,7 +66,18 @@ test("commission evidence may carry non-negative monetary evidence", () => {
 });
 
 test("negative monetary evidence is rejected", () => {
-  assert.throws(() => normalizeProviderEvidence(evidence({ amount: -1 })), /non-negative/);
+  assert.throws(() => normalize(evidence({ amount: -1 })), /non-negative/);
+});
+
+test("evidence timestamp allows small provider clock skew but rejects implausible future time", () => {
+  const withinSkew = normalizeProviderEvidence(evidence({
+    observedAt: new Date(NOW_MS + MAX_FUTURE_SKEW_MS).toISOString(),
+  }), { nowMs: NOW_MS });
+  assert.equal(withinSkew.observedAt, new Date(NOW_MS + MAX_FUTURE_SKEW_MS).toISOString());
+
+  assert.throws(() => normalizeProviderEvidence(evidence({
+    observedAt: new Date(NOW_MS + MAX_FUTURE_SKEW_MS + 1).toISOString(),
+  }), { nowMs: NOW_MS }), /future/);
 });
 
 test("evidence import is idempotent by evidenceEventId", () => {
@@ -67,6 +85,6 @@ test("evidence import is idempotent by evidenceEventId", () => {
     evidence(),
     evidence(),
     evidence({ externalEventId: "evt-2" }),
-  ]);
+  ], { nowMs: NOW_MS });
   assert.equal(unique.length, 2);
 });
