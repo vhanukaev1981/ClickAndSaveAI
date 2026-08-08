@@ -1,19 +1,30 @@
 "use strict";
 
+const crypto = require("node:crypto");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onMessagePublished } = require("firebase-functions/v2/pubsub");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
+const {
+  collectPdfAttachments,
+  firstHeader,
+  normalizePdfInvoiceCandidate,
+  parseGmailMessage,
+} = require("./gmailParser");
 const { decryptToken } = require("./tokenCrypto");
+const { _sendPushToUser: sendPushToUser } = require("./pushFunctions");
 
 const db = getFirestore();
 const googleOAuthClientId = defineString("GOOGLE_OAUTH_CLIENT_ID");
 const googleOAuthClientSecret = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
 const oauthTokenEncryptionKey = defineSecret("OAUTH_TOKEN_ENCRYPTION_KEY");
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const GMAIL_PUBSUB_TOPIC = "gmail-notifications";
+const MAX_PDF_BYTES = 10 * 1024 * 1024;
+const GMAIL_PARSER_VERSION = 4;
 
 function requireAuth(request) {
   const uid = request.auth?.uid;
@@ -51,6 +62,258 @@ function currentProjectId() {
   return projectId;
 }
 
+function base64UrlToBase64(value) {
+  const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  const padding = normalized.length % 4;
+  return padding === 0 ? normalized : normalized + "=".repeat(4 - padding);
+}
+
+async function loadPdfAttachmentBase64(accessToken, messageId, attachment) {
+  if (attachment.inlineData) {
+    const data = base64UrlToBase64(attachment.inlineData);
+    if (Buffer.byteLength(data, "base64") > MAX_PDF_BYTES) return null;
+    return data;
+  }
+  if (!attachment.attachmentId || attachment.size > MAX_PDF_BYTES) return null;
+  const response = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachment.attachmentId)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!response.ok) return null;
+  const payload = await response.json().catch(() => ({}));
+  const data = base64UrlToBase64(payload.data);
+  if (!data || Buffer.byteLength(data, "base64") > MAX_PDF_BYTES) return null;
+  return data;
+}
+
+function pdfSourceDocumentId(messageId, attachment, index) {
+  const fingerprint = crypto
+    .createHash("sha256")
+    .update(`${messageId}:${attachment.attachmentId || attachment.filename || "inline"}:${index}`)
+    .digest("hex")
+    .slice(0, 20);
+  return `${messageId}:pdf:${fingerprint}`;
+}
+
+async function analyzePdfInvoice(message, pdfBase64, filename, sourceDocumentId) {
+  const headers = message?.payload?.headers || [];
+  const subject = firstHeader(headers, "Subject").slice(0, 300);
+  const from = firstHeader(headers, "From").slice(0, 300);
+  const date = firstHeader(headers, "Date").slice(0, 120);
+  const safeFilename = String(filename || "").slice(0, 180);
+  const prompt = [
+    "Analyze this PDF independently of the email body.",
+    "Return JSON only with keys: isInvoice, providerName, category, monthlyCost, receivedDate.",
+    "Set isInvoice=true only when the PDF itself is clearly an invoice, tax invoice, receipt, bill, charge statement or equivalent billing document.",
+    "The document does not need to belong to a predefined household-service category.",
+    "For category, use a short useful category when clear; otherwise use other.",
+    "monthlyCost must be the actual document total, amount charged, amount paid or current amount due, never a promotional price or savings figure.",
+    "Do not invent an amount. If no reliable monetary total can be extracted, set isInvoice=false.",
+    "Do not return account numbers, addresses, IDs, phone numbers, payment details or other personal data.",
+    `Email subject context only: ${subject}`,
+    `Email sender context only: ${from}`,
+    `Email date context only: ${date}`,
+    `Attachment filename context only: ${safeFilename}`,
+  ].join("\n");
+
+  const { GoogleGenAI } = await import("@google/genai");
+  const ai = new GoogleGenAI({ apiKey: geminiApiKey.value() });
+  const response = await ai.models.generateContent({
+    model: "gemini-3.6-flash",
+    contents: [{
+      role: "user",
+      parts: [
+        { inlineData: { mimeType: "application/pdf", data: pdfBase64 } },
+        { text: prompt },
+      ],
+    }],
+    config: { responseMimeType: "application/json" },
+  });
+  return normalizePdfInvoiceCandidate(
+    JSON.parse(response.text || "{}"),
+    message,
+    sourceDocumentId
+  );
+}
+
+function normalizeStoredInvoice(invoice) {
+  if (!invoice || typeof invoice !== "object") return null;
+  const monthlyCost = Number(invoice.monthlyCost);
+  if (!invoice.sourceMessageId || !invoice.providerName || !Number.isFinite(monthlyCost) || monthlyCost <= 0) {
+    return null;
+  }
+  return {
+    sourceMessageId: String(invoice.sourceMessageId),
+    providerName: String(invoice.providerName),
+    category: String(invoice.category || "other"),
+    monthlyCost,
+    receivedDate: String(invoice.receivedDate || ""),
+    verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
+  };
+}
+
+function storedInvoices(data) {
+  const raw = Array.isArray(data?.invoices) ? data.invoices : [];
+  return raw.map(normalizeStoredInvoice).filter(Boolean);
+}
+
+async function listHistoryMessageIds(accessToken, startHistoryId) {
+  const ids = new Set();
+  let pageToken = "";
+  do {
+    const params = new URLSearchParams({ startHistoryId: String(startHistoryId), historyTypes: "messageAdded" });
+    if (pageToken) params.set("pageToken", pageToken);
+    const response = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/history?${params.toString()}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (response.status === 404) return { expired: true, messageIds: [] };
+    if (!response.ok) {
+      throw new Error(`Gmail history.list failed with ${response.status}`);
+    }
+    const payload = await response.json().catch(() => ({}));
+    for (const history of Array.isArray(payload.history) ? payload.history : []) {
+      for (const added of Array.isArray(history.messagesAdded) ? history.messagesAdded : []) {
+        const id = String(added?.message?.id || "");
+        if (id) ids.add(id);
+      }
+    }
+    pageToken = String(payload.nextPageToken || "");
+  } while (pageToken);
+  return { expired: false, messageIds: [...ids] };
+}
+
+async function processMessage(uid, accessToken, messageId) {
+  const auditRef = db.collection("users").doc(uid).collection("gmailMessageImports").doc(messageId);
+  const existing = await auditRef.get();
+  const existingData = existing.data() || {};
+  if (Number(existingData.parserVersion || 0) >= GMAIL_PARSER_VERSION && existingData.pdfAnalysisComplete === true) {
+    return { invoices: storedInvoices(existingData), importedCount: 0 };
+  }
+
+  const response = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=full`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!response.ok) return { invoices: [], importedCount: 0 };
+  const message = await response.json();
+  const bodyInvoice = parseGmailMessage(message);
+  const pdfAttachments = collectPdfAttachments(message.payload);
+  const pdfInvoices = [];
+  let allPdfsAnalyzed = true;
+
+  for (let index = 0; index < pdfAttachments.length; index += 1) {
+    const attachment = pdfAttachments[index];
+    try {
+      const pdfBase64 = await loadPdfAttachmentBase64(accessToken, messageId, attachment);
+      if (!pdfBase64) {
+        allPdfsAnalyzed = false;
+        continue;
+      }
+      const invoice = await analyzePdfInvoice(
+        message,
+        pdfBase64,
+        attachment.filename,
+        pdfSourceDocumentId(messageId, attachment, index)
+      );
+      if (invoice) pdfInvoices.push(invoice);
+    } catch (error) {
+      allPdfsAnalyzed = false;
+      logger.warn("Background PDF analysis failed and will be retried", {
+        uid,
+        messageId,
+        attachmentIndex: index,
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+    }
+  }
+
+  const parsedInvoices = pdfInvoices.length > 0 ? pdfInvoices : (bodyInvoice ? [bodyInvoice] : []);
+  let importedCount = 0;
+  await db.runTransaction(async (transaction) => {
+    const current = await transaction.get(auditRef);
+    const currentInvoices = storedInvoices(current.data() || {});
+    const existingIds = new Set(currentInvoices.map((invoice) => invoice.sourceMessageId));
+    importedCount = parsedInvoices.filter((invoice) => !existingIds.has(invoice.sourceMessageId)).length;
+    transaction.set(auditRef, {
+      sourceMessageId: messageId,
+      invoices: parsedInvoices,
+      importedAt: FieldValue.serverTimestamp(),
+      parserVersion: GMAIL_PARSER_VERSION,
+      pdfAttachmentCount: pdfAttachments.length,
+      pdfAnalysisComplete: allPdfsAnalyzed,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+
+  await Promise.all(parsedInvoices.map((invoice) => {
+    const safeId = crypto.createHash("sha256").update(invoice.sourceMessageId).digest("hex");
+    return db.collection("users").doc(uid).collection("gmailInvoices").doc(safeId).set({
+      ...invoice,
+      verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
+      sourceType: "GMAIL_READONLY",
+      updatedAt: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }));
+
+  return { invoices: parsedInvoices.map(normalizeStoredInvoice).filter(Boolean), importedCount };
+}
+
+async function processMailboxNotification(connectionDoc, notificationHistoryId) {
+  const uid = connectionDoc.id;
+  const connection = connectionDoc.data() || {};
+  if (!connection.encryptedRefreshToken || connection.watchEnabled !== true) return;
+  const startHistoryId = String(connection.watchHistoryId || "");
+  if (!startHistoryId) return;
+  const accessToken = await refreshAccessToken(connection.encryptedRefreshToken);
+  const history = await listHistoryMessageIds(accessToken, startHistoryId);
+
+  if (history.expired) {
+    await connectionDoc.ref.set({
+      watchHistoryId: notificationHistoryId,
+      historyRecoveryRequired: true,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    logger.warn("Gmail history id expired; full scan will recover missed invoices", { uid });
+    return;
+  }
+
+  const newInvoices = [];
+  let importedCount = 0;
+  for (const messageId of history.messageIds) {
+    const result = await processMessage(uid, accessToken, messageId);
+    importedCount += result.importedCount;
+    if (result.importedCount > 0) newInvoices.push(...result.invoices);
+  }
+
+  await connectionDoc.ref.set({
+    watchHistoryId: notificationHistoryId,
+    pendingHistoryId: FieldValue.delete(),
+    lastIncrementalScanAt: FieldValue.serverTimestamp(),
+    historyRecoveryRequired: false,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  if (importedCount > 0 && newInvoices.length > 0) {
+    const first = newInvoices[0];
+    const body = importedCount === 1
+      ? `${first.providerName}: ${first.monthlyCost.toFixed(2)} ₪. אנחנו בודקים עכשיו אם יש דרך לחסוך.`
+      : `נקלטו ${importedCount} חשבוניות חדשות. אנחנו בודקים עכשיו כמה אפשר לחסוך.`;
+    await sendPushToUser(uid, {
+      title: importedCount === 1 ? "חשבונית חדשה נקלטה" : "חשבוניות חדשות נקלטו",
+      body,
+      data: { type: "NEW_INVOICE", importedCount },
+    });
+  }
+
+  logger.info("Incremental Gmail processing completed", {
+    uid,
+    messageCount: history.messageIds.length,
+    importedCount,
+  });
+}
+
 exports.startGmailWatch = onCall(
   {
     enforceAppCheck: true,
@@ -61,7 +324,6 @@ exports.startGmailWatch = onCall(
     const ref = db.collection("gmailConnections").doc(uid);
     const snapshot = await ref.get();
     if (!snapshot.exists) throw new HttpsError("failed-precondition", "Gmail is not connected.");
-
     const connection = snapshot.data() || {};
     if (!Array.isArray(connection.scopes) || !connection.scopes.includes(GMAIL_READONLY_SCOPE)) {
       throw new HttpsError("permission-denied", "The stored connection lacks gmail.readonly.");
@@ -74,10 +336,7 @@ exports.startGmailWatch = onCall(
     const topicName = `projects/${currentProjectId()}/topics/${GMAIL_PUBSUB_TOPIC}`;
     const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/watch", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ topicName }),
     });
     const payload = await response.json().catch(() => ({}));
@@ -98,13 +357,7 @@ exports.startGmailWatch = onCall(
       watchStartedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
-
-    logger.info("Gmail watch started", { uid, topicName });
-    return {
-      watching: true,
-      historyId: String(payload.historyId),
-      expiration: String(payload.expiration || ""),
-    };
+    return { watching: true, historyId: String(payload.historyId), expiration: String(payload.expiration || "") };
   }
 );
 
@@ -119,18 +372,14 @@ exports.stopGmailWatch = onCall(
     const snapshot = await ref.get();
     if (!snapshot.exists) return { watching: false };
     const connection = snapshot.data() || {};
-
     if (connection.encryptedRefreshToken) {
       const accessToken = await refreshAccessToken(connection.encryptedRefreshToken);
       const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/stop", {
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!response.ok) {
-        logger.warn("Gmail users.stop failed", { uid, status: response.status });
-      }
+      if (!response.ok) logger.warn("Gmail users.stop failed", { uid, status: response.status });
     }
-
     await ref.set({
       watchEnabled: false,
       watchStoppedAt: FieldValue.serverTimestamp(),
@@ -145,14 +394,13 @@ exports.gmailPushNotification = onMessagePublished(
     topic: GMAIL_PUBSUB_TOPIC,
     region: "europe-west1",
     retry: true,
+    timeoutSeconds: 540,
+    memory: "1GiB",
+    secrets: [googleOAuthClientSecret, oauthTokenEncryptionKey, geminiApiKey],
   },
   async (event) => {
     const encoded = event.data?.message?.data || "";
-    if (!encoded) {
-      logger.warn("Gmail Pub/Sub event missing data");
-      return;
-    }
-
+    if (!encoded) return;
     let payload;
     try {
       payload = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
@@ -160,35 +408,23 @@ exports.gmailPushNotification = onMessagePublished(
       logger.warn("Gmail Pub/Sub event contains invalid JSON");
       return;
     }
-
     const emailAddress = String(payload.emailAddress || "").trim().toLowerCase();
     const historyId = String(payload.historyId || "").trim();
-    if (!emailAddress || !historyId) {
-      logger.warn("Gmail Pub/Sub event missing mailbox identity/historyId");
-      return;
-    }
+    if (!emailAddress || !historyId) return;
 
-    const matches = await db
-      .collection("gmailConnections")
+    const matches = await db.collection("gmailConnections")
       .where("email", "==", emailAddress)
       .limit(10)
       .get();
+    if (matches.empty) return;
 
-    if (matches.empty) {
-      logger.warn("Gmail push received for unknown mailbox", { emailAddress });
-      return;
-    }
-
-    await Promise.all(matches.docs.map((doc) => doc.ref.set({
-      pendingHistoryId: historyId,
-      lastPushNotificationAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true })));
-
-    logger.info("Gmail push notification accepted", {
-      emailAddress,
-      historyId,
-      matchedConnections: matches.size,
-    });
+    await Promise.all(matches.docs.map(async (doc) => {
+      await doc.ref.set({
+        pendingHistoryId: historyId,
+        lastPushNotificationAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      await processMailboxNotification(doc, historyId);
+    }));
   }
 );
