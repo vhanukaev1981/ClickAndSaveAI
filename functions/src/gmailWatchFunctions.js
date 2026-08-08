@@ -24,7 +24,7 @@ const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const GMAIL_PUBSUB_TOPIC = "gmail-notifications";
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
-const GMAIL_PARSER_VERSION = 4;
+const GMAIL_PARSER_VERSION = 5;
 
 function requireAuth(request) {
   const uid = request.auth?.uid;
@@ -103,10 +103,12 @@ async function analyzePdfInvoice(message, pdfBase64, filename, sourceDocumentId)
   const safeFilename = String(filename || "").slice(0, 180);
   const prompt = [
     "Analyze this PDF independently of the email body.",
-    "Return JSON only with keys: isInvoice, providerName, category, monthlyCost, receivedDate.",
+    "Return JSON only with keys: isInvoice, providerName, category, serviceType, monthlyCost, receivedDate.",
     "Set isInvoice=true only when the PDF itself is clearly an invoice, tax invoice, receipt, bill, charge statement or equivalent billing document.",
     "The document does not need to belong to a predefined household-service category.",
     "For category, use a short useful category when clear; otherwise use other.",
+    "For serviceType, return a concise service descriptor only when explicitly written in the PDF, for example internet speed (1 Gbps/500 Mbps), mobile line count plus data allowance, or an explicit insurance type. Otherwise return an empty string.",
+    "Never infer serviceType from provider name, price, marketing language or assumptions.",
     "monthlyCost must be the actual document total, amount charged, amount paid or current amount due, never a promotional price or savings figure.",
     "Do not invent an amount. If no reliable monetary total can be extracted, set isInvoice=false.",
     "Do not return account numbers, addresses, IDs, phone numbers, payment details or other personal data.",
@@ -142,7 +144,7 @@ function normalizeStoredInvoice(invoice) {
   if (!invoice.sourceMessageId || !invoice.providerName || !Number.isFinite(monthlyCost) || monthlyCost <= 0) {
     return null;
   }
-  return {
+  const normalized = {
     sourceMessageId: String(invoice.sourceMessageId),
     providerName: String(invoice.providerName),
     category: String(invoice.category || "other"),
@@ -150,6 +152,8 @@ function normalizeStoredInvoice(invoice) {
     receivedDate: String(invoice.receivedDate || ""),
     verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
   };
+  const serviceType = String(invoice.serviceType || "").trim();
+  return serviceType ? { ...normalized, serviceType } : normalized;
 }
 
 function storedInvoices(data) {
@@ -250,6 +254,7 @@ async function processMessage(uid, accessToken, messageId) {
     const safeId = crypto.createHash("sha256").update(invoice.sourceMessageId).digest("hex");
     return db.collection("users").doc(uid).collection("gmailInvoices").doc(safeId).set({
       ...invoice,
+      serviceType: invoice.serviceType || FieldValue.delete(),
       verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
       sourceType: "GMAIL_READONLY",
       updatedAt: FieldValue.serverTimestamp(),
