@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -64,7 +65,7 @@ fun DashboardScreen(
     val isSyncing by viewModel.isSyncingGmail.collectAsState()
     var showGmailConsent by remember { mutableStateOf(false) }
     var financialHome by remember { mutableStateOf<FinancialHomeResult?>(null) }
-    var financialHomeError by remember { mutableStateOf("") }
+    var financialHomeTemporarilyUnavailable by remember { mutableStateOf(false) }
     val backendRepository = remember { BackendRepository() }
 
     LaunchedEffect(session.isAuthenticated, isConnected, invoices.size) {
@@ -72,27 +73,32 @@ fun DashboardScreen(
             runCatching { backendRepository.getFinancialHome() }
                 .onSuccess {
                     financialHome = it
-                    financialHomeError = ""
+                    financialHomeTemporarilyUnavailable = false
                 }
                 .onFailure {
-                    financialHomeError = it.localizedMessage ?: "הנתונים עדיין לא זמינים."
+                    financialHomeTemporarilyUnavailable = true
                 }
         } else {
             financialHome = null
-            financialHomeError = ""
+            financialHomeTemporarilyUnavailable = false
         }
     }
 
-    val verifiedOpportunities = financialHome?.opportunities
-        .orEmpty()
-        .filter { (it.potentialMonthlySaving ?: 0.0) > 0.0 && it.matchedOffer != null }
+    val allOpportunities = financialHome?.opportunities.orEmpty()
+    val verifiedOpportunities = allOpportunities.filter {
+        (it.potentialMonthlySaving ?: 0.0) > 0.0 && it.matchedOffer != null
+    }
     val verifiedMonthlySavings = verifiedOpportunities.sumOf { it.potentialMonthlySaving ?: 0.0 }
     val verifiedAnnualSavings = verifiedOpportunities.sumOf { it.potentialAnnualSaving ?: 0.0 }
-    val detectedOpportunities = financialHome?.opportunities.orEmpty()
     val observedMonthlySpend = financialHome?.context?.observedRecurringMonthlySpend
         ?.takeIf { it > 0.0 }
         ?: localTotalMonthlyCost
     val recurringServiceCount = financialHome?.context?.recurringServiceCount ?: invoices.size
+    val categoryTotals = invoices
+        .groupBy { it.category.ifBlank { "אחר" } }
+        .mapValues { (_, items) -> items.sumOf { it.monthlyCost } }
+        .toList()
+        .sortedByDescending { it.second }
 
     if (showGmailConsent) {
         GmailConsentDialog(
@@ -119,7 +125,7 @@ fun DashboardScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "המערכת עוקבת אחרי ההוצאות החוזרות ומחפשת עבורך אפשרויות לחסוך.",
+                    text = "מקום אחד להבין מה יוצא בכל חודש ומה אפשר לחסוך.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -153,102 +159,85 @@ fun DashboardScreen(
             ) {
                 MetricCard(
                     modifier = Modifier.weight(1f),
-                    title = "הוצאה חודשית מזוהה",
+                    title = "הוצאה חודשית",
                     value = money(observedMonthlySpend),
-                    supporting = "חיובים חוזרים שנצפו"
+                    supporting = "חיובים חוזרים שזוהו"
                 )
                 MetricCard(
                     modifier = Modifier.weight(1f),
-                    title = "שירותים שזוהו",
+                    title = "שירותים במעקב",
                     value = recurringServiceCount.toString(),
                     supporting = "נבדקים אוטומטית"
                 )
             }
         }
 
-        if (detectedOpportunities.isNotEmpty()) {
+        if (categoryTotals.isNotEmpty()) {
+            item { SectionTitle("לאן הכסף הולך") }
             item {
-                Text(
-                    "מה מצאנו עבורך",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(categoryTotals.take(6), key = { it.first }) { (category, amount) ->
+                        CategorySnapshotCard(category = category, amount = amount)
+                    }
+                }
+            }
+        }
+
+        if (allOpportunities.isNotEmpty()) {
+            item { SectionTitle("מה מצאנו עבורך") }
+            items(allOpportunities.take(3), key = { it.id }) { opportunity ->
+                ProactiveOpportunityCard(
+                    opportunity = opportunity,
+                    onClick = { onNavigateToTab(2) }
                 )
             }
-            items(detectedOpportunities.take(3), key = { it.id }) { opportunity ->
-                ProactiveOpportunityCard(opportunity)
+            if (allOpportunities.size > 3) {
+                item {
+                    TextButton(
+                        onClick = { onNavigateToTab(2) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("לכל הזדמנויות החיסכון")
+                    }
+                }
             }
         } else if (isConnected) {
             item {
                 EmptyStateCard(
                     title = "הבדיקה ממשיכה ברקע",
-                    body = "כרגע אין הזדמנות חיסכון מאומתת. אם מחיר ישתנה או תופיע הצעה טובה ומתאימה יותר, היא תיבדק אוטומטית."
+                    body = "כרגע אין הזדמנות חיסכון מאומתת. אם תופיע חלופה טובה ומתאימה יותר, נציג אותה כאן אוטומטית."
                 )
             }
         }
 
-        if (financialHomeError.isNotBlank()) {
+        if (financialHomeTemporarilyUnavailable && isConnected) {
             item {
-                Text(
-                    financialHomeError,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                EmptyStateCard(
+                    title = "המידע מתעדכן",
+                    body = "חלק מהנתונים עדיין מסתנכרנים. אין צורך לבצע פעולה — התמונה תתעדכן אוטומטית."
                 )
             }
         }
 
-        item {
-            Text(
-                "ניהול",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                DashboardActionButton(
-                    text = "החשבונות שלי",
-                    subtitle = "כל החשבוניות והחיובים שהמערכת זיהתה",
-                    icon = Icons.Default.ReceiptLong,
-                    onClick = { onNavigateToTab(1) }
-                )
-                DashboardActionButton(
-                    text = "החיסכון שלי",
-                    subtitle = "הצעות שנבדקו מול השירותים והמחירים שלך",
-                    icon = Icons.Default.Storefront,
-                    onClick = { onNavigateToTab(2) }
-                )
-                DashboardActionButton(
-                    text = "אני והעדפות",
-                    subtitle = "חשבון, יעדי חיסכון, פרטיות וחיבורים",
-                    icon = Icons.Default.Tune,
-                    onClick = { onNavigateToTab(3) }
-                )
-            }
-        }
-
-        item {
-            Text(
-                "פעילות אחרונה",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        item { SectionTitle("פעילות אחרונה") }
 
         if (invoices.isEmpty()) {
             item {
                 EmptyStateCard(
                     title = if (isConnected) "עדיין אין חשבונות להצגה" else "חיבור אחד כדי להתחיל",
                     body = if (isConnected) {
-                        "כשנזהה חשבונית חדשה היא תופיע כאן ותיבדק אוטומטית להזדמנויות חיסכון."
+                        "כשנזהה חשבון חדש הוא יופיע כאן וייבדק אוטומטית להזדמנויות חיסכון."
                     } else {
-                        "בחיבור הראשון נבדוק עד 6 חודשים אחורה. לאחר מכן חשבוניות חדשות נקלטות אוטומטית."
+                        "בחיבור הראשון נבדוק עד 6 חודשים אחורה. לאחר מכן מסמכים חדשים נקלטים אוטומטית."
                     }
                 )
             }
         } else {
             items(invoices.take(4), key = { it.id }) { invoice ->
-                Card(shape = RoundedCornerShape(18.dp)) {
+                Card(
+                    onClick = { onNavigateToTab(1) },
+                    shape = RoundedCornerShape(18.dp)
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -278,7 +267,7 @@ fun DashboardScreen(
                         Column(horizontalAlignment = Alignment.End) {
                             Text(money(invoice.monthlyCost), fontWeight = FontWeight.Bold)
                             Text(
-                                "נבדק ברקע",
+                                "לחודש",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -286,7 +275,6 @@ fun DashboardScreen(
                     }
                 }
             }
-
             item {
                 TextButton(
                     onClick = { onNavigateToTab(1) },
@@ -296,6 +284,30 @@ fun DashboardScreen(
                 }
             }
         }
+
+        item { SectionTitle("ניהול") }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                DashboardActionButton(
+                    text = "החשבונות שלי",
+                    subtitle = "ההוצאות והחיובים שזוהו",
+                    icon = Icons.Default.ReceiptLong,
+                    onClick = { onNavigateToTab(1) }
+                )
+                DashboardActionButton(
+                    text = "החיסכון שלי",
+                    subtitle = "הצעות שנבדקו מול השירותים שלך",
+                    icon = Icons.Default.Storefront,
+                    onClick = { onNavigateToTab(2) }
+                )
+                DashboardActionButton(
+                    text = "אני והעדפות",
+                    subtitle = "יעדים, העדפות, פרטיות וחיבורים",
+                    icon = Icons.Default.Tune,
+                    onClick = { onNavigateToTab(3) }
+                )
+            }
+        }
     }
 
     @Suppress("UNUSED_VARIABLE")
@@ -303,8 +315,39 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun ProactiveOpportunityCard(opportunity: FinancialOpportunity) {
+private fun SectionTitle(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold
+    )
+}
+
+@Composable
+private fun CategorySnapshotCard(category: String, amount: Double) {
+    Card(shape = RoundedCornerShape(18.dp)) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(category, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(money(amount), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "לחודש",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProactiveOpportunityCard(
+    opportunity: FinancialOpportunity,
+    onClick: () -> Unit
+) {
     Card(
+        onClick = onClick,
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
     ) {
@@ -323,16 +366,16 @@ private fun ProactiveOpportunityCard(opportunity: FinancialOpportunity) {
                 )
                 val matchedOffer = opportunity.matchedOffer
                 if (matchedOffer != null && (opportunity.potentialMonthlySaving ?: 0.0) > 0.0) {
-                    val effectiveMonthly = matchedOffer.effectiveMonthlyPrice ?: matchedOffer.monthlyPrice
                     Text(
-                        "מצאנו ${matchedOffer.providerName} בעלות חודשית אפקטיבית של ${money(effectiveMonthly)}.",
-                        style = MaterialTheme.typography.bodyMedium
+                        "אפשר לחסוך ${money(opportunity.potentialMonthlySaving ?: 0.0)} בחודש",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TechBluePrimary
                     )
                     Text(
-                        "חיסכון מאומת: ${money(opportunity.potentialMonthlySaving ?: 0.0)} בחודש • ${money(opportunity.potentialAnnualSaving ?: 0.0)} בשנה",
+                        "${money(opportunity.potentialAnnualSaving ?: 0.0)} בשנה • הצעה שנבדקה והותאמה לשירות שלך",
                         style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = TechBluePrimary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
                     val detectionText = if (opportunity.type == "COMPARE_AFTER_PRICE_INCREASE") {
@@ -342,7 +385,7 @@ private fun ProactiveOpportunityCard(opportunity: FinancialOpportunity) {
                     }
                     Text(detectionText, style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        "סכום חיסכון יוצג רק לאחר שתימצא הצעה עדכנית שניתן לאמת ולהתאים לשירות שלך.",
+                        "סכום חיסכון יוצג רק לאחר אימות.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -400,6 +443,7 @@ private fun SavingsHeroCard(
     onOpenSavings: () -> Unit
 ) {
     Card(
+        onClick = onOpenSavings,
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = TechBluePrimary)
     ) {
@@ -432,9 +476,11 @@ private fun SavingsHeroCard(
                 color = MaterialTheme.colorScheme.onPrimary
             )
             if (opportunities > 0) {
-                Button(onClick = onOpenSavings, modifier = Modifier.fillMaxWidth()) {
-                    Text("צפה ב-$opportunities הזדמנויות מאומתות")
-                }
+                Text(
+                    "$opportunities הזדמנויות מאומתות • לחץ לפרטים",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
             }
         }
     }
