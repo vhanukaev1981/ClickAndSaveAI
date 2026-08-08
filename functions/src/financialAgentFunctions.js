@@ -10,14 +10,21 @@ const {
   detectFinancialSignals,
 } = require("./financialIntelligence");
 const { enrichOpportunityWithBestOffer } = require("./commerceEngine");
+const {
+  engineOpportunityPayload,
+  isOpportunityLifecycleLocked,
+  shouldRefreshCommerceMatch,
+} = require("./opportunityLifecycle");
 
 const db = getFirestore();
 const MAX_SOURCE_DOCS_PER_AGENT_RUN = 500;
 const MAX_PROVIDER_OFFERS_PER_RUN = 500;
+const MAX_EXISTING_OPPORTUNITIES_PER_RUN = 500;
 const MAX_WRITES_PER_BATCH = 400;
 const MAX_HOME_ITEMS = 20;
 const MAX_USERS_PER_SWEEP = 250;
 const SWEEP_CONCURRENCY = 5;
+const ENGINE_VERSION = 4;
 
 function requireAuth(request) {
   const uid = request.auth?.uid;
@@ -59,6 +66,14 @@ async function loadProviderOffers() {
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 }
 
+async function loadExistingOpportunityStates(userRef) {
+  const snapshot = await userRef
+    .collection("opportunities")
+    .limit(MAX_EXISTING_OPPORTUNITIES_PER_RUN)
+    .get();
+  return new Map(snapshot.docs.map((doc) => [doc.id, { id: doc.id, ...doc.data() }]));
+}
+
 async function commitWrites(writes) {
   for (let index = 0; index < writes.length; index += MAX_WRITES_PER_BATCH) {
     const batch = db.batch();
@@ -91,6 +106,14 @@ async function persistFinancialState(uid, invoices, providerOffers = []) {
   );
   const opportunities = enrichedOpportunities.map(opportunityWithoutCommissionTerms);
   const userRef = db.collection("users").doc(uid);
+  const existingById = await loadExistingOpportunityStates(userRef);
+  const lockedExistingIds = [...existingById.values()]
+    .filter(isOpportunityLifecycleLocked)
+    .map((item) => item.id);
+  const activeOpportunityIds = [...new Set([
+    ...opportunities.map((item) => item.id),
+    ...lockedExistingIds,
+  ])];
   const writes = [];
 
   writes.push({
@@ -98,9 +121,9 @@ async function persistFinancialState(uid, invoices, providerOffers = []) {
     data: {
       ...context,
       activeInsightIds: insights.map((item) => item.id),
-      activeOpportunityIds: opportunities.map((item) => item.id),
+      activeOpportunityIds,
       generatedAt: FieldValue.serverTimestamp(),
-      engineVersion: 3,
+      engineVersion: ENGINE_VERSION,
     },
   });
 
@@ -111,7 +134,7 @@ async function persistFinancialState(uid, invoices, providerOffers = []) {
         ...insight,
         engineGenerated: true,
         updatedAt: FieldValue.serverTimestamp(),
-        engineVersion: 3,
+        engineVersion: ENGINE_VERSION,
       },
     });
   }
@@ -119,18 +142,27 @@ async function persistFinancialState(uid, invoices, providerOffers = []) {
   for (let index = 0; index < opportunities.length; index += 1) {
     const opportunity = opportunities[index];
     const enriched = enrichedOpportunities[index];
+    const existing = existingById.get(opportunity.id) || null;
+    const locked = isOpportunityLifecycleLocked(existing);
+    const enginePayload = engineOpportunityPayload(opportunity, existing);
+
     writes.push({
       ref: userRef.collection("opportunities").doc(opportunity.id),
       data: {
-        ...opportunity,
+        ...enginePayload,
         engineGenerated: true,
+        engineLastObservedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
-        engineVersion: 3,
+        engineVersion: ENGINE_VERSION,
       },
     });
 
     const commission = enriched?.matchedOffer?.commercial;
-    if (enriched?.matchedOffer?.offerId) {
+    if (
+      !locked &&
+      shouldRefreshCommerceMatch(existing) &&
+      enriched?.matchedOffer?.offerId
+    ) {
       writes.push({
         ref: db.collection("commerceMatches").doc(`${uid}_${opportunity.id}`),
         data: {
@@ -144,9 +176,10 @@ async function persistFinancialState(uid, invoices, providerOffers = []) {
           agreementActive: commission?.agreementActive === true,
           commissionType: commission?.commissionType || "NONE",
           commissionValue: commission?.commissionValue ?? null,
-          attributionStatus: "MATCHED_NOT_ACTED",
+          matchStatus: "VERIFIED_MATCH",
+          lastMatchedAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
-          engineVersion: 3,
+          engineVersion: ENGINE_VERSION,
         },
       });
     }
@@ -156,7 +189,8 @@ async function persistFinancialState(uid, invoices, providerOffers = []) {
   return {
     context,
     insightCount: insights.length,
-    opportunityCount: opportunities.length,
+    opportunityCount: activeOpportunityIds.length,
+    detectedOpportunityCount: opportunities.length,
     matchedOfferCount: enrichedOpportunities.filter((item) => item.matchedOffer).length,
     trackableCommerceMatchCount: enrichedOpportunities.filter(
       (item) => item.matchedOffer?.commercial?.agreementActive === true
@@ -178,6 +212,7 @@ async function runFinancialAgentForUser(uid, providerOffersOverride = null) {
     recurringServiceCount: result.context.recurringServiceCount,
     insightCount: result.insightCount,
     opportunityCount: result.opportunityCount,
+    detectedOpportunityCount: result.detectedOpportunityCount,
     matchedOfferCount: result.matchedOfferCount,
     trackableCommerceMatchCount: result.trackableCommerceMatchCount,
   });
@@ -348,6 +383,7 @@ exports._runFinancialAgentForUser = runFinancialAgentForUser;
 exports._persistFinancialState = persistFinancialState;
 exports._loadObservedInvoices = loadObservedInvoices;
 exports._loadProviderOffers = loadProviderOffers;
+exports._loadExistingOpportunityStates = loadExistingOpportunityStates;
 exports._homeOpportunity = homeOpportunity;
 exports._homeInsight = homeInsight;
 exports._nullableFiniteNumber = nullableFiniteNumber;
