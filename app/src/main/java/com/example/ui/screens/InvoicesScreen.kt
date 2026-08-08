@@ -67,9 +67,12 @@ fun InvoicesScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var selectedInvoice by remember { mutableStateOf<InvoiceItem?>(null) }
 
-    val categories = listOf("הכל", "חשמל", "סלולר", "אינטרנט", "ביטוח", "טלוויזיה")
-    val filteredInvoices = if (selectedCategory == "הכל") invoices
-    else invoices.filter { it.category == selectedCategory }
+    val categories = listOf("הכל", "חשמל", "סלולר", "אינטרנט", "תקשורת", "ביטוח", "טלוויזיה")
+    val filteredInvoices = if (selectedCategory == "הכל") {
+        invoices
+    } else {
+        invoices.filter { it.category == selectedCategory }
+    }
 
     selectedInvoice?.let { invoice ->
         ProviderLeadDialog(
@@ -125,7 +128,7 @@ fun InvoicesScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("חשבוניות ולידים", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text(
-                            "חשבוניות Gmail מסומנות כלא מאומתות. ליד נשמר בתור קליטה מאובטח רק לאחר התחברות והסכמה מפורשת.",
+                            "חשבוניות Gmail נשמרות כלא מאומתות. קטגוריית 'תקשורת' משמשת כשספק רב-שירותים זוהה אך סוג השירות אינו חד-משמעי.",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -135,10 +138,12 @@ fun InvoicesScreen(
                         Text("הוסף")
                     }
                 }
+
                 Spacer(modifier = Modifier.height(12.dp))
-                Text("סה״כ חודשי: ₪${String.format("%.2f", totalMonthlyCost)}")
+                Text("סה״כ חודשי מתועד: ₪${String.format("%.2f", totalMonthlyCost)}")
                 Text("חיסכון שאומת: ₪${String.format("%.2f", verifiedSavings)}", fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(10.dp))
+
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(categories) { category ->
                         FilterChip(
@@ -161,13 +166,19 @@ fun InvoicesScreen(
                 Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Info, contentDescription = null)
                     Spacer(modifier = Modifier.size(10.dp))
-                    Text("לא נמצאו חשבוניות. אפשר להוסיף ידנית או לייבא מ-Gmail לאחר אישור.")
+                    Text(
+                        if (selectedCategory == "הכל") {
+                            "לא נמצאו חשבוניות. אפשר להוסיף ידנית או לייבא מ-Gmail לאחר אישור."
+                        } else {
+                            "אין כרגע חשבוניות בקטגוריה $selectedCategory."
+                        }
+                    )
                 }
             }
         } else {
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 100.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(filteredInvoices, key = { it.id }) { invoice ->
@@ -225,10 +236,7 @@ private fun InvoiceCard(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text("חיוב חודשי: ₪${String.format("%.2f", invoice.monthlyCost)}")
-            Text(
-                invoice.status.replace("ליד נשלח ל-CRM", "ליד נשמר בתור הקליטה"),
-                style = MaterialTheme.typography.bodySmall
-            )
+            Text(invoice.status.replace("ליד נשלח ל-CRM", "ליד נשמר בתור הקליטה"), style = MaterialTheme.typography.bodySmall)
             Text("אימות: ${invoice.verificationStatus}", style = MaterialTheme.typography.bodySmall)
             Spacer(modifier = Modifier.height(10.dp))
             Button(onClick = onLead, modifier = Modifier.fillMaxWidth()) {
@@ -268,7 +276,7 @@ private fun ProviderLeadDialog(
                         if (success.result.duplicate) {
                             "הבקשה כבר נשמרה בעבר ולא נוצרה כפילות."
                         } else {
-                            "הליד נמצא בתור הקליטה המאובטח. טרם הועבר ל-CRM חיצוני."
+                            "הליד נמצא בתור הקליטה המאובטח. טרם הועבר ל-CRM חיצוני או לספק."
                         }
                     )
                 } else {
@@ -349,7 +357,7 @@ private fun ManualInvoiceDialog(
     var provider by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("חשמל") }
     var amount by remember { mutableStateOf("") }
-    val categories = listOf("חשמל", "סלולר", "אינטרנט", "ביטוח", "טלוויזיה")
+    val categories = listOf("חשמל", "סלולר", "אינטרנט", "תקשורת", "ביטוח", "טלוויזיה")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -378,7 +386,10 @@ private fun ManualInvoiceDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text("הנתון יישמר כלא מאומת ולא יחושב ממנו חיסכון אוטומטי.", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "הנתון יישמר כלא מאומת ולא יחושב ממנו חיסכון אוטומטי.",
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         },
         confirmButton = {
