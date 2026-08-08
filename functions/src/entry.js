@@ -8,6 +8,7 @@ const financialAgentFunctions = require("./financialAgentFunctions");
 const opportunityNotificationFunctions = require("./opportunityNotificationFunctions");
 const opportunityActionFunctions = require("./opportunityActionFunctions");
 const commerceOperationsFunctions = require("./commerceOperationsFunctions");
+const providerOfferCatalogFunctions = require("./providerOfferCatalogFunctions");
 
 module.exports = {
   ...coreFunctions,
@@ -18,4 +19,5 @@ module.exports = {
   ...opportunityNotificationFunctions,
   ...opportunityActionFunctions,
   ...commerceOperationsFunctions,
+  ...providerOfferCatalogFunctions,
 };
