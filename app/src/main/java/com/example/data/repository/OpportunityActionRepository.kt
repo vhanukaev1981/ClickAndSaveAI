@@ -22,12 +22,14 @@ class OpportunityActionRepository(
 
     suspend fun acceptSavingsOpportunity(
         opportunityId: String,
+        expectedOfferId: String,
         contactName: String,
         phone: String,
         contactEmail: String
     ): OpportunityActionResult {
         val payload = mapOf(
             "opportunityId" to opportunityId,
+            "expectedOfferId" to expectedOfferId,
             "contactName" to contactName,
             "phone" to phone,
             "contactEmail" to contactEmail,
@@ -44,7 +46,7 @@ class OpportunityActionRepository(
             status = response["status"] as? String ?: "NEW",
             duplicate = response["duplicate"] as? Boolean ?: false,
             opportunityId = response["opportunityId"] as? String ?: opportunityId,
-            offerId = response["offerId"] as? String ?: "",
+            offerId = response["offerId"] as? String ?: expectedOfferId,
             potentialMonthlySaving = (response["potentialMonthlySaving"] as? Number)?.toDouble() ?: 0.0,
             potentialAnnualSaving = (response["potentialAnnualSaving"] as? Number)?.toDouble() ?: 0.0
         )
