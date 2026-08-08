@@ -10,6 +10,7 @@ const {
   detectFinancialSignals,
 } = require("./financialIntelligence");
 const { enrichOpportunityWithBestOffer } = require("./commerceEngine");
+const { commercialActionMode } = require("./commercialPolicy");
 const {
   engineOpportunityPayload,
   isOpportunityLifecycleLocked,
@@ -25,7 +26,7 @@ const MAX_WRITES_PER_BATCH = 400;
 const MAX_HOME_ITEMS = 20;
 const MAX_USERS_PER_SWEEP = 250;
 const SWEEP_CONCURRENCY = 5;
-const ENGINE_VERSION = 4;
+const ENGINE_VERSION = 5;
 
 function requireAuth(request) {
   const uid = request.auth?.uid;
@@ -86,15 +87,23 @@ async function commitWrites(writes) {
 }
 
 function opportunityWithoutCommissionTerms(opportunity) {
-  if (!opportunity?.matchedOffer) return opportunity;
+  if (!opportunity?.matchedOffer) {
+    return { ...opportunity, actionMode: "VIEW_ONLY" };
+  }
   const { commercial, ...offerForUserState } = opportunity.matchedOffer;
+  const actionMode = commercialActionMode(commercial);
   return {
     ...opportunity,
     matchedOffer: offerForUserState,
+    actionMode,
     commercial: {
       ...(opportunity.commercial || {}),
-      partnerMatchStatus: commercial?.agreementActive ? "ACTIVE_PARTNER_MATCH" : "NO_ACTIVE_PARTNER_AGREEMENT",
-      commissionStatus: commercial?.agreementActive ? "TRACKABLE" : "NOT_TRACKABLE",
+      partnerMatchStatus: actionMode === "IN_APP_PROVIDER_REQUEST"
+        ? "ACTIVE_PARTNER_MATCH"
+        : "NO_ACTIVE_PARTNER_AGREEMENT",
+      commissionStatus: actionMode === "IN_APP_PROVIDER_REQUEST"
+        ? "TRACKABLE"
+        : "NOT_TRACKABLE",
     },
   };
 }
@@ -172,11 +181,14 @@ async function persistFinancialState(uid, invoices, providerOffers = []) {
           offerId: enriched.matchedOffer.offerId,
           providerName: enriched.matchedOffer.providerName,
           monthlyPrice: enriched.matchedOffer.monthlyPrice,
+          effectiveMonthlyPrice: enriched.matchedOffer.effectiveMonthlyPrice,
+          firstYearCost: enriched.matchedOffer.firstYearCost,
           potentialMonthlySaving: enriched.potentialMonthlySaving,
           potentialAnnualSaving: enriched.potentialAnnualSaving,
           agreementActive: commission?.agreementActive === true,
           commissionType: commission?.commissionType || "NONE",
           commissionValue: commission?.commissionValue ?? null,
+          actionMode: opportunity.actionMode,
           matchStatus: "VERIFIED_MATCH",
           lastMatchedAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
@@ -193,8 +205,8 @@ async function persistFinancialState(uid, invoices, providerOffers = []) {
     opportunityCount: activeOpportunityIds.length,
     detectedOpportunityCount: opportunities.length,
     matchedOfferCount: enrichedOpportunities.filter((item) => item.matchedOffer).length,
-    trackableCommerceMatchCount: enrichedOpportunities.filter(
-      (item) => item.matchedOffer?.commercial?.agreementActive === true
+    trackableCommerceMatchCount: opportunities.filter(
+      (item) => item.actionMode === "IN_APP_PROVIDER_REQUEST"
     ).length,
   };
 }
@@ -240,8 +252,10 @@ function homeOpportunity(item) {
     id: String(item.id || ""),
     type: String(item.type || ""),
     status: String(item.status || "OPEN"),
+    actionMode: String(item.actionMode || "VIEW_ONLY"),
     providerName: String(item.providerName || ""),
     category: String(item.category || ""),
+    serviceType: String(item.serviceType || ""),
     currentMonthlyCost: Number(item.currentMonthlyCost || 0),
     previousMonthlyCost: Number(item.previousMonthlyCost || 0),
     monthlyIncrease: Number(item.monthlyIncrease || 0),
@@ -252,7 +266,14 @@ function homeOpportunity(item) {
     matchedOffer: item.matchedOffer ? {
       offerId: String(item.matchedOffer.offerId || ""),
       providerName: String(item.matchedOffer.providerName || ""),
-      monthlyPrice: Number(item.matchedOffer.monthlyPrice || 0),
+      pricingModel: String(item.matchedOffer.pricingModel || ""),
+      monthlyPrice: nullableFiniteNumber(item.matchedOffer.monthlyPrice),
+      effectiveMonthlyPrice: nullableFiniteNumber(item.matchedOffer.effectiveMonthlyPrice),
+      priceGuaranteedMonths: nullableFiniteNumber(item.matchedOffer.priceGuaranteedMonths),
+      requiredRecurringFees: nullableFiniteNumber(item.matchedOffer.requiredRecurringFees),
+      requiredRecurringFeesDescription: String(item.matchedOffer.requiredRecurringFeesDescription || ""),
+      oneTimeFees: nullableFiniteNumber(item.matchedOffer.oneTimeFees),
+      firstYearCost: nullableFiniteNumber(item.matchedOffer.firstYearCost),
       serviceType: String(item.matchedOffer.serviceType || ""),
       verifiedAt: String(item.matchedOffer.verifiedAt || ""),
       validUntil: String(item.matchedOffer.validUntil || ""),
@@ -396,4 +417,5 @@ exports._loadExistingOpportunityStates = loadExistingOpportunityStates;
 exports._homeOpportunity = homeOpportunity;
 exports._homeInsight = homeInsight;
 exports._nullableFiniteNumber = nullableFiniteNumber;
+exports._opportunityWithoutCommissionTerms = opportunityWithoutCommissionTerms;
 exports._runSweep = runSweep;
