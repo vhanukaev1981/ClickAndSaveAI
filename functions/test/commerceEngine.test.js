@@ -19,6 +19,7 @@ function offer(overrides) {
     offerId: "offer-default",
     providerName: "Provider",
     category: "אינטרנט",
+    pricingModel: "FIXED_MONTHLY",
     country: "IL",
     monthlyPrice: 99,
     serviceType: "1Gbps fiber",
@@ -45,12 +46,13 @@ test("ranking chooses the highest user saving even when another provider pays a 
   assert.equal(matches[1].offerId, "best-commission");
 });
 
-test("unverified, expired and incompatible offers are rejected", () => {
+test("unverified, expired, wrong-model and incompatible offers are rejected", () => {
   const matches = matchVerifiedOffers(opportunity, [
     offer({ offerId: "unverified", officialSourceVerified: false }),
     offer({ offerId: "expired", validUntil: "2026-08-01T08:00:00Z" }),
     offer({ offerId: "wrong-service", serviceType: "100Mbps" }),
     offer({ offerId: "wrong-country", country: "US" }),
+    offer({ offerId: "wrong-model", pricingModel: "PERCENT_DISCOUNT" }),
     offer({ offerId: "valid", monthlyPrice: 95 }),
   ], { nowMs });
 
@@ -75,6 +77,35 @@ test("offer without a declared service type is rejected", () => {
     offer({ offerId: "missing-service", serviceType: "" }),
   ], { nowMs });
   assert.equal(matches.length, 0);
+});
+
+test("insurance and electricity never receive a fixed-monthly savings claim", () => {
+  const insurance = enrichOpportunityWithBestOffer({
+    category: "ביטוח",
+    currentMonthlyCost: 350,
+    serviceType: "INSURANCE_CAR",
+  }, [offer({
+    offerId: "fake-insurance-fixed",
+    category: "ביטוח",
+    serviceType: "INSURANCE_CAR",
+    monthlyPrice: 250,
+  })], { nowMs });
+  assert.equal(insurance.matchedOffer, null);
+  assert.equal(insurance.potentialMonthlySaving, null);
+  assert.equal(insurance.truthfulness.savingsClaimAvailable, false);
+  assert.match(insurance.truthfulness.reason, /category-specific pricing model/i);
+
+  const electricity = enrichOpportunityWithBestOffer({
+    category: "חשמל",
+    currentMonthlyCost: 500,
+  }, [offer({
+    offerId: "fake-electricity-fixed",
+    category: "חשמל",
+    serviceType: "ANY",
+    monthlyPrice: 400,
+  })], { nowMs });
+  assert.equal(electricity.matchedOffer, null);
+  assert.equal(electricity.potentialAnnualSaving, null);
 });
 
 test("savings claim appears only after a verified compatible offer is matched", () => {
