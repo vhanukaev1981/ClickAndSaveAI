@@ -96,7 +96,7 @@ fun DashboardScreen(
                     Column {
                         Text("תשתית Backend מאובטחת", fontWeight = FontWeight.Bold)
                         Text(
-                            "Gmail, AI ולידים פועלים רק דרך Firebase Functions מאומתות. לפני פריסה והגדרת הסודות, הפעולות יחזירו שגיאה ולא נתוני דמה.",
+                            "Gmail, AI ולידים פועלים דרך Firebase Functions מאומתות ב-Firebase Auth וב-App Check. כשל בשירות מוצג כשגיאה ואינו מוחלף בנתוני דמה.",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -122,7 +122,7 @@ fun DashboardScreen(
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        "השרת מחפש נושאי חשבונית/קבלה בלבד. אין הרשאת שליחה, מחיקה או שינוי הודעות.",
+                        "השרת מחפש הודעות שעשויות להכיל חשבוניות וקבלות וקורא את תוכנן רק לצורך זיהוי פרטי החיוב. תוכן המייל הגולמי אינו נשמר. אין הרשאת שליחה, מחיקה או שינוי הודעות.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -253,8 +253,8 @@ private fun GmailConsentDialog(onDismiss: () -> Unit, onApprove: () -> Unit) {
         title = { Text("אישור גישה מוגבלת ל-Gmail") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("האפליקציה מבקשת gmail.readonly בלבד כדי לחפש הודעות שנושאיהן קשורים לחשבוניות וקבלות.")
-                Text("היא אינה יכולה לשלוח, למחוק, לערוך או לסמן הודעות. קוד ההרשאה נשלח לשרת, וה-refresh token נשמר מוצפן.")
+                Text("האפליקציה מבקשת gmail.readonly בלבד כדי לאתר הודעות שעשויות להכיל חשבוניות וקבלות ולחלץ מהן פרטי חיוב מינימליים.")
+                Text("היא אינה יכולה לשלוח, למחוק, לערוך או לסמן הודעות. תוכן המייל הגולמי אינו נשמר; קוד ההרשאה נשלח לשרת וה-refresh token נשמר מוצפן.")
                 Text("ניתן לבטל את החיבור וההרשאה בכל עת.")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = accepted, onCheckedChange = { accepted = it })
