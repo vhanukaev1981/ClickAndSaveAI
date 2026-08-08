@@ -4,6 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   collectMessageText,
+  parseAmount,
   parseGmailMessage,
 } = require("../src/gmailParser");
 
@@ -45,6 +46,16 @@ test("extracts text from nested HTML Gmail bodies", () => {
   assert.match(collectMessageText(payload), /321\.45 ₪/);
 });
 
+test("billing label amount is preferred over an earlier promotional price", () => {
+  const amount = parseAmount("מבצע חדש רק 29.90 ₪. סה\"כ לתשלום: 169.90 ₪");
+  assert.equal(amount, 169.9);
+});
+
+test("parses labeled amount even when currency symbol is omitted", () => {
+  const amount = parseAmount("סכום לתשלום: 245.70");
+  assert.equal(amount, 245.7);
+});
+
 test("parses an electricity invoice from message body", () => {
   const parsed = parseGmailMessage(message({
     subject: "החשבון החודשי שלך",
@@ -78,6 +89,28 @@ test("explicit fiber signal overrides telecom fallback category", () => {
 
   assert.equal(parsed.providerName, "סלקום");
   assert.equal(parsed.category, "אינטרנט");
+});
+
+test("generic English partner in body is not treated as Partner telecom", () => {
+  const parsed = parseGmailMessage(message({
+    subject: "Receipt",
+    from: "shop@example.test",
+    body: "Thank you for being our partner. Total due: 88.00 ₪",
+  }));
+
+  assert.equal(parsed, null);
+});
+
+test("Partner sender is recognized as telecom even without explicit service type", () => {
+  const parsed = parseGmailMessage(message({
+    subject: "Your monthly bill",
+    from: "Partner <billing@example.test>",
+    body: "Amount due 119.90",
+  }));
+
+  assert.equal(parsed.providerName, "פרטנר");
+  assert.equal(parsed.category, "תקשורת");
+  assert.equal(parsed.monthlyCost, 119.9);
 });
 
 test("does not import generic receipts without a supported category/provider", () => {
