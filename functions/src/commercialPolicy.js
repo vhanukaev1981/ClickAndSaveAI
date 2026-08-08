@@ -12,7 +12,11 @@ function commercialTerms(source) {
   const nested = direct.commercial && typeof direct.commercial === "object"
     ? direct.commercial
     : {};
-  const agreementActive = direct.commercialAgreementActive === true || nested.agreementActive === true;
+  const agreementActive =
+    direct.commercialAgreementActive === true ||
+    direct.agreementActive === true ||
+    nested.commercialAgreementActive === true ||
+    nested.agreementActive === true;
   const commissionType = normalizeCommissionType(
     direct.commissionType !== undefined ? direct.commissionType : nested.commissionType
   );
