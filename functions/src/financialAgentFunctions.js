@@ -1,6 +1,7 @@
 "use strict";
 
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
+const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const {
@@ -9,7 +10,8 @@ const {
 } = require("./financialIntelligence");
 
 const db = getFirestore();
-const MAX_INVOICES_PER_AGENT_RUN = 500;
+const MAX_SOURCE_DOCS_PER_AGENT_RUN = 500;
+const MAX_WRITES_PER_BATCH = 400;
 
 function requireAuth(request) {
   const uid = request.auth?.uid;
@@ -17,48 +19,87 @@ function requireAuth(request) {
   return uid;
 }
 
-async function loadObservedInvoices(uid) {
-  const snapshot = await db
-    .collection("users")
-    .doc(uid)
-    .collection("gmailInvoices")
-    .limit(MAX_INVOICES_PER_AGENT_RUN)
-    .get();
+function collectInvoicesFromImportDoc(data) {
+  const raw = Array.isArray(data?.invoices)
+    ? data.invoices
+    : (data?.invoice ? [data.invoice] : []);
+  return raw.filter((invoice) => invoice && typeof invoice === "object");
+}
 
-  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+async function loadObservedInvoices(uid) {
+  const userRef = db.collection("users").doc(uid);
+  const [invoiceSnapshot, importSnapshot] = await Promise.all([
+    userRef.collection("gmailInvoices").limit(MAX_SOURCE_DOCS_PER_AGENT_RUN).get(),
+    userRef.collection("gmailMessageImports").limit(MAX_SOURCE_DOCS_PER_AGENT_RUN).get(),
+  ]);
+
+  const bySourceId = new Map();
+  for (const doc of importSnapshot.docs) {
+    for (const invoice of collectInvoicesFromImportDoc(doc.data())) {
+      const sourceMessageId = String(invoice.sourceMessageId || "").trim();
+      if (sourceMessageId) bySourceId.set(sourceMessageId, invoice);
+    }
+  }
+  for (const doc of invoiceSnapshot.docs) {
+    const invoice = doc.data();
+    const sourceMessageId = String(invoice.sourceMessageId || "").trim();
+    if (sourceMessageId) bySourceId.set(sourceMessageId, invoice);
+  }
+  return [...bySourceId.values()];
+}
+
+async function commitWrites(writes) {
+  for (let index = 0; index < writes.length; index += MAX_WRITES_PER_BATCH) {
+    const batch = db.batch();
+    for (const write of writes.slice(index, index + MAX_WRITES_PER_BATCH)) {
+      batch.set(write.ref, write.data, { merge: true });
+    }
+    await batch.commit();
+  }
 }
 
 async function persistFinancialState(uid, invoices) {
   const context = buildFinancialContext(invoices);
   const { insights, opportunities } = detectFinancialSignals(invoices);
   const userRef = db.collection("users").doc(uid);
-  const batch = db.batch();
+  const writes = [];
 
-  batch.set(userRef.collection("financialContext").doc("current"), {
-    ...context,
-    generatedAt: FieldValue.serverTimestamp(),
-    engineVersion: 1,
-  }, { merge: true });
+  writes.push({
+    ref: userRef.collection("financialContext").doc("current"),
+    data: {
+      ...context,
+      activeInsightIds: insights.map((item) => item.id),
+      activeOpportunityIds: opportunities.map((item) => item.id),
+      generatedAt: FieldValue.serverTimestamp(),
+      engineVersion: 1,
+    },
+  });
 
   for (const insight of insights) {
-    batch.set(userRef.collection("financialInsights").doc(insight.id), {
-      ...insight,
-      updatedAt: FieldValue.serverTimestamp(),
-      createdAt: FieldValue.serverTimestamp(),
-      engineVersion: 1,
-    }, { merge: true });
+    writes.push({
+      ref: userRef.collection("financialInsights").doc(insight.id),
+      data: {
+        ...insight,
+        engineGenerated: true,
+        updatedAt: FieldValue.serverTimestamp(),
+        engineVersion: 1,
+      },
+    });
   }
 
   for (const opportunity of opportunities) {
-    batch.set(userRef.collection("opportunities").doc(opportunity.id), {
-      ...opportunity,
-      updatedAt: FieldValue.serverTimestamp(),
-      createdAt: FieldValue.serverTimestamp(),
-      engineVersion: 1,
-    }, { merge: true });
+    writes.push({
+      ref: userRef.collection("opportunities").doc(opportunity.id),
+      data: {
+        ...opportunity,
+        engineGenerated: true,
+        updatedAt: FieldValue.serverTimestamp(),
+        engineVersion: 1,
+      },
+    });
   }
 
-  await batch.commit();
+  await commitWrites(writes);
   return {
     context,
     insightCount: insights.length,
@@ -79,6 +120,20 @@ async function runFinancialAgentForUser(uid) {
   return result;
 }
 
+exports.onGmailFinancialDataChanged = onDocumentWritten(
+  {
+    document: "users/{uid}/gmailMessageImports/{messageId}",
+    region: "europe-west1",
+    memory: "256MiB",
+    timeoutSeconds: 120,
+  },
+  async (event) => {
+    const uid = String(event.params.uid || "").trim();
+    if (!uid) return;
+    await runFinancialAgentForUser(uid);
+  }
+);
+
 exports.refreshFinancialAgent = onCall(
   { enforceAppCheck: true },
   async (request) => {
@@ -97,3 +152,4 @@ exports.refreshFinancialAgent = onCall(
 
 exports._runFinancialAgentForUser = runFinancialAgentForUser;
 exports._persistFinancialState = persistFinancialState;
+exports._loadObservedInvoices = loadObservedInvoices;
