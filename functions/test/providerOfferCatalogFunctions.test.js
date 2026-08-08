@@ -24,6 +24,10 @@ function validOffer(overrides = {}) {
     monthlyPrice: 89,
     priceGuaranteedMonths: 12,
     oneTimeFees: 0,
+    consumerPriceIncludesVat: true,
+    requiredRecurringFees: 0,
+    requiredRecurringFeesDescription: "",
+    availabilityMode: "NATIONWIDE",
     availabilityStatus: "AVAILABLE",
     officialSourceUrl: "https://provider.example.co.il/fiber/1g",
     officialSourceName: "Provider A official website",
@@ -46,6 +50,9 @@ test("catalog accepts a current Israeli fixed-monthly offer with complete first-
   assert.equal(result.serviceType, "INTERNET_1000_MBPS");
   assert.equal(result.priceGuaranteedMonths, 12);
   assert.equal(result.oneTimeFees, 0);
+  assert.equal(result.consumerPriceIncludesVat, true);
+  assert.equal(result.requiredRecurringFees, 0);
+  assert.equal(result.availabilityMode, "NATIONWIDE");
   assert.equal(result.commissionType, "CPA");
 });
 
@@ -66,6 +73,44 @@ test("first-year one-time fees must be stated explicitly, including zero", () =>
 
   const withFee = validateProviderOfferInput(validOffer({ oneTimeFees: 240 }), nowMs);
   assert.equal(withFee.oneTimeFees, 240);
+});
+
+test("consumer pricing must include VAT and disclose mandatory recurring fees", () => {
+  assert.throws(
+    () => validateProviderOfferInput(validOffer({ consumerPriceIncludesVat: false }), nowMs),
+    /VAT-inclusive/i
+  );
+  assert.throws(
+    () => validateProviderOfferInput(validOffer({
+      requiredRecurringFees: 20,
+      requiredRecurringFeesDescription: "",
+    }), nowMs),
+    /mandatory recurring fees/i
+  );
+
+  const withRouter = validateProviderOfferInput(validOffer({
+    requiredRecurringFees: 20,
+    requiredRecurringFeesDescription: "required router rental",
+  }), nowMs);
+  assert.equal(withRouter.requiredRecurringFees, 20);
+  assert.equal(withRouter.requiredRecurringFeesDescription, "required router rental");
+});
+
+test("catalog requires an explicit supported availability mode", () => {
+  const missing = validOffer();
+  delete missing.availabilityMode;
+  assert.throws(
+    () => validateProviderOfferInput(missing, nowMs),
+    /availabilityMode/i
+  );
+  assert.throws(
+    () => validateProviderOfferInput(validOffer({ availabilityMode: "UNKNOWN" }), nowMs),
+    /availabilityMode/i
+  );
+  assert.equal(
+    validateProviderOfferInput(validOffer({ availabilityMode: "USER_VERIFIED" }), nowMs).availabilityMode,
+    "USER_VERIFIED"
+  );
 });
 
 test("insurance and electricity cannot masquerade as fixed-monthly comparable offers", () => {
