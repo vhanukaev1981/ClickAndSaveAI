@@ -10,6 +10,7 @@ const opportunityActionFunctions = require("./opportunityActionFunctions");
 const commerceOperationsFunctions = require("./commerceOperationsFunctions");
 const providerOfferCatalogFunctions = require("./providerOfferCatalogFunctions");
 const providerDispatchFunctions = require("./providerDispatchFunctions");
+const commerceFunnelFunctions = require("./commerceFunnelFunctions");
 const gmailScanV5Functions = require("./gmailScanV5Functions");
 
 module.exports = {
@@ -23,6 +24,7 @@ module.exports = {
   ...commerceOperationsFunctions,
   ...providerOfferCatalogFunctions,
   ...providerDispatchFunctions,
+  ...commerceFunnelFunctions,
   // Intentionally last: preserves the public callable name while replacing only
   // the legacy parser-v4 implementation. OAuth/connect/disconnect remain untouched.
   ...gmailScanV5Functions,
