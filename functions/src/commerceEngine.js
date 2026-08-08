@@ -4,6 +4,22 @@ function normalizeText(value) {
   return String(value || "").trim();
 }
 
+function toMillis(value) {
+  if (value instanceof Date) return value.getTime();
+  if (value && typeof value.toDate === "function") {
+    const date = value.toDate();
+    return date instanceof Date ? date.getTime() : Number.NaN;
+  }
+  if (value && Number.isFinite(Number(value.seconds))) {
+    const seconds = Number(value.seconds);
+    const nanos = Number.isFinite(Number(value.nanoseconds)) ? Number(value.nanoseconds) : 0;
+    return (seconds * 1000) + Math.floor(nanos / 1_000_000);
+  }
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Date.parse(normalizeText(value));
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
 function normalizeOffer(offer, nowMs = Date.now()) {
   if (!offer || typeof offer !== "object") return null;
   const offerId = normalizeText(offer.offerId || offer.id);
@@ -11,12 +27,13 @@ function normalizeOffer(offer, nowMs = Date.now()) {
   const category = normalizeText(offer.category);
   const country = normalizeText(offer.country || "IL").toUpperCase();
   const monthlyPrice = Number(offer.monthlyPrice);
-  const verifiedAtMs = Date.parse(normalizeText(offer.verifiedAt));
-  const validUntilMs = Date.parse(normalizeText(offer.validUntil));
+  const verifiedAtMs = toMillis(offer.verifiedAt);
+  const validUntilMs = toMillis(offer.validUntil);
 
   if (!offerId || !providerName || !category) return null;
   if (!Number.isFinite(monthlyPrice) || monthlyPrice <= 0 || monthlyPrice >= 1_000_000) return null;
   if (!Number.isFinite(verifiedAtMs) || !Number.isFinite(validUntilMs)) return null;
+  if (verifiedAtMs > nowMs) return null;
   if (validUntilMs <= nowMs) return null;
   if (offer.officialSourceVerified !== true) return null;
   if (offer.availabilityStatus !== "AVAILABLE") return null;
@@ -128,6 +145,7 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
 }
 
 module.exports = {
+  toMillis,
   normalizeOffer,
   matchVerifiedOffers,
   enrichOpportunityWithBestOffer,
