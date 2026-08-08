@@ -55,7 +55,7 @@ function normalizeConsumerPricingEvidence(offer) {
   return {
     consumerPriceIncludesVat: true,
     requiredRecurringFees: Math.round((requiredRecurringFees + Number.EPSILON) * 100) / 100,
-    requiredRecurringFeesDescription,
+    requiredRecurringFeesDescription: recurringFeesDescription,
   };
 }
 
