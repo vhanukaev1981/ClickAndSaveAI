@@ -100,7 +100,7 @@ class GmailRepository(
         return runCatching {
             val result = backendRepository.scanGmailInvoices()
             result.invoices.forEach { invoice ->
-                shoppingRepository.addInvoice(
+                shoppingRepository.upsertGmailInvoice(
                     InvoiceItem(
                         providerName = invoice.providerName,
                         category = invoice.category,
