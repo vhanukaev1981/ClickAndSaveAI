@@ -54,6 +54,28 @@ class GmailRepository(
         }
     }
 
+    suspend fun refreshConnectionStatusAndUpgradeIfNeeded(): Result<GmailConnectionResult> {
+        val connectionResult = refreshConnectionStatus()
+        val connection = connectionResult.getOrNull() ?: return connectionResult
+        if (!connection.connected) return connectionResult
+
+        val syncStatus = runCatching { backendRepository.getGmailSyncStatus() }
+            .onFailure { error ->
+                // A sync-status lookup failure must never make a valid Gmail connection appear disconnected.
+                Log.w("GmailRepository", "Gmail parser upgrade status unavailable", error)
+            }
+            .getOrNull()
+
+        if (syncStatus?.upgradeRequired == true) {
+            Log.i(
+                "GmailRepository",
+                "Running one-time Gmail parser upgrade ${syncStatus.storedParserVersion} -> ${syncStatus.activeParserVersion}"
+            )
+            scanInvoices()
+        }
+        return connectionResult
+    }
+
     suspend fun connectWithAuthorizationCode(
         serverAuthCode: String,
         userEmail: String
