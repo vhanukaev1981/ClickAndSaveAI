@@ -12,6 +12,8 @@ const {
   parseGmailMessage,
 } = require("./gmailParser");
 const { decryptToken } = require("./tokenCrypto");
+const { BACKFILL_BATCH_MODE } = require("./agentTriggerPolicy");
+const { _runFinancialAgentForUser: runFinancialAgentForUser } = require("./financialAgentFunctions");
 
 const db = getFirestore();
 const googleOAuthClientId = defineString("GOOGLE_OAUTH_CLIENT_ID");
@@ -262,6 +264,7 @@ async function processMessage(uid, accessToken, messageId) {
     parserVersion: GMAIL_PARSER_VERSION,
     pdfAttachmentCount: pdfAttachments.length,
     pdfAnalysisComplete: allPdfsAnalyzed,
+    agentTriggerMode: BACKFILL_BATCH_MODE,
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
   await persistInvoiceDocuments(uid, parsedInvoices);
@@ -317,6 +320,20 @@ exports.scanGmailInvoices = onCall(
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
 
+    let agentRefreshed = false;
+    try {
+      await runFinancialAgentForUser(uid);
+      agentRefreshed = true;
+    } catch (error) {
+      // The Gmail import itself remains successful. The scheduled financial-agent
+      // sweep is the recovery path if a transient post-import evaluation fails.
+      logger.error("Financial agent refresh failed after Gmail backfill batch", {
+        uid,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     logger.info("Gmail parser-v5 scan completed", {
       uid,
       lookback: INITIAL_GMAIL_LOOKBACK,
@@ -325,6 +342,7 @@ exports.scanGmailInvoices = onCall(
       returned: invoices.length,
       importedCount,
       upgradedMessages,
+      agentRefreshed,
     });
 
     return {
@@ -335,6 +353,7 @@ exports.scanGmailInvoices = onCall(
       lookback: INITIAL_GMAIL_LOOKBACK,
       parserVersion: GMAIL_PARSER_VERSION,
       upgradedMessages,
+      agentRefreshed,
     };
   }
 );
