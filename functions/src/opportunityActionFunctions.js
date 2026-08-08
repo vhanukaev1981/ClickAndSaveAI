@@ -33,6 +33,7 @@ function validateOpportunityActionInput(data) {
   }
   return {
     opportunityId: requiredString(data.opportunityId, "opportunityId", 128),
+    expectedOfferId: requiredString(data.expectedOfferId, "expectedOfferId", 128),
     contactName: requiredString(data.contactName, "contactName", 120),
     phone: validatePhone(data.phone),
     contactEmail: validateEmail(data.contactEmail),
@@ -40,11 +41,12 @@ function validateOpportunityActionInput(data) {
   };
 }
 
-function verifiedActionSnapshot(opportunity, currentOffer) {
+function verifiedActionSnapshot(opportunity, currentOffer, expectedOfferId = "") {
   if (!opportunity || typeof opportunity !== "object") return null;
   const matchedOffer = opportunity.matchedOffer;
   const opportunityId = String(opportunity.id || "").trim();
   const offerId = String(matchedOffer?.offerId || "").trim();
+  const expected = String(expectedOfferId || "").trim();
   const category = String(opportunity.category || "").trim();
   const currentProvider = String(opportunity.providerName || "").trim();
   const requestedProvider = String(matchedOffer?.providerName || "").trim();
@@ -53,6 +55,7 @@ function verifiedActionSnapshot(opportunity, currentOffer) {
   const monthlySaving = Number(opportunity.potentialMonthlySaving);
   const annualSaving = Number(opportunity.potentialAnnualSaving);
   if (!opportunityId || !offerId || !category || !currentProvider || !requestedProvider) return null;
+  if (expected && expected !== offerId) return null;
   if (!Number.isFinite(currentMonthlyCost) || currentMonthlyCost <= 0) return null;
   if (!Number.isFinite(matchedMonthlyPrice) || matchedMonthlyPrice <= 0) return null;
   if (!Number.isFinite(monthlySaving) || monthlySaving <= 0) return null;
@@ -93,43 +96,52 @@ exports.acceptSavingsOpportunity = onCall(
 
     const userRef = db.collection("users").doc(uid);
     const opportunityRef = userRef.collection("opportunities").doc(input.opportunityId);
-    const opportunitySnapshot = await opportunityRef.get();
-    if (!opportunitySnapshot.exists) {
-      throw new HttpsError("not-found", "The savings opportunity no longer exists.");
-    }
-
-    const opportunity = { id: opportunitySnapshot.id, ...opportunitySnapshot.data() };
-    const offerId = String(opportunity.matchedOffer?.offerId || "").trim();
-    if (!offerId) {
-      throw new HttpsError("failed-precondition", "This opportunity does not have a verified provider offer.");
-    }
-
-    const offerSnapshot = await db.collection("providerOffers").doc(offerId).get();
-    if (!offerSnapshot.exists) {
-      throw new HttpsError("failed-precondition", "The provider offer is no longer available.");
-    }
-    const action = verifiedActionSnapshot(opportunity, { id: offerSnapshot.id, ...offerSnapshot.data() });
-    if (!action) {
-      throw new HttpsError("failed-precondition", "The provider offer changed or can no longer be verified.");
-    }
-
     const leadId = crypto
       .createHash("sha256")
-      .update(`${uid}|${action.opportunityId}|${action.offerId}`)
+      .update(`${uid}|${input.opportunityId}|${input.expectedOfferId}`)
       .digest("hex");
     const leadRef = db.collection("providerLeads").doc(leadId);
-    const commerceRef = db.collection("commerceMatches").doc(`${uid}_${action.opportunityId}`);
+    const commerceRef = db.collection("commerceMatches").doc(`${uid}_${input.opportunityId}`);
     let duplicate = false;
+    let action = null;
 
     await db.runTransaction(async (transaction) => {
-      const [existingLead, currentOpportunity, commerceSnapshot] = await Promise.all([
-        transaction.get(leadRef),
-        transaction.get(opportunityRef),
-        transaction.get(commerceRef),
-      ]);
+      const currentOpportunity = await transaction.get(opportunityRef);
       if (!currentOpportunity.exists) {
         throw new HttpsError("not-found", "The savings opportunity no longer exists.");
       }
+
+      const opportunity = { id: currentOpportunity.id, ...currentOpportunity.data() };
+      const currentOfferId = String(opportunity.matchedOffer?.offerId || "").trim();
+      if (!currentOfferId || currentOfferId !== input.expectedOfferId) {
+        throw new HttpsError(
+          "failed-precondition",
+          "The provider offer changed. Refresh the opportunity before approving it."
+        );
+      }
+
+      const offerRef = db.collection("providerOffers").doc(currentOfferId);
+      const [offerSnapshot, existingLead, commerceSnapshot] = await Promise.all([
+        transaction.get(offerRef),
+        transaction.get(leadRef),
+        transaction.get(commerceRef),
+      ]);
+      if (!offerSnapshot.exists) {
+        throw new HttpsError("failed-precondition", "The provider offer is no longer available.");
+      }
+
+      action = verifiedActionSnapshot(
+        opportunity,
+        { id: offerSnapshot.id, ...offerSnapshot.data() },
+        input.expectedOfferId
+      );
+      if (!action) {
+        throw new HttpsError(
+          "failed-precondition",
+          "The provider offer changed or can no longer be verified."
+        );
+      }
+
       if (existingLead.exists) {
         duplicate = true;
         return;
@@ -161,6 +173,7 @@ exports.acceptSavingsOpportunity = onCall(
       transaction.set(opportunityRef, {
         status: "USER_ACCEPTED",
         actionLeadId: leadId,
+        acceptedOfferId: action.offerId,
         userAcceptedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
@@ -181,6 +194,10 @@ exports.acceptSavingsOpportunity = onCall(
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: commerceSnapshot.exists });
     });
+
+    if (!action) {
+      throw new HttpsError("internal", "The verified opportunity action was not resolved.");
+    }
 
     logger.info("Verified savings opportunity accepted", {
       uid,
