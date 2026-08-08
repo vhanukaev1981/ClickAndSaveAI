@@ -44,6 +44,12 @@ test("non-direct commercial models require attribution field", () => {
   assert.throws(() => normalizeProviderContract(contract({ attributionField: "" })), /attributionField/);
 });
 
+test("contract active window requires valid timestamps in chronological order", () => {
+  assert.throws(() => normalizeProviderContract(contract({ activeFrom: "not-a-date" })), /activeFrom must be a valid timestamp/);
+  assert.throws(() => normalizeProviderContract(contract({ activeUntil: "not-a-date" })), /activeUntil must be a valid timestamp/);
+  assert.throws(() => normalizeProviderContract(contract({ activeUntil: "2026-07-31T23:59:59Z" })), /after activeFrom/);
+});
+
 test("contract activity is deterministic and independent of commission amount", () => {
   const midAugust = Date.parse("2026-08-15T12:00:00Z");
   assert.equal(isContractActive(contract(), midAugust), true);
