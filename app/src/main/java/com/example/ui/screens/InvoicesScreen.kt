@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,6 +27,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,8 +54,23 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
     val verifiedSavings by viewModel.totalMonthlySavingsPotential.collectAsState()
     var selectedCategory by remember { mutableStateOf("הכל") }
     var showAddDialog by remember { mutableStateOf(false) }
-    val categories = listOf("הכל", "חשמל", "סלולר", "אינטרנט", "תקשורת", "ביטוח", "טלוויזיה")
-    val filteredInvoices = if (selectedCategory == "הכל") invoices else invoices.filter { it.category == selectedCategory }
+    var pendingDelete by remember { mutableStateOf<InvoiceItem?>(null) }
+
+    val categories = listOf("הכל") + invoices
+        .map { it.category.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+        .sorted()
+    val filteredInvoices = if (selectedCategory == "הכל") {
+        invoices
+    } else {
+        invoices.filter { it.category == selectedCategory }
+    }
+    val categoryTotals = invoices
+        .groupBy { it.category.ifBlank { "אחר" } }
+        .mapValues { (_, items) -> items.sumOf { it.monthlyCost } }
+        .toList()
+        .sortedByDescending { it.second }
 
     if (showAddDialog) {
         ManualInvoiceDialog(
@@ -63,6 +78,17 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
             onAdd = { provider, category, cost ->
                 viewModel.addManualInvoice(provider, category, cost, "", 0.0, 0.0)
                 showAddDialog = false
+            }
+        )
+    }
+
+    pendingDelete?.let { invoice ->
+        DeleteInvoiceDialog(
+            invoice = invoice,
+            onDismiss = { pendingDelete = null },
+            onConfirm = {
+                viewModel.deleteInvoice(invoice.id)
+                pendingDelete = null
             }
         )
     }
@@ -82,7 +108,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "כל החיובים שהמערכת זיהתה במקום אחד.",
+                    "תמונת ההוצאות החודשיות שהמערכת זיהתה עבורך.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -105,7 +131,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "₪${String.format("%.2f", totalMonthlyCost)}",
+                                money(totalMonthlyCost),
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold
                             )
@@ -115,24 +141,46 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Button(onClick = { showAddDialog = true }) {
+                        OutlinedButton(onClick = { showAddDialog = true }) {
                             Icon(Icons.Default.Add, contentDescription = null)
                             Spacer(Modifier.size(4.dp))
-                            Text("הוסף חשבון")
+                            Text("הוסף ידנית")
                         }
                     }
 
                     if (verifiedSavings > 0.0) {
                         Text(
-                            "חיסכון חודשי מאומת: ₪${String.format("%.2f", verifiedSavings)}",
+                            "חיסכון חודשי מאומת: ${money(verifiedSavings)}",
                             color = TechBluePrimary,
                             fontWeight = FontWeight.Bold
                         )
                     } else {
                         Text(
-                            "המערכת בודקת כל שירות מול הצעות מתאימות. חיסכון יוצג רק אחרי אימות.",
+                            "אנחנו בודקים את השירותים ברקע. סכום חיסכון יוצג רק לאחר שנמצאה הצעה מתאימה שניתן לאמת.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        if (categoryTotals.isNotEmpty()) {
+            item {
+                Text(
+                    "הוצאות לפי קטגוריה",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(categoryTotals, key = { it.first }) { (category, total) ->
+                        CategorySpendCard(
+                            category = category,
+                            monthlyAmount = total,
+                            selected = selectedCategory == category,
+                            onClick = { selectedCategory = category }
                         )
                     }
                 }
@@ -177,7 +225,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
             items(filteredInvoices, key = { it.id }) { invoice ->
                 InvoiceCard(
                     invoice = invoice,
-                    onDelete = { viewModel.deleteInvoice(invoice.id) }
+                    onDelete = { pendingDelete = invoice }
                 )
             }
         }
@@ -194,7 +242,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                     Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = TechBluePrimary)
                     Spacer(Modifier.size(10.dp))
                     Text(
-                        "חשבונות הם מקור המידע. אם נמצאת חלופה טובה ומאומתת, הפעולה תופיע במסך חיסכון — לא צריך לבקש בדיקה מכל חשבון בנפרד.",
+                        "לא צריך לבקש בדיקה מכל חשבון. אם נמצאת חלופה טובה ומאומתת, היא תופיע אוטומטית באזור החיסכון.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -204,6 +252,35 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
 
     @Suppress("UNUSED_VARIABLE")
     val receiptScanKeptForApiCompatibility = onOpenReceiptScan
+}
+
+@Composable
+private fun CategorySpendCard(
+    category: String,
+    monthlyAmount: Double,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(category, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(money(monthlyAmount), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "לחודש",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
 }
 
 @Composable
@@ -227,11 +304,11 @@ private fun InvoiceCard(invoice: InvoiceItem, onDelete: () -> Unit) {
                     )
                 }
                 IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.DeleteOutline, contentDescription = "מחק")
+                    Icon(Icons.Default.DeleteOutline, contentDescription = "מחק חשבון")
                 }
             }
             Text(
-                "₪${String.format("%.2f", invoice.monthlyCost)} לחודש",
+                "${money(invoice.monthlyCost)} לחודש",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -251,6 +328,29 @@ private fun customerStatus(invoice: InvoiceItem): String {
         raw.contains("UNVERIFIED") || raw.contains("NOT_FOUND") || raw.contains("GMAIL_READONLY") -> "החשבון זוהה ונמצא בבדיקה"
         else -> "נבדק אוטומטית להזדמנויות חיסכון"
     }
+}
+
+@Composable
+private fun DeleteInvoiceDialog(
+    invoice: InvoiceItem,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("להסיר את החשבון?") },
+        text = {
+            Text(
+                "${invoice.providerName} יוסר מהתצוגה המקומית. אם ייקלט בעתיד מסמך חדש מאותו שירות, הוא עשוי להופיע שוב."
+            )
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) { Text("הסר") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("ביטול") }
+        }
+    )
 }
 
 @Composable
@@ -304,3 +404,5 @@ private fun ManualInvoiceDialog(onDismiss: () -> Unit, onAdd: (String, String, D
         dismissButton = { TextButton(onClick = onDismiss) { Text("ביטול") } }
     )
 }
+
+private fun money(value: Double): String = "₪${String.format("%.2f", value)}"
