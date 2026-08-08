@@ -219,7 +219,7 @@ fun MainAppStructure(
     LaunchedEffect(session.uid) {
         if (session.isAuthenticated) {
             PushRegistration.registerCurrentToken()
-            viewModel.gmailRepository.refreshConnectionStatus()
+            viewModel.gmailRepository.refreshConnectionStatusAndUpgradeIfNeeded()
         }
     }
 
