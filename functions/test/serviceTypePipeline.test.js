@@ -32,12 +32,12 @@ test("explicit Gmail internet speed reaches the proactive opportunity as a canon
   const first = parseGmailMessage(gmailMessage({
     id: "internet-july",
     date: "Wed, 1 Jul 2026 08:00:00 +0300",
-    body: "שירות אינטרנט סיבים במהירות 1 Gbps. סה\"כ לתשלום 129 ₪",
+    body: "השירות שלך: אינטרנט סיבים במהירות 1 Gbps. סה\"כ לתשלום 129 ₪",
   }));
   const second = parseGmailMessage(gmailMessage({
     id: "internet-august",
     date: "Sat, 1 Aug 2026 08:00:00 +0300",
-    body: "שירות אינטרנט סיבים במהירות 1000 Mbps. סה\"כ לתשלום 129 ₪",
+    body: "החבילה שלך: אינטרנט סיבים במהירות 1000 Mbps. סה\"כ לתשלום 129 ₪",
   }));
 
   assert.equal(first.serviceType, "INTERNET_1000_MBPS");
@@ -75,7 +75,10 @@ test("canonical user service profile matches equivalent provider wording but rej
   const baseOffer = {
     providerName: "Provider A",
     category: "אינטרנט",
+    pricingModel: "FIXED_MONTHLY",
     country: "IL",
+    priceGuaranteedMonths: 12,
+    oneTimeFees: 0,
     verifiedAt: "2026-08-08T08:00:00Z",
     validUntil: "2026-09-08T08:00:00Z",
     officialSourceVerified: true,
@@ -102,4 +105,5 @@ test("canonical user service profile matches equivalent provider wording but rej
 
   assert.deepEqual(matches.map((item) => item.offerId), ["same-speed"]);
   assert.equal(matches[0].serviceType, "INTERNET_1000_MBPS");
+  assert.equal(matches[0].annualSaving, 480);
 });
