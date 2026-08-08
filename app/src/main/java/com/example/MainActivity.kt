@@ -1,6 +1,8 @@
 package com.example
 
+import android.Manifest
 import android.app.Activity
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -45,6 +47,12 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
     private val authorizationClient by lazy { Identity.getAuthorizationClient(this) }
 
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) PushRegistration.registerCurrentToken()
+    }
+
     private val gmailAuthorizationLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
@@ -67,6 +75,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         configureFirebaseAndAppCheck()
+        requestNotificationPermissionIfNeeded()
         enableEdgeToEdge()
 
         setContent {
@@ -97,6 +106,14 @@ class MainActivity : ComponentActivity() {
             AppCheckInstaller.install()
         }.onFailure {
             Log.w("MainActivity", "Firebase/App Check unavailable: ${it.localizedMessage}")
+        }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            PushRegistration.registerCurrentToken()
         }
     }
 
@@ -150,6 +167,7 @@ class MainActivity : ComponentActivity() {
             )
             return
         }
+        PushRegistration.registerCurrentToken()
         viewModel.completeGmailAuthorization(serverAuthCode)
     }
 
@@ -169,6 +187,7 @@ fun MainAppStructure(
 
     LaunchedEffect(session.uid) {
         if (session.isAuthenticated) {
+            PushRegistration.registerCurrentToken()
             viewModel.gmailRepository.refreshConnectionStatus()
         }
     }
