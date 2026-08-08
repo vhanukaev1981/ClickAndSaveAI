@@ -122,11 +122,11 @@ class AuthRepository(private val applicationContext: Context) {
             val user = auth.signInWithCredential(firebaseCredential).await().user
                 ?: throw IllegalStateException("Firebase returned no authenticated user")
 
-            // Credential Manager allows account selection even while another Firebase user is
-            // signed in. Never let Gmail-derived invoice metadata from account A survive a direct
-            // switch to account B on the same device. Manual invoices remain local and untouched.
-            if (previousUid.isNotBlank() && previousUid != user.uid) {
-                purgeGmailDerivedInvoices("account switch")
+            // If this is not provably the same Firebase user as before, clear only Gmail-derived
+            // local data before exposing the new session. This also cleans up any stale Gmail data
+            // left behind by an interrupted sign-out. Manual invoices remain untouched.
+            if (previousUid != user.uid) {
+                purgeGmailDerivedInvoices("account boundary change")
             }
 
             val session = UserSession(
@@ -153,12 +153,12 @@ class AuthRepository(private val applicationContext: Context) {
     }
 
     suspend fun signOut() {
+        // Privacy boundary first: local Gmail-derived metadata is recoverable from the backend and
+        // should be removed before Firebase changes to a signed-out state. Manual invoices remain.
+        purgeGmailDerivedInvoices("sign-out")
+
         runCatching { getFirebaseAuthSafe()?.signOut() }
             .onFailure { Log.e("AuthRepository", "Sign-out failed", it) }
-
-        // Remove only Gmail-derived data before another account can be used on this device.
-        // Manually entered invoices belong to the local app state and must survive sign-out.
-        purgeGmailDerivedInvoices("sign-out")
 
         _userSession.value = UserSession()
         _authState.value = AuthState.Idle
