@@ -87,9 +87,17 @@ fun SettingsScreen(
                     }
                     Spacer(modifier = Modifier.size(6.dp))
                 }
-                Column {
-                    Text("הגדרות והעדפות", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("העדפות מקומיות בלבד", style = MaterialTheme.typography.bodySmall)
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        "העדפות חיסכון",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "עזור למערכת להבין מה חשוב לך יותר.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -97,13 +105,13 @@ fun SettingsScreen(
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(18.dp)
             ) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
                     Icon(Icons.Default.Info, contentDescription = null)
                     Spacer(modifier = Modifier.size(10.dp))
                     Text(
-                        "ההגדרות במסך זה נשמרות כרגע בזיכרון המקומי בלבד. הן אינן מפעילות ניטור רקע, התראות Push, מעבר אוטומטי בין ספקים או הוראות לספק חיצוני.",
+                        "העדפות אלו עוזרות להתאים את החוויה והיעדים שלך. הן אינן מאשרות מעבר ספק או פעולה כספית — כל פעולה כזו דורשת אישור מפורש שלך.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -111,22 +119,22 @@ fun SettingsScreen(
         }
 
         item {
-            Card(shape = RoundedCornerShape(16.dp)) {
+            Card(shape = RoundedCornerShape(18.dp)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("יעדים מקומיים", fontWeight = FontWeight.Bold)
+                    Text("יעדי חיסכון", fontWeight = FontWeight.Bold)
                     OutlinedTextField(
                         value = goalInput,
                         onValueChange = { goalInput = it.filter(Char::isDigit) },
-                        label = { Text("יעד חיסכון חודשי אישי (₪)") },
-                        supportingText = { Text("יעד תצוגה בלבד; אינו תחזית חיסכון.") },
+                        label = { Text("יעד חיסכון חודשי (₪)") },
+                        supportingText = { Text("יעד אישי שיעזור לך לעקוב אחרי ההתקדמות.") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = thresholdInput,
                         onValueChange = { thresholdInput = it.filter(Char::isDigit) },
-                        label = { Text("סף חיסכון מועדף (₪/חודש)") },
-                        supportingText = { Text("נשמר כהעדפה בלבד; אינו מפעיל התראות אוטומטיות.") },
+                        label = { Text("סף חיסכון מועדף (₪ בחודש)") },
+                        supportingText = { Text("הסכום שממנו הזדמנות חיסכון הופכת למעניינת עבורך.") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -135,11 +143,11 @@ fun SettingsScreen(
         }
 
         item {
-            Card(shape = RoundedCornerShape(16.dp)) {
+            Card(shape = RoundedCornerShape(18.dp)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("ספקים מועדפים", fontWeight = FontWeight.Bold)
                     Text(
-                        "הבחירות אינן מהוות המלצה מסחרית ואינן משנות את תוצאות ה-AI בלי אימות מקור רשמי.",
+                        "אפשר לציין העדפות, אבל ההמלצה הסופית עדיין מבוססת על התאמה, מחיר ותנאים מאומתים — לא על העמלה של Click&SaveAI.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -165,13 +173,13 @@ fun SettingsScreen(
                         autoSwitch = false,
                         minThreshold = thresholdInput.toDoubleOrNull() ?: 0.0
                     )
-                    Toast.makeText(context, "ההעדפות עודכנו בזיכרון המקומי", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "ההעדפות נשמרו", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Save, contentDescription = null)
                 Spacer(modifier = Modifier.size(8.dp))
-                Text("שמור העדפות מקומיות")
+                Text("שמור העדפות")
             }
         }
     }
