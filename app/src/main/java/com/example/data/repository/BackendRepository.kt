@@ -18,6 +18,12 @@ data class GmailConnectionResult(
     val consentVersion: String
 )
 
+data class GmailWatchResult(
+    val watching: Boolean,
+    val historyId: String = "",
+    val expiration: String = ""
+)
+
 data class GmailScanResult(
     val invoices: List<BackendInvoice>,
     val scannedMessages: Int,
@@ -85,6 +91,20 @@ class BackendRepository(
             email = response["email"] as? String ?: "",
             consentVersion = response["consentVersion"] as? String ?: consentVersion
         )
+    }
+
+    suspend fun startGmailWatch(): GmailWatchResult {
+        val response = functions.getHttpsCallable("startGmailWatch").call().await().data.asStringMap()
+        return GmailWatchResult(
+            watching = response["watching"] as? Boolean ?: false,
+            historyId = response["historyId"]?.toString() ?: "",
+            expiration = response["expiration"]?.toString() ?: ""
+        )
+    }
+
+    suspend fun stopGmailWatch(): GmailWatchResult {
+        val response = functions.getHttpsCallable("stopGmailWatch").call().await().data.asStringMap()
+        return GmailWatchResult(watching = response["watching"] as? Boolean ?: false)
     }
 
     suspend fun scanGmailInvoices(): GmailScanResult {
