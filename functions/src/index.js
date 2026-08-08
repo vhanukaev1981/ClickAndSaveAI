@@ -396,9 +396,15 @@ exports.analyzeDeal = onCall(
         requiresVerification: true,
       };
     } catch (error) {
+      const errorObject = error && typeof error === "object" ? error : {};
       logger.error("Gemini analysis failed", {
         uid,
-        message: error instanceof Error ? error.message : String(error),
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorCode: typeof errorObject.code === "string" || typeof errorObject.code === "number"
+          ? String(errorObject.code)
+          : "",
+        httpStatus: typeof errorObject.status === "number" ? errorObject.status : null,
       });
       throw new HttpsError("unavailable", "AI analysis is temporarily unavailable.");
     }
