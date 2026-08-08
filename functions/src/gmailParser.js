@@ -75,10 +75,12 @@ function parseAmount(text) {
 function identifyCategory(text) {
   const normalized = text.toLowerCase();
   if (/(חשמל|electric|iec|power)/i.test(normalized)) return "חשמל";
-  if (/(סלולר|mobile|cellular|פלאפון|pelephone|wecom|019|קו נייד|חבילת גלישה)/i.test(normalized)) return "סלולר";
-  if (/(אינטרנט|סיבים|fiber|broadband|bezeq|בזק|נתב|ראוטר)/i.test(normalized)) return "אינטרנט";
   if (/(ביטוח|insurance|פוליסה)/i.test(normalized)) return "ביטוח";
-  if (/(טלוויזיה|streaming|netflix|yes|freetv)/i.test(normalized)) return "טלוויזיה";
+  // Prefer explicit service signals over provider names so multi-service providers
+  // such as Cellcom/Partner/HOT are not incorrectly forced into mobile or TV.
+  if (/(אינטרנט|סיבים|fiber|broadband|bezeq|בזק|נתב|ראוטר)/i.test(normalized)) return "אינטרנט";
+  if (/(סלולר|mobile|cellular|פלאפון|pelephone|wecom|019|קו נייד|חבילת גלישה)/i.test(normalized)) return "סלולר";
+  if (/(טלוויזיה|streaming|netflix|(^|\W)yes(\W|$)|freetv)/i.test(normalized)) return "טלוויזיה";
   return null;
 }
 
@@ -97,6 +99,11 @@ function identifyProvider(from, subject, searchableText) {
   return providers.find(([, pattern]) => pattern.test(text))?.[0] || "ספק שזוהה מהודעת Gmail";
 }
 
+function fallbackCategoryForProvider(providerName) {
+  if (["סלקום", "פרטנר", "HOT"].includes(providerName)) return "תקשורת";
+  return null;
+}
+
 function parseGmailMessage(message) {
   const payload = message?.payload || {};
   const headers = payload.headers || [];
@@ -107,7 +114,8 @@ function parseGmailMessage(message) {
   const bodyText = collectMessageText(payload);
   const searchableText = `${subject} ${from} ${snippet} ${bodyText}`.slice(0, 30_000);
   const amount = parseAmount(searchableText);
-  const category = identifyCategory(searchableText);
+  const providerName = identifyProvider(from, subject, searchableText);
+  const category = identifyCategory(searchableText) || fallbackCategoryForProvider(providerName);
 
   if (!message?.id || amount == null || category == null) return null;
 
@@ -115,7 +123,7 @@ function parseGmailMessage(message) {
   // Raw Gmail subject, sender, snippet and body text are deliberately not returned or stored.
   return {
     sourceMessageId: String(message.id),
-    providerName: identifyProvider(from, subject, searchableText),
+    providerName,
     category,
     monthlyCost: amount,
     receivedDate: date.slice(0, 120),
@@ -130,5 +138,6 @@ module.exports = {
   parseAmount,
   identifyCategory,
   identifyProvider,
+  fallbackCategoryForProvider,
   parseGmailMessage,
 };
