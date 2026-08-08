@@ -8,6 +8,27 @@ const AMOUNT_PATTERNS = [
   /([\d,]+(?:\.\d{1,2})?)\s*(?:₪|ש["״]?ח|ILS)/i,
 ];
 
+const SUPPORTED_CATEGORIES = new Map([
+  ["חשמל", "חשמל"],
+  ["electricity", "חשמל"],
+  ["electric", "חשמל"],
+  ["אינטרנט", "אינטרנט"],
+  ["internet", "אינטרנט"],
+  ["fiber", "אינטרנט"],
+  ["broadband", "אינטרנט"],
+  ["סלולר", "סלולר"],
+  ["mobile", "סלולר"],
+  ["cellular", "סלולר"],
+  ["טלוויזיה", "טלוויזיה"],
+  ["television", "טלוויזיה"],
+  ["tv", "טלוויזיה"],
+  ["ביטוח", "ביטוח"],
+  ["insurance", "ביטוח"],
+  ["תקשורת", "תקשורת"],
+  ["telecom", "תקשורת"],
+  ["communications", "תקשורת"],
+]);
+
 function firstHeader(headers, name) {
   if (!Array.isArray(headers)) return "";
   return headers.find((header) =>
@@ -65,6 +86,42 @@ function collectMessageText(payload, maxChars = 24_000) {
   return chunks.join(" ");
 }
 
+function collectPdfAttachments(payload, maxAttachments = 3) {
+  const attachments = [];
+
+  function visit(part, depth = 0) {
+    if (!part || depth > 12 || attachments.length >= maxAttachments) return;
+    const mimeType = String(part.mimeType || "").toLowerCase();
+    const filename = String(part.filename || "").trim();
+    const isPdf = mimeType === "application/pdf" || /\.pdf$/i.test(filename);
+
+    if (isPdf) {
+      const attachmentId = typeof part.body?.attachmentId === "string"
+        ? part.body.attachmentId
+        : "";
+      const inlineData = typeof part.body?.data === "string"
+        ? part.body.data
+        : "";
+      const size = Number(part.body?.size || 0);
+      if (attachmentId || inlineData) {
+        attachments.push({
+          attachmentId,
+          inlineData,
+          size: Number.isFinite(size) && size > 0 ? size : 0,
+          filename: filename.slice(0, 180),
+        });
+      }
+    }
+
+    if (Array.isArray(part.parts)) {
+      for (const child of part.parts) visit(child, depth + 1);
+    }
+  }
+
+  visit(payload);
+  return attachments;
+}
+
 function parseAmount(text) {
   const normalized = String(text || "").replace(/\u00a0/g, " ");
   for (const pattern of AMOUNT_PATTERNS) {
@@ -118,6 +175,42 @@ function fallbackCategoryForProvider(providerName) {
   return null;
 }
 
+function normalizeDocumentCategory(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (SUPPORTED_CATEGORIES.has(normalized)) return SUPPORTED_CATEGORIES.get(normalized);
+  return identifyCategory(normalized);
+}
+
+function normalizePdfInvoiceCandidate(candidate, message) {
+  if (!candidate || candidate.isInvoice !== true || !message?.id) return null;
+
+  const payload = message.payload || {};
+  const headers = payload.headers || [];
+  const subject = firstHeader(headers, "Subject");
+  const from = firstHeader(headers, "From");
+  const headerDate = firstHeader(headers, "Date");
+  const providerText = String(candidate.providerName || "").trim().slice(0, 160);
+  const detectedProvider = identifyProvider(from, subject, providerText);
+  const providerName = providerText ||
+    (detectedProvider !== "ספק שזוהה מהודעת Gmail" ? detectedProvider : "");
+  const category = normalizeDocumentCategory(candidate.category) ||
+    fallbackCategoryForProvider(providerName);
+  const monthlyCost = Number(candidate.monthlyCost);
+
+  if (!providerName || !category) return null;
+  if (!Number.isFinite(monthlyCost) || monthlyCost <= 0 || monthlyCost >= 1_000_000) return null;
+
+  return {
+    sourceMessageId: String(message.id),
+    providerName,
+    category,
+    monthlyCost,
+    receivedDate: String(candidate.receivedDate || headerDate || "").slice(0, 120),
+    verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
+  };
+}
+
 function parseGmailMessage(message) {
   const payload = message?.payload || {};
   const headers = payload.headers || [];
@@ -149,9 +242,11 @@ module.exports = {
   firstHeader,
   decodeBase64Url,
   collectMessageText,
+  collectPdfAttachments,
   parseAmount,
   identifyCategory,
   identifyProvider,
   fallbackCategoryForProvider,
+  normalizePdfInvoiceCandidate,
   parseGmailMessage,
 };
