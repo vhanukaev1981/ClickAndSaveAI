@@ -9,9 +9,14 @@ const FIXED_MONTHLY_CATEGORIES = new Set([
   "תקשורת",
 ]);
 const SUPPORTED_PRICING_MODEL = "FIXED_MONTHLY";
+const MIN_PRICE_GUARANTEE_MONTHS = 12;
 
 function normalizeText(value) {
   return String(value || "").trim();
+}
+
+function roundMoney(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 }
 
 function toMillis(value) {
@@ -38,6 +43,8 @@ function normalizeOffer(offer, nowMs = Date.now()) {
   const country = normalizeText(offer.country || "IL").toUpperCase();
   const pricingModel = normalizeText(offer.pricingModel || SUPPORTED_PRICING_MODEL).toUpperCase();
   const monthlyPrice = Number(offer.monthlyPrice);
+  const priceGuaranteedMonths = Number(offer.priceGuaranteedMonths);
+  const oneTimeFees = Number(offer.oneTimeFees);
   const verifiedAtMs = toMillis(offer.verifiedAt);
   const validUntilMs = toMillis(offer.validUntil);
 
@@ -45,6 +52,8 @@ function normalizeOffer(offer, nowMs = Date.now()) {
   if (pricingModel !== SUPPORTED_PRICING_MODEL) return null;
   if (!FIXED_MONTHLY_CATEGORIES.has(category)) return null;
   if (!Number.isFinite(monthlyPrice) || monthlyPrice <= 0 || monthlyPrice >= 1_000_000) return null;
+  if (!Number.isInteger(priceGuaranteedMonths) || priceGuaranteedMonths < MIN_PRICE_GUARANTEE_MONTHS || priceGuaranteedMonths > 120) return null;
+  if (!Number.isFinite(oneTimeFees) || oneTimeFees < 0 || oneTimeFees >= 1_000_000) return null;
   if (!Number.isFinite(verifiedAtMs) || !Number.isFinite(validUntilMs)) return null;
   if (verifiedAtMs > nowMs) return null;
   if (validUntilMs <= nowMs) return null;
@@ -55,13 +64,17 @@ function normalizeOffer(offer, nowMs = Date.now()) {
   if (!serviceType) return null;
 
   const userFitScore = Number(offer.userFitScore);
+  const firstYearCost = roundMoney((monthlyPrice * 12) + oneTimeFees);
   return {
     offerId,
     providerName,
     category,
     country,
     pricingModel,
-    monthlyPrice,
+    monthlyPrice: roundMoney(monthlyPrice),
+    priceGuaranteedMonths,
+    oneTimeFees: roundMoney(oneTimeFees),
+    firstYearCost,
     serviceType,
     verifiedAt: new Date(verifiedAtMs).toISOString(),
     validUntil: new Date(validUntilMs).toISOString(),
@@ -95,6 +108,7 @@ function matchVerifiedOffers(opportunity, offers, options = {}) {
   if (!Number.isFinite(currentMonthlyCost) || currentMonthlyCost <= 0 || !category) return [];
   if (!FIXED_MONTHLY_CATEGORIES.has(category)) return [];
 
+  const currentFirstYearCost = roundMoney(currentMonthlyCost * 12);
   const matches = [];
   for (const rawOffer of Array.isArray(offers) ? offers : []) {
     const offer = normalizeOffer(rawOffer, nowMs);
@@ -102,13 +116,17 @@ function matchVerifiedOffers(opportunity, offers, options = {}) {
     if (offer.country !== country) continue;
     if (offer.category !== category) continue;
     if (!serviceCompatible(opportunity, offer)) continue;
-    if (offer.monthlyPrice >= currentMonthlyCost) continue;
 
-    const monthlySaving = Math.round((currentMonthlyCost - offer.monthlyPrice) * 100) / 100;
+    const annualSaving = roundMoney(currentFirstYearCost - offer.firstYearCost);
+    if (annualSaving <= 0) continue;
+    const monthlySaving = roundMoney(annualSaving / 12);
+    const headlineMonthlySaving = roundMoney(currentMonthlyCost - offer.monthlyPrice);
     matches.push({
       ...offer,
+      currentFirstYearCost,
+      headlineMonthlySaving,
       monthlySaving,
-      annualSaving: Math.round(monthlySaving * 12 * 100) / 100,
+      annualSaving,
       commercial: {
         agreementActive: offer.commercialAgreementActive,
         commissionType: offer.commissionType,
@@ -119,9 +137,9 @@ function matchVerifiedOffers(opportunity, offers, options = {}) {
 
   // User value is the ranking rule. Commission is deliberately excluded from this comparator.
   matches.sort((a, b) => {
-    if (a.monthlySaving !== b.monthlySaving) return b.monthlySaving - a.monthlySaving;
+    if (a.annualSaving !== b.annualSaving) return b.annualSaving - a.annualSaving;
     if (a.userFitScore !== b.userFitScore) return b.userFitScore - a.userFitScore;
-    if (a.monthlyPrice !== b.monthlyPrice) return a.monthlyPrice - b.monthlyPrice;
+    if (a.firstYearCost !== b.firstYearCost) return a.firstYearCost - b.firstYearCost;
     return a.offerId.localeCompare(b.offerId);
   });
   return matches;
@@ -139,7 +157,7 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
         ...(opportunity.truthfulness || {}),
         savingsClaimAvailable: false,
         reason: FIXED_MONTHLY_CATEGORIES.has(String(opportunity?.category || "").trim())
-          ? "No verified compatible current offer is available."
+          ? "No verified compatible current offer with a trustworthy first-year cost is available."
           : "This category requires a category-specific pricing model before a savings amount can be claimed.",
       },
     };
@@ -153,6 +171,9 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
       providerName: best.providerName,
       pricingModel: best.pricingModel,
       monthlyPrice: best.monthlyPrice,
+      priceGuaranteedMonths: best.priceGuaranteedMonths,
+      oneTimeFees: best.oneTimeFees,
+      firstYearCost: best.firstYearCost,
       serviceType: best.serviceType,
       verifiedAt: best.verifiedAt,
       validUntil: best.validUntil,
@@ -164,7 +185,7 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
     truthfulness: {
       ...(opportunity.truthfulness || {}),
       savingsClaimAvailable: true,
-      reason: "Savings are calculated from a verified compatible fixed-monthly current offer.",
+      reason: "Savings are calculated from verified first-year cost, including declared one-time fees.",
     },
   };
 }
@@ -172,6 +193,8 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
 module.exports = {
   FIXED_MONTHLY_CATEGORIES,
   SUPPORTED_PRICING_MODEL,
+  MIN_PRICE_GUARANTEE_MONTHS,
+  roundMoney,
   toMillis,
   normalizeOffer,
   serviceCompatible,
