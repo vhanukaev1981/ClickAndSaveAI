@@ -196,10 +196,10 @@ exports.scanGmailInvoices = onCall(
 
     const { accessToken } = await refreshGoogleAccessToken(connectionData.encryptedRefreshToken);
     const query = encodeURIComponent(
-      'newer_than:18m subject:(חשבונית OR קבלה OR "הודעת תשלום" OR invoice OR receipt)'
+      'newer_than:24m {חשבונית קבלה "הודעת תשלום" "פירוט חיוב" "חשבון חודשי" invoice receipt bill statement סלקום cellcom פרטנר partner פלאפון pelephone בזק bezeq "חברת החשמל" HOT yes}'
     );
     const listResponse = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=25`,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=100`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     if (!listResponse.ok) {
@@ -227,7 +227,7 @@ exports.scanGmailInvoices = onCall(
         continue;
       }
 
-      const detailUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`;
+      const detailUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=full`;
       const detailResponse = await fetch(detailUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
@@ -252,7 +252,7 @@ exports.scanGmailInvoices = onCall(
           sourceMessageId: parsed.sourceMessageId,
           invoice: parsed,
           importedAt: FieldValue.serverTimestamp(),
-          parserVersion: 1,
+          parserVersion: 2,
         });
         wasCreated = true;
       });
