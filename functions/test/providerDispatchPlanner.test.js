@@ -51,7 +51,16 @@ function envelope() {
     offerId: "offer-1",
     contractId: "contract-1",
     adapterKey: "provider-a-v1",
-    payload: { leadId: "lead-1", offerId: "offer-1", phone: "0501234567" },
+    payload: {
+      leadId: "lead-1",
+      contactName: "Test User",
+      phone: "0501234567",
+      contactEmail: "test@example.com",
+      requestedProvider: "Provider A",
+      category: "אינטרנט",
+      offerId: "offer-1",
+      consentVersion: "v1",
+    },
   });
 }
 
