@@ -70,10 +70,46 @@ function televisionProfile(text) {
   return null;
 }
 
+function canonicalServiceType(category, raw) {
+  const upper = raw.toUpperCase();
+  const normalizedCategory = normalizeText(category).toLowerCase();
+
+  if (["אינטרנט", "internet", "fiber", "broadband"].includes(normalizedCategory)) {
+    const match = upper.match(/^INTERNET_(\d{2,5})_MBPS$/);
+    if (!match) return null;
+    const speed = Number(match[1]);
+    return speed >= 10 && speed <= 10_000 ? `INTERNET_${speed}_MBPS` : null;
+  }
+
+  if (["סלולר", "mobile", "cellular"].includes(normalizedCategory)) {
+    const match = upper.match(/^MOBILE_(\d{1,2})_LINES_(\d{1,6})_GB$/);
+    if (!match) return null;
+    const lines = Number(match[1]);
+    const dataGb = Number(match[2]);
+    if (lines < 1 || lines > 20 || dataGb < 1 || dataGb > 100_000) return null;
+    return `MOBILE_${lines}_LINES_${dataGb}_GB`;
+  }
+
+  if (["ביטוח", "insurance"].includes(normalizedCategory)) {
+    return ["INSURANCE_CAR", "INSURANCE_HOME", "INSURANCE_TRAVEL"].includes(upper)
+      ? upper
+      : null;
+  }
+
+  if (["טלוויזיה", "television", "tv"].includes(normalizedCategory)) {
+    return upper === "TV_STREAMING" ? upper : null;
+  }
+
+  return null;
+}
+
 function normalizeServiceType(category, value) {
   const raw = normalizeText(value);
   if (!raw) return null;
   if (raw.toUpperCase() === "ANY") return "ANY";
+
+  const canonical = canonicalServiceType(category, raw);
+  if (canonical) return canonical;
 
   const normalizedCategory = normalizeText(category).toLowerCase();
   if (["אינטרנט", "internet", "fiber", "broadband"].includes(normalizedCategory)) {
@@ -101,6 +137,7 @@ module.exports = {
   mobileProfile,
   insuranceProfile,
   televisionProfile,
+  canonicalServiceType,
   normalizeServiceType,
   extractServiceType,
 };
