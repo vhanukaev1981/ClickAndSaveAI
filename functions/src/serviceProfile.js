@@ -4,6 +4,7 @@ function normalizeText(value) {
   return String(value || "")
     .replace(/\u00a0/g, " ")
     .replace(/,/g, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -128,8 +129,62 @@ function normalizeServiceType(category, value) {
   return null;
 }
 
+const CURRENT_SERVICE_CUES = /(?:החבילה\s*שלך|המסלול\s*שלך|השירות\s*שלך|המהירות\s*שלך|חבילה\s*נוכחית|מסלול\s*נוכחי|שירות\s*נוכחי|מהירות\s*נוכחית|פרטי\s*החבילה|פרטי\s*השירות|service\s*details|current\s*(?:plan|package|service|speed)|your\s*(?:plan|package|service|speed)|(?:שירות|חבילה|מסלול|מהירות|speed|plan|package)\s*(?:[:\-]|אינטרנט|סיבים))/i;
+const PROMOTIONAL_CUES = /(?:מבצע|הצעה|שדרוג|הצטרפות|חדש\s*עבורך|upgrade|special\s*offer|offer|promotion|promo|switch\s*to|join\s*now)/i;
+const SPEED_CANDIDATE = /(\d+(?:\.\d+)?)\s*(gbps|gbit(?:\/s)?|gigabit(?:\/s)?|giga(?:bit)?|גיגה(?:ביט)?|mbps|mbit(?:\/s)?|megabit(?:\/s)?|מגה(?:ביט)?)/ig;
+
+function extractObservedInternetProfile(text) {
+  const raw = normalizeText(text);
+  if (!raw) return null;
+  SPEED_CANDIDATE.lastIndex = 0;
+  let match;
+  while ((match = SPEED_CANDIDATE.exec(raw)) !== null) {
+    const start = match.index;
+    const prefix = raw.slice(Math.max(0, start - 110), start);
+    const suffix = raw.slice(start + match[0].length, Math.min(raw.length, start + match[0].length + 35));
+    const context = `${prefix} ${match[0]} ${suffix}`;
+    const promotionalPrefix = prefix.slice(-75);
+    if (!CURRENT_SERVICE_CUES.test(context)) continue;
+    if (PROMOTIONAL_CUES.test(promotionalPrefix)) continue;
+    const canonical = normalizeServiceType("אינטרנט", match[0]);
+    if (canonical) return canonical;
+  }
+  return null;
+}
+
+function extractObservedMobileProfile(text) {
+  const raw = normalizeText(text);
+  if (!raw) return null;
+  const profile = mobileProfile(raw);
+  if (!profile) return null;
+  const linesIndex = raw.search(/\d{1,2}\s*(?:קווים|קוי(?:ם)?|lines?)/i);
+  if (linesIndex < 0) return null;
+  const prefix = raw.slice(Math.max(0, linesIndex - 110), linesIndex);
+  const context = raw.slice(Math.max(0, linesIndex - 110), Math.min(raw.length, linesIndex + 180));
+  if (!CURRENT_SERVICE_CUES.test(context)) return null;
+  if (PROMOTIONAL_CUES.test(prefix.slice(-75))) return null;
+  return profile;
+}
+
 function extractServiceType(category, text) {
-  return normalizeServiceType(category, text);
+  const normalizedCategory = normalizeText(category).toLowerCase();
+  if (["אינטרנט", "internet", "fiber", "broadband"].includes(normalizedCategory)) {
+    return extractObservedInternetProfile(text);
+  }
+  if (["סלולר", "mobile", "cellular"].includes(normalizedCategory)) {
+    return extractObservedMobileProfile(text);
+  }
+  if (["ביטוח", "insurance"].includes(normalizedCategory)) {
+    const raw = normalizeText(text);
+    if (PROMOTIONAL_CUES.test(raw) && !/(פוליסה|policy|הפוליסה\s*שלך|your\s+policy)/i.test(raw)) return null;
+    return insuranceProfile(raw);
+  }
+  if (["טלוויזיה", "television", "tv"].includes(normalizedCategory)) {
+    const raw = normalizeText(text);
+    if (PROMOTIONAL_CUES.test(raw)) return null;
+    return televisionProfile(raw);
+  }
+  return null;
 }
 
 module.exports = {
@@ -139,5 +194,7 @@ module.exports = {
   televisionProfile,
   canonicalServiceType,
   normalizeServiceType,
+  extractObservedInternetProfile,
+  extractObservedMobileProfile,
   extractServiceType,
 };
