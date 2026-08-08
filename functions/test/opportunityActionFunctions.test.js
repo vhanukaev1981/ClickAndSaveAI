@@ -24,6 +24,7 @@ function opportunity(overrides = {}) {
       offerId: "offer-1",
       providerName: "Provider A",
       monthlyPrice: 89,
+      firstYearCost: 1068,
     },
     ...overrides,
   };
@@ -44,6 +45,10 @@ function providerOffer(overrides = {}) {
     validUntil: "2026-09-08T08:00:00Z",
     officialSourceVerified: true,
     availabilityStatus: "AVAILABLE",
+    availabilityMode: "NATIONWIDE",
+    consumerPriceIncludesVat: true,
+    requiredRecurringFees: 0,
+    requiredRecurringFeesDescription: "",
     userFitScore: 0.9,
     commercialAgreementActive: true,
     commissionType: "CPA",
@@ -82,6 +87,7 @@ test("verified action snapshot carries user saving and commercial attribution se
   assert.ok(snapshot);
   assert.equal(snapshot.requestedProvider, "Provider A");
   assert.equal(snapshot.potentialMonthlySaving, 40);
+  assert.equal(snapshot.firstYearCost, 1068);
   assert.equal(snapshot.commissionType, "CPA");
   assert.equal(snapshot.commissionValue, 180);
   assert.equal(snapshot.commercialAgreementActive, true);
@@ -106,21 +112,48 @@ test("specific provider offer can be accepted when the observed service type mat
   assert.equal(snapshot.offerId, "offer-1");
 });
 
+test("user-verified offer cannot be accepted unless the opportunity carries eligibility proof", () => {
+  assert.equal(
+    verifiedActionSnapshot(
+      opportunity(),
+      providerOffer({ availabilityMode: "USER_VERIFIED" }),
+      "offer-1"
+    ),
+    null
+  );
+
+  const verified = verifiedActionSnapshot(
+    opportunity({ availabilityVerifiedOfferIds: ["offer-1"] }),
+    providerOffer({ availabilityMode: "USER_VERIFIED" }),
+    "offer-1"
+  );
+  assert.ok(verified);
+});
+
 test("action is rejected when the opportunity no longer points to the offer the user saw", () => {
   const snapshot = verifiedActionSnapshot(opportunity(), providerOffer(), "offer-old");
   assert.equal(snapshot, null);
 });
 
-test("opportunity cannot be accepted when the official offer changed price", () => {
-  const snapshot = verifiedActionSnapshot(
-    opportunity(),
-    providerOffer({ monthlyPrice: 99 }),
-    "offer-1"
+test("opportunity cannot be accepted when the official offer changed price or first-year economics", () => {
+  assert.equal(
+    verifiedActionSnapshot(opportunity(), providerOffer({ monthlyPrice: 99 }), "offer-1"),
+    null
   );
-  assert.equal(snapshot, null);
+  assert.equal(
+    verifiedActionSnapshot(
+      opportunity(),
+      providerOffer({
+        requiredRecurringFees: 20,
+        requiredRecurringFeesDescription: "required router rental",
+      }),
+      "offer-1"
+    ),
+    null
+  );
 });
 
-test("opportunity cannot be accepted against expired or unverified offer", () => {
+test("opportunity cannot be accepted against expired, unverified or non-VAT offer", () => {
   assert.equal(
     verifiedActionSnapshot(
       opportunity(),
@@ -133,6 +166,14 @@ test("opportunity cannot be accepted against expired or unverified offer", () =>
     verifiedActionSnapshot(
       opportunity(),
       providerOffer({ validUntil: "2026-01-01T00:00:00Z" }),
+      "offer-1"
+    ),
+    null
+  );
+  assert.equal(
+    verifiedActionSnapshot(
+      opportunity(),
+      providerOffer({ consumerPriceIncludesVat: false }),
       "offer-1"
     ),
     null
