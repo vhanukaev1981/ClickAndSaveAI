@@ -193,6 +193,12 @@ async function loadDocsByIds(collectionRef, ids) {
   }));
 }
 
+function nullableFiniteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function homeOpportunity(item) {
   return {
     id: String(item.id || ""),
@@ -204,12 +210,8 @@ function homeOpportunity(item) {
     previousMonthlyCost: Number(item.previousMonthlyCost || 0),
     monthlyIncrease: Number(item.monthlyIncrease || 0),
     percentIncrease: Number(item.percentIncrease || 0),
-    potentialMonthlySaving: Number.isFinite(Number(item.potentialMonthlySaving))
-      ? Number(item.potentialMonthlySaving)
-      : null,
-    potentialAnnualSaving: Number.isFinite(Number(item.potentialAnnualSaving))
-      ? Number(item.potentialAnnualSaving)
-      : null,
+    potentialMonthlySaving: nullableFiniteNumber(item.potentialMonthlySaving),
+    potentialAnnualSaving: nullableFiniteNumber(item.potentialAnnualSaving),
     recommendationAction: String(item.recommendationAction || ""),
     matchedOffer: item.matchedOffer ? {
       offerId: String(item.matchedOffer.offerId || ""),
@@ -348,4 +350,5 @@ exports._loadObservedInvoices = loadObservedInvoices;
 exports._loadProviderOffers = loadProviderOffers;
 exports._homeOpportunity = homeOpportunity;
 exports._homeInsight = homeInsight;
+exports._nullableFiniteNumber = nullableFiniteNumber;
 exports._runSweep = runSweep;
