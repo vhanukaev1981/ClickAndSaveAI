@@ -7,7 +7,12 @@ const { setGlobalOptions } = require("firebase-functions/v2");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
-const { parseGmailMessage } = require("./gmailParser");
+const {
+  collectPdfAttachments,
+  firstHeader,
+  normalizePdfInvoiceCandidate,
+  parseGmailMessage,
+} = require("./gmailParser");
 const { decryptToken, encryptToken } = require("./tokenCrypto");
 const { validateDealQuery, validateLeadInput } = require("./validation");
 
@@ -27,6 +32,7 @@ const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const CONSENT_VERSION = "gmail-readonly-v1";
+const MAX_PDF_BYTES = 10 * 1024 * 1024;
 
 function requireAuth(request) {
   if (!request.auth?.uid) {
@@ -119,6 +125,78 @@ async function refreshGoogleAccessToken(encryptedRefreshToken) {
   return { accessToken: payload.access_token };
 }
 
+function base64UrlToBase64(value) {
+  const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  const padding = normalized.length % 4;
+  return padding === 0 ? normalized : normalized + "=".repeat(4 - padding);
+}
+
+async function loadPdfAttachmentBase64(accessToken, messageId, attachment) {
+  if (attachment.inlineData) {
+    const data = base64UrlToBase64(attachment.inlineData);
+    if (Buffer.byteLength(data, "base64") > MAX_PDF_BYTES) return null;
+    return data;
+  }
+
+  if (!attachment.attachmentId) return null;
+  if (attachment.size > MAX_PDF_BYTES) return null;
+
+  const url = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachment.attachmentId)}`;
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    logger.warn("Gmail attachment skipped", { messageId, status: response.status });
+    return null;
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  const data = base64UrlToBase64(payload.data);
+  if (!data || Buffer.byteLength(data, "base64") > MAX_PDF_BYTES) return null;
+  return data;
+}
+
+async function analyzePdfInvoice(message, pdfBase64, filename) {
+  const headers = message?.payload?.headers || [];
+  const subject = firstHeader(headers, "Subject").slice(0, 300);
+  const from = firstHeader(headers, "From").slice(0, 300);
+  const date = firstHeader(headers, "Date").slice(0, 120);
+  const safeFilename = String(filename || "").slice(0, 180);
+
+  const prompt = [
+    "Analyze the attached PDF strictly as a document extractor, not as a recommendation engine.",
+    "Return JSON only with keys: isInvoice, providerName, category, monthlyCost, receivedDate.",
+    "Set isInvoice=true only when the PDF itself clearly represents a bill, invoice, monthly statement or receipt for a recurring household service.",
+    "Supported categories are only: חשמל, אינטרנט, סלולר, טלוויזיה, ביטוח, תקשורת.",
+    "monthlyCost must be the actual total/current amount due for this billing document, not a promotional price, subtotal, previous balance or savings figure.",
+    "Do not infer or invent missing provider, category or amount. If any required field is uncertain, set isInvoice=false.",
+    "Do not return account numbers, addresses, IDs, phone numbers, payment details or any other personal data.",
+    `Email subject context: ${subject}`,
+    `Email sender context: ${from}`,
+    `Email date context: ${date}`,
+    `Attachment filename context: ${safeFilename}`,
+  ].join("\n");
+
+  const { GoogleGenAI } = await import("@google/genai");
+  const ai = new GoogleGenAI({ apiKey: geminiApiKey.value() });
+  const response = await ai.models.generateContent({
+    model: "gemini-3.6-flash",
+    contents: [{
+      role: "user",
+      parts: [
+        { inlineData: { mimeType: "application/pdf", data: pdfBase64 } },
+        { text: prompt },
+      ],
+    }],
+    config: {
+      responseMimeType: "application/json",
+    },
+  });
+
+  const candidate = JSON.parse(response.text || "{}");
+  return normalizePdfInvoiceCandidate(candidate, message);
+}
+
 exports.getGmailConnectionStatus = onCall(
   { enforceAppCheck: true },
   async (request) => {
@@ -178,9 +256,6 @@ exports.connectGmail = onCall(
       throw new HttpsError("failed-precondition", "Google did not return an access token.");
     }
 
-    // Tie the mailbox to the authenticated Firebase identity. AuthorizationClient can present
-    // an account chooser, so without this check a user could accidentally connect a different
-    // Gmail account while the UI still labels it with the Firebase account email.
     const gmailEmail = await fetchGmailProfileEmail(accessToken);
     const firebaseEmail = String(request.auth.token.email || "").trim().toLowerCase();
     if (!firebaseEmail || gmailEmail !== firebaseEmail) {
@@ -224,7 +299,7 @@ exports.connectGmail = onCall(
 exports.scanGmailInvoices = onCall(
   {
     enforceAppCheck: true,
-    secrets: [googleOAuthClientSecret, oauthTokenEncryptionKey],
+    secrets: [googleOAuthClientSecret, oauthTokenEncryptionKey, geminiApiKey],
     timeoutSeconds: 120,
     memory: "512MiB",
   },
@@ -243,7 +318,7 @@ exports.scanGmailInvoices = onCall(
 
     const { accessToken } = await refreshGoogleAccessToken(connectionData.encryptedRefreshToken);
     const query = encodeURIComponent(
-      'newer_than:24m {חשבונית קבלה "הודעת תשלום" "פירוט חיוב" "חשבון חודשי" invoice receipt bill statement סלקום cellcom פרטנר partner פלאפון pelephone בזק bezeq "חברת החשמל" HOT yes}'
+      'newer_than:24m {חשבונית קבלה "הודעת תשלום" "פירוט חיוב" "חשבון חודשי" invoice receipt bill statement סלקום cellcom פרטנר partner פלאפון pelephone בזק bezeq "חברת החשמל" HOT yes filename:pdf}'
     );
     const listResponse = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=100`,
@@ -260,6 +335,8 @@ exports.scanGmailInvoices = onCall(
       : [];
     const invoices = [];
     let importedCount = 0;
+    let pdfCandidates = 0;
+    let pdfAnalyzed = 0;
 
     for (const messageId of messageIds) {
       const auditRef = db
@@ -283,7 +360,29 @@ exports.scanGmailInvoices = onCall(
         continue;
       }
 
-      const parsed = parseGmailMessage(await detailResponse.json());
+      const message = await detailResponse.json();
+      let parsed = parseGmailMessage(message);
+
+      if (!parsed) {
+        const pdfAttachments = collectPdfAttachments(message.payload, 3);
+        pdfCandidates += pdfAttachments.length;
+        for (const attachment of pdfAttachments) {
+          try {
+            const pdfBase64 = await loadPdfAttachmentBase64(accessToken, messageId, attachment);
+            if (!pdfBase64) continue;
+            pdfAnalyzed += 1;
+            parsed = await analyzePdfInvoice(message, pdfBase64, attachment.filename);
+            if (parsed) break;
+          } catch (error) {
+            logger.warn("PDF invoice analysis skipped", {
+              uid,
+              messageId,
+              errorName: error instanceof Error ? error.name : typeof error,
+            });
+          }
+        }
+      }
+
       if (!parsed) continue;
 
       let resolvedInvoice = parsed;
@@ -299,7 +398,7 @@ exports.scanGmailInvoices = onCall(
           sourceMessageId: parsed.sourceMessageId,
           invoice: parsed,
           importedAt: FieldValue.serverTimestamp(),
-          parserVersion: 2,
+          parserVersion: 3,
         });
         wasCreated = true;
       });
@@ -317,6 +416,8 @@ exports.scanGmailInvoices = onCall(
       candidates: messageIds.length,
       returned: invoices.length,
       imported: importedCount,
+      pdfCandidates,
+      pdfAnalyzed,
     });
     return {
       invoices,
