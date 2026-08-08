@@ -8,6 +8,7 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
 import androidx.credentials.exceptions.GetCredentialException
+import com.example.data.local.AppDatabase
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
@@ -135,9 +136,19 @@ class AuthRepository(private val applicationContext: Context) {
         }
     }
 
-    fun signOut() {
+    suspend fun signOut() {
         runCatching { getFirebaseAuthSafe()?.signOut() }
             .onFailure { Log.e("AuthRepository", "Sign-out failed", it) }
+
+        // Invoice data can originate from the signed-in Gmail account. Purge it before another
+        // account can be used on the same device. Android backup is disabled, so this also keeps
+        // account-derived invoice metadata from lingering locally after sign-out.
+        runCatching {
+            AppDatabase.getDatabase(applicationContext).invoiceDao().deleteAllInvoices()
+        }.onFailure {
+            Log.e("AuthRepository", "Local invoice purge on sign-out failed", it)
+        }
+
         _userSession.value = UserSession()
         _authState.value = AuthState.Idle
     }
