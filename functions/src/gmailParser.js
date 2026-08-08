@@ -1,8 +1,11 @@
 "use strict";
 
+// Prefer amounts next to billing labels before falling back to any currency-looking amount.
+// This reduces false positives from promotional prices that may appear elsewhere in the email.
 const AMOUNT_PATTERNS = [
-  /(?:₪|ש[\"״]?ח|ILS)\s*([\d,]+(?:\.\d{1,2})?)/i,
-  /([\d,]+(?:\.\d{1,2})?)\s*(?:₪|ש[\"״]?ח|ILS)/i,
+  /(?:סה["״]?כ\s*(?:לתשלום|חיוב)?|סכום\s*(?:לתשלום|החיוב)?|לתשלום|total\s*(?:due|amount)?|amount\s*due|balance\s*due)\s*[:\-]?\s*(?:₪|ש["״]?ח|ILS)?\s*([\d,]+(?:\.\d{1,2})?)/i,
+  /(?:₪|ש["״]?ח|ILS)\s*([\d,]+(?:\.\d{1,2})?)/i,
+  /([\d,]+(?:\.\d{1,2})?)\s*(?:₪|ש["״]?ח|ILS)/i,
 ];
 
 function firstHeader(headers, name) {
@@ -27,7 +30,7 @@ function htmlToText(value) {
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&nbsp;|&#160;|\u00a0/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'")
@@ -63,8 +66,9 @@ function collectMessageText(payload, maxChars = 24_000) {
 }
 
 function parseAmount(text) {
+  const normalized = String(text || "").replace(/\u00a0/g, " ");
   for (const pattern of AMOUNT_PATTERNS) {
-    const match = pattern.exec(text);
+    const match = pattern.exec(normalized);
     if (!match) continue;
     const value = Number(match[1].replace(/,/g, ""));
     if (Number.isFinite(value) && value > 0 && value < 1_000_000) return value;
@@ -73,7 +77,7 @@ function parseAmount(text) {
 }
 
 function identifyCategory(text) {
-  const normalized = text.toLowerCase();
+  const normalized = String(text || "").toLowerCase();
   if (/(חשמל|electric|iec|power)/i.test(normalized)) return "חשמל";
   if (/(ביטוח|insurance|פוליסה)/i.test(normalized)) return "ביטוח";
   // Prefer explicit service signals over provider names so multi-service providers
@@ -84,19 +88,29 @@ function identifyCategory(text) {
   return null;
 }
 
-function identifyProvider(from, subject, searchableText) {
-  const text = `${from} ${subject} ${searchableText}`.toLowerCase();
+function matchProvider(text, includeGenericPartner = false) {
   const providers = [
     ["חברת החשמל", /(iec|חברת החשמל)/i],
     ["בזק", /(bezeq|בזק)/i],
     ["סלקום", /(cellcom|סלקום)/i],
-    ["פרטנר", /(partner|פרטנר)/i],
+    ["פרטנר", includeGenericPartner ? /(^|\W)(partner|פרטנר)(\W|$)/i : /פרטנר/i],
     ["פלאפון", /(pelephone|פלאפון)/i],
     ["HOT", /(^|\W)hot(\W|$)/i],
     ["yes", /(^|\W)yes(\W|$)/i],
     ["Netflix", /(^|\W)netflix(\W|$)/i],
   ];
-  return providers.find(([, pattern]) => pattern.test(text))?.[0] || "ספק שזוהה מהודעת Gmail";
+  return providers.find(([, pattern]) => pattern.test(text))?.[0] || null;
+}
+
+function identifyProvider(from, subject, searchableText) {
+  // Sender/subject are strong brand signals. Body text is a weaker fallback because words such
+  // as the English "partner" can occur generically in unrelated receipts.
+  const strongText = `${from} ${subject}`.toLowerCase();
+  const strongMatch = matchProvider(strongText, true);
+  if (strongMatch) return strongMatch;
+
+  const bodyText = String(searchableText || "").toLowerCase();
+  return matchProvider(bodyText, false) || "ספק שזוהה מהודעת Gmail";
 }
 
 function fallbackCategoryForProvider(providerName) {
