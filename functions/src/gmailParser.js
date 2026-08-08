@@ -27,6 +27,8 @@ const SUPPORTED_CATEGORIES = new Map([
   ["תקשורת", "תקשורת"],
   ["telecom", "תקשורת"],
   ["communications", "תקשורת"],
+  ["אחר", "אחר"],
+  ["other", "אחר"],
 ]);
 
 function firstHeader(headers, name) {
@@ -86,7 +88,7 @@ function collectMessageText(payload, maxChars = 24_000) {
   return chunks.join(" ");
 }
 
-function collectPdfAttachments(payload, maxAttachments = 3) {
+function collectPdfAttachments(payload, maxAttachments = Number.POSITIVE_INFINITY) {
   const attachments = [];
 
   function visit(part, depth = 0) {
@@ -182,7 +184,7 @@ function normalizeDocumentCategory(value) {
   return identifyCategory(normalized);
 }
 
-function normalizePdfInvoiceCandidate(candidate, message) {
+function normalizePdfInvoiceCandidate(candidate, message, sourceDocumentId = "") {
   if (!candidate || candidate.isInvoice !== true || !message?.id) return null;
 
   const payload = message.payload || {};
@@ -193,16 +195,16 @@ function normalizePdfInvoiceCandidate(candidate, message) {
   const providerText = String(candidate.providerName || "").trim().slice(0, 160);
   const detectedProvider = identifyProvider(from, subject, providerText);
   const providerName = providerText ||
-    (detectedProvider !== "ספק שזוהה מהודעת Gmail" ? detectedProvider : "");
+    (detectedProvider !== "ספק שזוהה מהודעת Gmail" ? detectedProvider : "ספק לא מזוהה");
   const category = normalizeDocumentCategory(candidate.category) ||
-    fallbackCategoryForProvider(providerName);
+    fallbackCategoryForProvider(providerName) ||
+    "אחר";
   const monthlyCost = Number(candidate.monthlyCost);
 
-  if (!providerName || !category) return null;
   if (!Number.isFinite(monthlyCost) || monthlyCost <= 0 || monthlyCost >= 1_000_000) return null;
 
   return {
-    sourceMessageId: String(message.id),
+    sourceMessageId: String(sourceDocumentId || message.id),
     providerName,
     category,
     monthlyCost,
