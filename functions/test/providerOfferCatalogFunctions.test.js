@@ -22,10 +22,12 @@ function validOffer(overrides = {}) {
     country: "IL",
     serviceType: "1Gbps fiber",
     monthlyPrice: 89,
+    priceGuaranteedMonths: 12,
+    oneTimeFees: 0,
     availabilityStatus: "AVAILABLE",
     officialSourceUrl: "https://provider.example.co.il/fiber/1g",
     officialSourceName: "Provider A official website",
-    sourceEvidenceNote: "Public 1Gbps monthly price",
+    sourceEvidenceNote: "Public 1Gbps monthly price and first-year fees",
     verifiedAt: "2026-08-08T16:30:00Z",
     validUntil: "2026-09-08T16:30:00Z",
     commercialAgreementActive: true,
@@ -35,14 +37,35 @@ function validOffer(overrides = {}) {
   };
 }
 
-test("catalog accepts a current Israeli fixed-monthly offer and stores a canonical service profile", () => {
+test("catalog accepts a current Israeli fixed-monthly offer with complete first-year pricing evidence", () => {
   const result = validateProviderOfferInput(validOffer(), nowMs);
   assert.equal(result.offerId, "internet-provider-a-1g-202608");
   assert.equal(result.monthlyPrice, 89);
   assert.equal(result.category, "אינטרנט");
   assert.equal(result.pricingModel, "FIXED_MONTHLY");
   assert.equal(result.serviceType, "INTERNET_1000_MBPS");
+  assert.equal(result.priceGuaranteedMonths, 12);
+  assert.equal(result.oneTimeFees, 0);
   assert.equal(result.commissionType, "CPA");
+});
+
+test("headline promo prices shorter than twelve months are rejected", () => {
+  assert.throws(
+    () => validateProviderOfferInput(validOffer({ priceGuaranteedMonths: 3 }), nowMs),
+    /priceGuaranteedMonths/i
+  );
+});
+
+test("first-year one-time fees must be stated explicitly, including zero", () => {
+  const missing = validOffer();
+  delete missing.oneTimeFees;
+  assert.throws(
+    () => validateProviderOfferInput(missing, nowMs),
+    /oneTimeFees must be stated explicitly/i
+  );
+
+  const withFee = validateProviderOfferInput(validOffer({ oneTimeFees: 240 }), nowMs);
+  assert.equal(withFee.oneTimeFees, 240);
 });
 
 test("insurance and electricity cannot masquerade as fixed-monthly comparable offers", () => {
