@@ -26,6 +26,7 @@ function input(overrides = {}) {
       requestedProvider: "Provider A",
       category: "אינטרנט",
       offerId: "offer-1",
+      consentVersion: "v1",
     },
     ...overrides,
   };
@@ -38,18 +39,46 @@ test("dispatch identity is deterministic for the same lead/provider/offer/contra
   assert.equal(first.length, 64);
 });
 
-test("dispatch envelope starts READY with zero attempts", () => {
+test("dispatch envelope starts READY with zero attempts and normalized minimal payload", () => {
   const envelope = buildDispatchEnvelope(input());
   assert.equal(envelope.state, QUEUE_STATES.READY);
   assert.equal(envelope.attempt, 0);
+  assert.deepEqual(envelope.payload, {
+    leadId: "lead-1",
+    contactName: "Test User",
+    phone: "0501234567",
+    contactEmail: "test@example.com",
+    requestedProvider: "Provider A",
+    category: "אינטרנט",
+    offerId: "offer-1",
+    consentVersion: "v1",
+    source: "CLICKANDSAVE_VERIFIED_OPPORTUNITY",
+  });
 });
 
-test("provider payload rejects internal financial and identity context", () => {
-  for (const forbidden of ["uid", "gmailContent", "currentMonthlyCost", "potentialMonthlySaving", "commissionAmount"]) {
+test("provider payload rejects every field outside the minimum-data allowlist", () => {
+  for (const forbidden of ["uid", "gmailContent", "currentMonthlyCost", "potentialMonthlySaving", "commissionAmount", "metadata"]) {
+    const value = forbidden === "metadata" ? { gmailContent: "private" } : "private";
     assert.throws(() => buildDispatchEnvelope(input({
-      payload: { ...input().payload, [forbidden]: "private" },
-    })), /forbidden field/);
+      payload: { ...input().payload, [forbidden]: value },
+    })), /unsupported field/);
   }
+});
+
+test("provider payload identifiers must match the dispatch envelope", () => {
+  assert.throws(() => buildDispatchEnvelope(input({
+    payload: { ...input().payload, leadId: "other-lead" },
+  })), /leadId does not match/);
+
+  assert.throws(() => buildDispatchEnvelope(input({
+    payload: { ...input().payload, offerId: "other-offer" },
+  })), /offerId does not match/);
+});
+
+test("provider payload cannot override the verified source marker", () => {
+  assert.throws(() => buildDispatchEnvelope(input({
+    payload: { ...input().payload, source: "MANUAL" },
+  })), /source is unsupported/);
 });
 
 test("attempt transitions READY to IN_FLIGHT and increments exactly once", () => {
