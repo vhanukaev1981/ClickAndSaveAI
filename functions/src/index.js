@@ -74,6 +74,34 @@ async function postForm(url, values) {
   return payload;
 }
 
+async function fetchGmailProfileEmail(accessToken) {
+  const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    logger.error("Gmail profile lookup failed", { status: response.status });
+    throw new HttpsError("failed-precondition", "The authorized Gmail account could not be verified.");
+  }
+  const payload = await response.json().catch(() => ({}));
+  const email = String(payload.emailAddress || "").trim().toLowerCase();
+  if (!email) {
+    throw new HttpsError("failed-precondition", "Google did not return the Gmail account identity.");
+  }
+  return email;
+}
+
+async function bestEffortRevokeGoogleToken(token) {
+  if (!token) return;
+  try {
+    await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+  } catch {
+    // Revocation is defensive cleanup only; never mask the original authorization error.
+  }
+}
+
 async function refreshGoogleAccessToken(encryptedRefreshToken) {
   const refreshToken = decryptToken(
     encryptedRefreshToken,
@@ -141,7 +169,27 @@ exports.connectGmail = onCall(
       .split(/\s+/)
       .filter(Boolean);
     if (!grantedScopes.includes(GMAIL_READONLY_SCOPE)) {
+      await bestEffortRevokeGoogleToken(tokenPayload.refresh_token || tokenPayload.access_token);
       throw new HttpsError("permission-denied", "The gmail.readonly scope was not granted.");
+    }
+
+    const accessToken = String(tokenPayload.access_token || "");
+    if (!accessToken) {
+      throw new HttpsError("failed-precondition", "Google did not return an access token.");
+    }
+
+    // Tie the mailbox to the authenticated Firebase identity. AuthorizationClient can present
+    // an account chooser, so without this check a user could accidentally connect a different
+    // Gmail account while the UI still labels it with the Firebase account email.
+    const gmailEmail = await fetchGmailProfileEmail(accessToken);
+    const firebaseEmail = String(request.auth.token.email || "").trim().toLowerCase();
+    if (!firebaseEmail || gmailEmail !== firebaseEmail) {
+      await bestEffortRevokeGoogleToken(tokenPayload.refresh_token || accessToken);
+      logger.warn("Gmail/Firebase account mismatch rejected", { uid });
+      throw new HttpsError(
+        "permission-denied",
+        "The Gmail account must match the Google account signed in to the app."
+      );
     }
 
     const connectionRef = db.collection("gmailConnections").doc(uid);
@@ -158,10 +206,9 @@ exports.connectGmail = onCall(
       );
     }
 
-    const email = String(request.auth.token.email || "").toLowerCase();
     await connectionRef.set({
       uid,
-      email,
+      email: gmailEmail,
       encryptedRefreshToken,
       scopes: grantedScopes,
       consentVersion: CONSENT_VERSION,
@@ -170,7 +217,7 @@ exports.connectGmail = onCall(
     }, { merge: true });
 
     logger.info("Gmail connection stored", { uid, scopeCount: grantedScopes.length });
-    return { connected: true, email, consentVersion: CONSENT_VERSION };
+    return { connected: true, email: gmailEmail, consentVersion: CONSENT_VERSION };
   }
 );
 
@@ -295,14 +342,11 @@ exports.disconnectGmail = onCall(
           connection.data().encryptedRefreshToken,
           oauthTokenEncryptionKey.value()
         );
-        await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(refreshToken)}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        });
+        await bestEffortRevokeGoogleToken(refreshToken);
       } catch (error) {
         logger.warn("Google token revocation failed; deleting local connection", {
           uid,
-          message: error instanceof Error ? error.message : String(error),
+          errorMessage: error instanceof Error ? error.message : String(error),
         });
       }
     }
