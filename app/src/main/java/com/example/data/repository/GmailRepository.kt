@@ -86,7 +86,7 @@ class GmailRepository(
             }
         }
 
-        _syncState.value = GmailSyncState.Syncing("סורק בשרת הודעות עם נושאי חשבונית בלבד...", 45)
+        _syncState.value = GmailSyncState.Syncing("סורק בשרת חשבוניות וחיובים רלוונטיים...", 45)
         return runCatching {
             val result = backendRepository.scanGmailInvoices()
             result.invoices.forEach { invoice ->
@@ -120,8 +120,10 @@ class GmailRepository(
                         "יובאו ${result.importedCount} חשבוניות חדשות ללא המלצת חיסכון עד לאימות."
                     recoveredCount > 0 ->
                         "לא נמצאו חשבוניות חדשות; שוחזרו $recoveredCount רשומות שכבר נקלטו בשרת."
+                    result.scannedMessages > 0 ->
+                        "נבדקו ${result.scannedMessages} הודעות מועמדות, אך לא נמצא חיוב שניתן לזהות באופן דטרמיניסטי."
                     else ->
-                        "הסריקה הסתיימה. לא נמצאו חשבוניות שניתן לזהות באופן דטרמיניסטי."
+                        "לא נמצאו ב-Gmail הודעות מועמדות שתואמות לחיפוש החשבוניות."
                 }
             )
             result
