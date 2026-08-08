@@ -1,5 +1,7 @@
 "use strict";
 
+const { normalizeServiceType } = require("./serviceProfile");
+
 function normalizeText(value) {
   return String(value || "").trim();
 }
@@ -38,7 +40,7 @@ function normalizeOffer(offer, nowMs = Date.now()) {
   if (offer.officialSourceVerified !== true) return null;
   if (offer.availabilityStatus !== "AVAILABLE") return null;
 
-  const serviceType = normalizeText(offer.serviceType);
+  const serviceType = normalizeServiceType(category, offer.serviceType);
   if (!serviceType) return null;
 
   const userFitScore = Number(offer.userFitScore);
@@ -63,12 +65,13 @@ function normalizeOffer(offer, nowMs = Date.now()) {
 }
 
 function serviceCompatible(opportunity, offer) {
-  const requiredServiceType = normalizeText(opportunity?.serviceType);
-  const offeredServiceType = normalizeText(offer?.serviceType);
+  const category = normalizeText(opportunity?.category || offer?.category);
+  const offeredServiceType = normalizeServiceType(category, offer?.serviceType);
   if (!offeredServiceType) return false;
-  if (offeredServiceType.toUpperCase() === "ANY") return true;
+  if (offeredServiceType === "ANY") return true;
+  const requiredServiceType = normalizeServiceType(category, opportunity?.serviceType);
   if (!requiredServiceType) return false;
-  return requiredServiceType.toLowerCase() === offeredServiceType.toLowerCase();
+  return requiredServiceType === offeredServiceType;
 }
 
 function matchVerifiedOffers(opportunity, offers, options = {}) {
