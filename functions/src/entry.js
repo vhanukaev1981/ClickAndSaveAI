@@ -6,6 +6,7 @@ const gmailWatchFunctions = require("./gmailWatchFunctions");
 const gmailWatchRenewal = require("./gmailWatchRenewal");
 const financialAgentFunctions = require("./financialAgentFunctions");
 const opportunityNotificationFunctions = require("./opportunityNotificationFunctions");
+const opportunityActionFunctions = require("./opportunityActionFunctions");
 
 module.exports = {
   ...coreFunctions,
@@ -14,4 +15,5 @@ module.exports = {
   ...gmailWatchRenewal,
   ...financialAgentFunctions,
   ...opportunityNotificationFunctions,
+  ...opportunityActionFunctions,
 };
