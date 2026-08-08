@@ -4,7 +4,7 @@ const crypto = require("node:crypto");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
-const { normalizeOffer } = require("./commerceEngine");
+const { normalizeOffer, serviceCompatible } = require("./commerceEngine");
 const {
   requiredString,
   validateEmail,
@@ -65,6 +65,7 @@ function verifiedActionSnapshot(opportunity, currentOffer, expectedOfferId = "")
   if (!normalizedOffer || normalizedOffer.offerId !== offerId) return null;
   if (normalizedOffer.category !== category) return null;
   if (normalizedOffer.providerName !== requestedProvider) return null;
+  if (!serviceCompatible(opportunity, normalizedOffer)) return null;
   if (Math.abs(normalizedOffer.monthlyPrice - matchedMonthlyPrice) > 0.001) return null;
 
   return {
@@ -121,10 +122,9 @@ exports.acceptSavingsOpportunity = onCall(
       }
 
       const offerRef = db.collection("providerOffers").doc(currentOfferId);
-      const [offerSnapshot, existingLead, commerceSnapshot] = await Promise.all([
+      const [offerSnapshot, existingLead] = await Promise.all([
         transaction.get(offerRef),
         transaction.get(leadRef),
-        transaction.get(commerceRef),
       ]);
       if (!offerSnapshot.exists) {
         throw new HttpsError("failed-precondition", "The provider offer is no longer available.");
@@ -192,7 +192,7 @@ exports.acceptSavingsOpportunity = onCall(
         attributionStatus: "LEAD_CREATED",
         leadCreatedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: commerceSnapshot.exists });
+      }, { merge: true });
     });
 
     if (!action) {
