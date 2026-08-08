@@ -11,6 +11,7 @@ const EVIDENCE_KINDS = Object.freeze({
 });
 
 const SOURCES = new Set(["WEBHOOK", "POSTBACK", "REPORT_IMPORT", "MANUAL_VERIFIED"]);
+const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
 
 function requiredText(value, field, maxLength = 200) {
   const text = typeof value === "string" ? value.trim() : "";
@@ -19,10 +20,13 @@ function requiredText(value, field, maxLength = 200) {
   return text;
 }
 
-function normalizeIsoTime(value, field) {
+function normalizeIsoTime(value, field, nowMs, maxFutureSkewMs) {
   const text = requiredText(value, field, 64);
   const parsed = Date.parse(text);
   if (!Number.isFinite(parsed)) throw new TypeError(`${field} must be a valid timestamp`);
+  if (parsed > nowMs + maxFutureSkewMs) {
+    throw new TypeError(`${field} cannot be implausibly far in the future`);
+  }
   return new Date(parsed).toISOString();
 }
 
@@ -36,10 +40,15 @@ function deriveEvidenceEventId(input) {
   return crypto.createHash("sha256").update(material).digest("hex");
 }
 
-function normalizeProviderEvidence(input) {
+function normalizeProviderEvidence(input, options = {}) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new TypeError("provider evidence must be an object");
   }
+
+  const nowMs = Number.isFinite(options.nowMs) ? options.nowMs : Date.now();
+  const maxFutureSkewMs = Number.isFinite(options.maxFutureSkewMs)
+    ? Math.max(0, options.maxFutureSkewMs)
+    : MAX_FUTURE_SKEW_MS;
 
   const kind = requiredText(input.kind, "kind", 40).toUpperCase();
   if (!Object.values(EVIDENCE_KINDS).includes(kind)) {
@@ -56,7 +65,7 @@ function normalizeProviderEvidence(input) {
     externalEventId: requiredText(input.externalEventId, "externalEventId", 200),
     kind,
     source,
-    observedAt: normalizeIsoTime(input.observedAt, "observedAt"),
+    observedAt: normalizeIsoTime(input.observedAt, "observedAt", nowMs, maxFutureSkewMs),
   };
 
   if (input.amount != null) {
@@ -72,10 +81,10 @@ function normalizeProviderEvidence(input) {
   return normalized;
 }
 
-function dedupeProviderEvidence(events) {
+function dedupeProviderEvidence(events, options = {}) {
   if (!Array.isArray(events)) throw new TypeError("provider evidence events must be an array");
   const unique = new Map();
-  for (const event of events.map(normalizeProviderEvidence)) {
+  for (const event of events.map((item) => normalizeProviderEvidence(item, options))) {
     if (!unique.has(event.evidenceEventId)) unique.set(event.evidenceEventId, event);
   }
   return [...unique.values()];
@@ -83,6 +92,7 @@ function dedupeProviderEvidence(events) {
 
 module.exports = {
   EVIDENCE_KINDS,
+  MAX_FUTURE_SKEW_MS,
   deriveEvidenceEventId,
   normalizeProviderEvidence,
   dedupeProviderEvidence,
