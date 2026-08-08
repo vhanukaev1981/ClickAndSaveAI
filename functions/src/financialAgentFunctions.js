@@ -8,9 +8,11 @@ const {
   buildFinancialContext,
   detectFinancialSignals,
 } = require("./financialIntelligence");
+const { enrichOpportunityWithBestOffer } = require("./commerceEngine");
 
 const db = getFirestore();
 const MAX_SOURCE_DOCS_PER_AGENT_RUN = 500;
+const MAX_PROVIDER_OFFERS_PER_RUN = 500;
 const MAX_WRITES_PER_BATCH = 400;
 
 function requireAuth(request) {
@@ -48,6 +50,11 @@ async function loadObservedInvoices(uid) {
   return [...bySourceId.values()];
 }
 
+async function loadProviderOffers() {
+  const snapshot = await db.collection("providerOffers").limit(MAX_PROVIDER_OFFERS_PER_RUN).get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+}
+
 async function commitWrites(writes) {
   for (let index = 0; index < writes.length; index += MAX_WRITES_PER_BATCH) {
     const batch = db.batch();
@@ -58,9 +65,27 @@ async function commitWrites(writes) {
   }
 }
 
-async function persistFinancialState(uid, invoices) {
+function opportunityWithoutCommissionTerms(opportunity) {
+  if (!opportunity?.matchedOffer) return opportunity;
+  const { commercial, ...offerForUserState } = opportunity.matchedOffer;
+  return {
+    ...opportunity,
+    matchedOffer: offerForUserState,
+    commercial: {
+      ...(opportunity.commercial || {}),
+      partnerMatchStatus: commercial?.agreementActive ? "ACTIVE_PARTNER_MATCH" : "NO_ACTIVE_PARTNER_AGREEMENT",
+      commissionStatus: commercial?.agreementActive ? "TRACKABLE" : "NOT_TRACKABLE",
+    },
+  };
+}
+
+async function persistFinancialState(uid, invoices, providerOffers = []) {
   const context = buildFinancialContext(invoices);
-  const { insights, opportunities } = detectFinancialSignals(invoices);
+  const { insights, opportunities: detectedOpportunities } = detectFinancialSignals(invoices);
+  const enrichedOpportunities = detectedOpportunities.map((opportunity) =>
+    enrichOpportunityWithBestOffer(opportunity, providerOffers, { country: "IL" })
+  );
+  const opportunities = enrichedOpportunities.map(opportunityWithoutCommissionTerms);
   const userRef = db.collection("users").doc(uid);
   const writes = [];
 
@@ -71,7 +96,7 @@ async function persistFinancialState(uid, invoices) {
       activeInsightIds: insights.map((item) => item.id),
       activeOpportunityIds: opportunities.map((item) => item.id),
       generatedAt: FieldValue.serverTimestamp(),
-      engineVersion: 1,
+      engineVersion: 2,
     },
   });
 
@@ -82,21 +107,45 @@ async function persistFinancialState(uid, invoices) {
         ...insight,
         engineGenerated: true,
         updatedAt: FieldValue.serverTimestamp(),
-        engineVersion: 1,
+        engineVersion: 2,
       },
     });
   }
 
-  for (const opportunity of opportunities) {
+  for (let index = 0; index < opportunities.length; index += 1) {
+    const opportunity = opportunities[index];
+    const enriched = enrichedOpportunities[index];
     writes.push({
       ref: userRef.collection("opportunities").doc(opportunity.id),
       data: {
         ...opportunity,
         engineGenerated: true,
         updatedAt: FieldValue.serverTimestamp(),
-        engineVersion: 1,
+        engineVersion: 2,
       },
     });
+
+    const commission = enriched?.matchedOffer?.commercial;
+    if (enriched?.matchedOffer?.offerId) {
+      writes.push({
+        ref: db.collection("commerceMatches").doc(`${uid}_${opportunity.id}`),
+        data: {
+          uid,
+          opportunityId: opportunity.id,
+          offerId: enriched.matchedOffer.offerId,
+          providerName: enriched.matchedOffer.providerName,
+          monthlyPrice: enriched.matchedOffer.monthlyPrice,
+          potentialMonthlySaving: enriched.potentialMonthlySaving,
+          potentialAnnualSaving: enriched.potentialAnnualSaving,
+          agreementActive: commission?.agreementActive === true,
+          commissionType: commission?.commissionType || "NONE",
+          commissionValue: commission?.commissionValue ?? null,
+          attributionStatus: "MATCHED_NOT_ACTED",
+          updatedAt: FieldValue.serverTimestamp(),
+          engineVersion: 2,
+        },
+      });
+    }
   }
 
   await commitWrites(writes);
@@ -104,18 +153,28 @@ async function persistFinancialState(uid, invoices) {
     context,
     insightCount: insights.length,
     opportunityCount: opportunities.length,
+    matchedOfferCount: enrichedOpportunities.filter((item) => item.matchedOffer).length,
+    trackableCommerceMatchCount: enrichedOpportunities.filter(
+      (item) => item.matchedOffer?.commercial?.agreementActive === true
+    ).length,
   };
 }
 
 async function runFinancialAgentForUser(uid) {
-  const invoices = await loadObservedInvoices(uid);
-  const result = await persistFinancialState(uid, invoices);
+  const [invoices, providerOffers] = await Promise.all([
+    loadObservedInvoices(uid),
+    loadProviderOffers(),
+  ]);
+  const result = await persistFinancialState(uid, invoices, providerOffers);
   logger.info("Financial agent evaluation completed", {
     uid,
     invoiceCount: invoices.length,
+    providerOfferCount: providerOffers.length,
     recurringServiceCount: result.context.recurringServiceCount,
     insightCount: result.insightCount,
     opportunityCount: result.opportunityCount,
+    matchedOfferCount: result.matchedOfferCount,
+    trackableCommerceMatchCount: result.trackableCommerceMatchCount,
   });
   return result;
 }
@@ -144,6 +203,8 @@ exports.refreshFinancialAgent = onCall(
       recurringServiceCount: result.context.recurringServiceCount,
       insightCount: result.insightCount,
       opportunityCount: result.opportunityCount,
+      matchedOfferCount: result.matchedOfferCount,
+      trackableCommerceMatchCount: result.trackableCommerceMatchCount,
       sourceCoverage: result.context.sourceCoverage,
       isCompleteHouseholdSpend: result.context.isCompleteHouseholdSpend,
     };
@@ -153,3 +214,4 @@ exports.refreshFinancialAgent = onCall(
 exports._runFinancialAgentForUser = runFinancialAgentForUser;
 exports._persistFinancialState = persistFinancialState;
 exports._loadObservedInvoices = loadObservedInvoices;
+exports._loadProviderOffers = loadProviderOffers;
