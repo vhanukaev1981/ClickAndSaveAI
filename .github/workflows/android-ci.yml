@@ -83,5 +83,13 @@ jobs:
       - name: Assemble debug APK
         run: gradle --no-daemon assembleDebug --stacktrace
 
+      - name: Upload staging debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: clickandsaveai-staging-debug-${{ github.sha }}
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Assemble release APK
         run: gradle --no-daemon assembleRelease --stacktrace
