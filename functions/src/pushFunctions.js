@@ -1,8 +1,10 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const { getMessaging } = require("firebase-admin/messaging");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const logger = require("firebase-functions/logger");
 
 const db = getFirestore();
 
@@ -24,6 +26,67 @@ function normalizeToken(value) {
 
 function tokenDocumentId(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+async function sendPushToUser(uid, { title, body, data = {} }) {
+  const snapshot = await db
+    .collection("users")
+    .doc(uid)
+    .collection("pushTokens")
+    .where("enabled", "==", true)
+    .get();
+
+  const tokenDocs = snapshot.docs
+    .map((doc) => ({ ref: doc.ref, token: String(doc.data()?.token || "").trim() }))
+    .filter((item) => item.token.length >= 20);
+
+  if (tokenDocs.length === 0) {
+    return { attempted: 0, delivered: 0, removedInvalid: 0 };
+  }
+
+  const response = await getMessaging().sendEachForMulticast({
+    tokens: tokenDocs.map((item) => item.token),
+    notification: { title, body },
+    data: Object.fromEntries(
+      Object.entries(data).map(([key, value]) => [key, String(value)])
+    ),
+    android: {
+      priority: "high",
+      notification: {
+        channelId: "savings_opportunities",
+      },
+    },
+  });
+
+  const invalidIndexes = [];
+  response.responses.forEach((result, index) => {
+    if (result.success) return;
+    const code = result.error?.code || "";
+    if (
+      code === "messaging/registration-token-not-registered" ||
+      code === "messaging/invalid-registration-token"
+    ) {
+      invalidIndexes.push(index);
+    }
+  });
+
+  await Promise.all(
+    invalidIndexes.map((index) => tokenDocs[index].ref.delete().catch(() => undefined))
+  );
+
+  logger.info("Push delivery completed", {
+    uid,
+    attempted: tokenDocs.length,
+    delivered: response.successCount,
+    failed: response.failureCount,
+    removedInvalid: invalidIndexes.length,
+  });
+
+  return {
+    attempted: tokenDocs.length,
+    delivered: response.successCount,
+    removedInvalid: invalidIndexes.length,
+  };
 }
 
 exports.registerPushToken = onCall(
@@ -67,3 +130,24 @@ exports.unregisterPushToken = onCall(
     return { registered: false };
   }
 );
+
+exports.sendTestPush = onCall(
+  { enforceAppCheck: true },
+  async (request) => {
+    const uid = requireAuth(request);
+    const delivery = await sendPushToUser(uid, {
+      title: "ClickAndSaveAI מחובר להתראות",
+      body: "ההתראות פעילות. כשנמצא חיסכון מאומת, נציג לך כמה אפשר לחסוך.",
+      data: { type: "PUSH_TEST" },
+    });
+    if (delivery.attempted === 0) {
+      throw new HttpsError(
+        "failed-precondition",
+        "No registered notification device was found for this user."
+      );
+    }
+    return delivery;
+  }
+);
+
+exports.sendPushToUser = sendPushToUser;
