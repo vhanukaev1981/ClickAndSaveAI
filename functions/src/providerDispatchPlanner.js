@@ -4,6 +4,8 @@ const { CAPABILITIES, assertAdapterCapability } = require("./providerAdapterRegi
 const { assertDispatchAllowed, nextRetry } = require("./providerIntegrationFramework");
 const { QUEUE_STATES } = require("./providerDispatchEnvelope");
 const { isContractActive } = require("./providerContractConfig");
+const { evaluateCircuit } = require("./providerCircuitBreaker");
+const { RATE_LIMIT_ACTIONS, planRateLimit } = require("./providerRateLimitPlanner");
 
 const PLAN_ACTIONS = Object.freeze({
   DISPATCH: "DISPATCH",
@@ -17,6 +19,52 @@ function requiredObject(value, field) {
     throw new TypeError(`${field} must be an object`);
   }
   return value;
+}
+
+function planResilientDispatch(source, envelope, nowMs) {
+  const circuit = evaluateCircuit(source.circuitState || {}, nowMs);
+  if (!circuit.allowRequest) {
+    return {
+      action: PLAN_ACTIONS.WAIT,
+      reason: "provider circuit breaker is open",
+      dispatchId: envelope.dispatchId,
+      delayMs: circuit.delayMs,
+      circuitState: circuit.state,
+      circuitProbe: false,
+    };
+  }
+
+  const rateLimit = planRateLimit({
+    policy: source.rateLimitPolicy,
+    usage: source.rateLimitUsage,
+    nowMs,
+  });
+  if (rateLimit.action === RATE_LIMIT_ACTIONS.WAIT) {
+    return {
+      action: PLAN_ACTIONS.WAIT,
+      reason: "provider rate limit reached",
+      dispatchId: envelope.dispatchId,
+      delayMs: rateLimit.delayMs,
+      circuitState: circuit.state,
+      circuitProbe: circuit.probe,
+      rateLimitAction: rateLimit.action,
+      rateLimitResetAtMs: rateLimit.resetAtMs,
+    };
+  }
+
+  return {
+    action: PLAN_ACTIONS.DISPATCH,
+    reason: "provider, contract, adapter and resilience gates verified",
+    dispatchId: envelope.dispatchId,
+    circuitState: circuit.state,
+    circuitProbe: circuit.probe,
+    rateLimitAction: rateLimit.action,
+    ...(rateLimit.action === RATE_LIMIT_ACTIONS.ALLOW ? {
+      rateLimitResetAtMs: rateLimit.resetAtMs,
+      remainingRequests: rateLimit.remainingRequests,
+      nextRateLimitUsage: rateLimit.nextUsage,
+    } : {}),
+  };
 }
 
 function planDispatch(input) {
@@ -88,11 +136,7 @@ function planDispatch(input) {
     };
   }
 
-  return {
-    action: PLAN_ACTIONS.DISPATCH,
-    reason: "provider, contract and adapter capability verified",
-    dispatchId: envelope.dispatchId,
-  };
+  return planResilientDispatch(source, envelope, nowMs);
 }
 
 module.exports = {
