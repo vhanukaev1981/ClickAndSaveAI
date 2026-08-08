@@ -14,6 +14,7 @@ const db = getFirestore();
 const MAX_SOURCE_DOCS_PER_AGENT_RUN = 500;
 const MAX_PROVIDER_OFFERS_PER_RUN = 500;
 const MAX_WRITES_PER_BATCH = 400;
+const MAX_HOME_ITEMS = 20;
 
 function requireAuth(request) {
   const uid = request.auth?.uid;
@@ -179,6 +180,59 @@ async function runFinancialAgentForUser(uid) {
   return result;
 }
 
+async function loadDocsByIds(collectionRef, ids) {
+  const safeIds = Array.isArray(ids) ? ids.slice(0, MAX_HOME_ITEMS) : [];
+  const snapshots = await Promise.all(safeIds.map((id) => collectionRef.doc(String(id)).get()));
+  return snapshots.filter((snapshot) => snapshot.exists).map((snapshot) => ({
+    id: snapshot.id,
+    ...snapshot.data(),
+  }));
+}
+
+function homeOpportunity(item) {
+  return {
+    id: String(item.id || ""),
+    type: String(item.type || ""),
+    status: String(item.status || "OPEN"),
+    providerName: String(item.providerName || ""),
+    category: String(item.category || ""),
+    currentMonthlyCost: Number(item.currentMonthlyCost || 0),
+    previousMonthlyCost: Number(item.previousMonthlyCost || 0),
+    monthlyIncrease: Number(item.monthlyIncrease || 0),
+    percentIncrease: Number(item.percentIncrease || 0),
+    potentialMonthlySaving: Number.isFinite(Number(item.potentialMonthlySaving))
+      ? Number(item.potentialMonthlySaving)
+      : null,
+    potentialAnnualSaving: Number.isFinite(Number(item.potentialAnnualSaving))
+      ? Number(item.potentialAnnualSaving)
+      : null,
+    recommendationAction: String(item.recommendationAction || ""),
+    matchedOffer: item.matchedOffer ? {
+      offerId: String(item.matchedOffer.offerId || ""),
+      providerName: String(item.matchedOffer.providerName || ""),
+      monthlyPrice: Number(item.matchedOffer.monthlyPrice || 0),
+      serviceType: String(item.matchedOffer.serviceType || ""),
+      verifiedAt: String(item.matchedOffer.verifiedAt || ""),
+      validUntil: String(item.matchedOffer.validUntil || ""),
+      userFitScore: Number(item.matchedOffer.userFitScore || 0),
+    } : null,
+  };
+}
+
+function homeInsight(item) {
+  return {
+    id: String(item.id || ""),
+    type: String(item.type || ""),
+    providerName: String(item.providerName || ""),
+    category: String(item.category || ""),
+    currentMonthlyCost: Number(item.currentMonthlyCost || 0),
+    previousMonthlyCost: Number(item.previousMonthlyCost || 0),
+    monthlyIncrease: Number(item.monthlyIncrease || 0),
+    percentIncrease: Number(item.percentIncrease || 0),
+    severity: String(item.severity || "INFO"),
+  };
+}
+
 exports.onGmailFinancialDataChanged = onDocumentWritten(
   {
     document: "users/{uid}/gmailMessageImports/{messageId}",
@@ -211,7 +265,43 @@ exports.refreshFinancialAgent = onCall(
   }
 );
 
+exports.getFinancialHome = onCall(
+  { enforceAppCheck: true },
+  async (request) => {
+    const uid = requireAuth(request);
+    const userRef = db.collection("users").doc(uid);
+    let contextSnapshot = await userRef.collection("financialContext").doc("current").get();
+    if (!contextSnapshot.exists) {
+      await runFinancialAgentForUser(uid);
+      contextSnapshot = await userRef.collection("financialContext").doc("current").get();
+    }
+
+    const context = contextSnapshot.data() || {};
+    const [insights, opportunities] = await Promise.all([
+      loadDocsByIds(userRef.collection("financialInsights"), context.activeInsightIds),
+      loadDocsByIds(userRef.collection("opportunities"), context.activeOpportunityIds),
+    ]);
+
+    return {
+      context: {
+        sourceCoverage: Array.isArray(context.sourceCoverage) ? context.sourceCoverage.map(String) : [],
+        isCompleteHouseholdSpend: context.isCompleteHouseholdSpend === true,
+        observedRecurringMonthlySpend: Number(context.observedRecurringMonthlySpend || 0),
+        recurringServiceCount: Number(context.recurringServiceCount || 0),
+        recurringServices: Array.isArray(context.recurringServices)
+          ? context.recurringServices.slice(0, MAX_HOME_ITEMS)
+          : [],
+        categories: Array.isArray(context.categories) ? context.categories.slice(0, MAX_HOME_ITEMS) : [],
+      },
+      insights: insights.map(homeInsight),
+      opportunities: opportunities.map(homeOpportunity),
+    };
+  }
+);
+
 exports._runFinancialAgentForUser = runFinancialAgentForUser;
 exports._persistFinancialState = persistFinancialState;
 exports._loadObservedInvoices = loadObservedInvoices;
 exports._loadProviderOffers = loadProviderOffers;
+exports._homeOpportunity = homeOpportunity;
+exports._homeInsight = homeInsight;
