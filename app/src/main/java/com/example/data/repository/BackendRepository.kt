@@ -131,6 +131,11 @@ data class FinancialHomeResult(
     val opportunities: List<FinancialOpportunity>
 )
 
+class FinancialHomeUnavailableException(cause: Throwable) : IllegalStateException(
+    "הנתונים הפיננסיים עדיין מתעדכנים. ננסה שוב אוטומטית.",
+    cause
+)
+
 class BackendRepository(
     private val functionsProvider: () -> FirebaseFunctions = {
         FirebaseFunctions.getInstance("europe-west1")
@@ -207,7 +212,11 @@ class BackendRepository(
     }
 
     suspend fun getFinancialHome(): FinancialHomeResult {
-        val response = functions.getHttpsCallable("getFinancialHome").call().await().data.asStringMap()
+        val response = try {
+            functions.getHttpsCallable("getFinancialHome").call().await().data.asStringMap()
+        } catch (error: Exception) {
+            throw FinancialHomeUnavailableException(error)
+        }
         val contextMap = response["context"].asStringMapOrNull().orEmpty()
         val recurringServices = (contextMap["recurringServices"] as? List<*>)
             .orEmpty()
