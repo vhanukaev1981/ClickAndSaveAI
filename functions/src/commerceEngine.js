@@ -38,6 +38,9 @@ function normalizeOffer(offer, nowMs = Date.now()) {
   if (offer.officialSourceVerified !== true) return null;
   if (offer.availabilityStatus !== "AVAILABLE") return null;
 
+  const serviceType = normalizeText(offer.serviceType);
+  if (!serviceType) return null;
+
   const userFitScore = Number(offer.userFitScore);
   return {
     offerId,
@@ -45,7 +48,7 @@ function normalizeOffer(offer, nowMs = Date.now()) {
     category,
     country,
     monthlyPrice,
-    serviceType: normalizeText(offer.serviceType),
+    serviceType,
     verifiedAt: new Date(verifiedAtMs).toISOString(),
     validUntil: new Date(validUntilMs).toISOString(),
     userFitScore: Number.isFinite(userFitScore)
@@ -61,8 +64,11 @@ function normalizeOffer(offer, nowMs = Date.now()) {
 
 function serviceCompatible(opportunity, offer) {
   const requiredServiceType = normalizeText(opportunity?.serviceType);
-  if (!requiredServiceType || !offer.serviceType) return true;
-  return requiredServiceType.toLowerCase() === offer.serviceType.toLowerCase();
+  const offeredServiceType = normalizeText(offer?.serviceType);
+  if (!offeredServiceType) return false;
+  if (offeredServiceType.toUpperCase() === "ANY") return true;
+  if (!requiredServiceType) return false;
+  return requiredServiceType.toLowerCase() === offeredServiceType.toLowerCase();
 }
 
 function matchVerifiedOffers(opportunity, offers, options = {}) {
@@ -147,6 +153,7 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
 module.exports = {
   toMillis,
   normalizeOffer,
+  serviceCompatible,
   matchVerifiedOffers,
   enrichOpportunityWithBestOffer,
 };
