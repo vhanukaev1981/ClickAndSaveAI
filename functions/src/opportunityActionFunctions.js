@@ -4,7 +4,8 @@ const crypto = require("node:crypto");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
-const { normalizeOffer, serviceCompatible } = require("./commerceEngine");
+const { normalizeOffer, serviceCompatible, roundMoney } = require("./commerceEngine");
+const { offerAvailabilityEligible } = require("./offerEligibilityPolicy");
 const {
   requiredString,
   validateEmail,
@@ -52,12 +53,14 @@ function verifiedActionSnapshot(opportunity, currentOffer, expectedOfferId = "")
   const requestedProvider = String(matchedOffer?.providerName || "").trim();
   const currentMonthlyCost = Number(opportunity.currentMonthlyCost);
   const matchedMonthlyPrice = Number(matchedOffer?.monthlyPrice);
+  const matchedFirstYearCost = Number(matchedOffer?.firstYearCost);
   const monthlySaving = Number(opportunity.potentialMonthlySaving);
   const annualSaving = Number(opportunity.potentialAnnualSaving);
   if (!opportunityId || !offerId || !category || !currentProvider || !requestedProvider) return null;
   if (expected && expected !== offerId) return null;
   if (!Number.isFinite(currentMonthlyCost) || currentMonthlyCost <= 0) return null;
   if (!Number.isFinite(matchedMonthlyPrice) || matchedMonthlyPrice <= 0) return null;
+  if (!Number.isFinite(matchedFirstYearCost) || matchedFirstYearCost <= 0) return null;
   if (!Number.isFinite(monthlySaving) || monthlySaving <= 0) return null;
   if (!Number.isFinite(annualSaving) || annualSaving <= 0) return null;
 
@@ -66,7 +69,15 @@ function verifiedActionSnapshot(opportunity, currentOffer, expectedOfferId = "")
   if (normalizedOffer.category !== category) return null;
   if (normalizedOffer.providerName !== requestedProvider) return null;
   if (!serviceCompatible(opportunity, normalizedOffer)) return null;
+  if (!offerAvailabilityEligible(opportunity, normalizedOffer)) return null;
   if (Math.abs(normalizedOffer.monthlyPrice - matchedMonthlyPrice) > 0.001) return null;
+  if (Math.abs(normalizedOffer.firstYearCost - matchedFirstYearCost) > 0.001) return null;
+
+  const recalculatedAnnualSaving = roundMoney((currentMonthlyCost * 12) - normalizedOffer.firstYearCost);
+  const recalculatedMonthlySaving = roundMoney(recalculatedAnnualSaving / 12);
+  if (recalculatedAnnualSaving <= 0 || recalculatedMonthlySaving <= 0) return null;
+  if (Math.abs(recalculatedAnnualSaving - annualSaving) > 0.01) return null;
+  if (Math.abs(recalculatedMonthlySaving - monthlySaving) > 0.01) return null;
 
   return {
     opportunityId,
@@ -75,9 +86,11 @@ function verifiedActionSnapshot(opportunity, currentOffer, expectedOfferId = "")
     currentProvider,
     requestedProvider,
     currentMonthlyCost,
-    offeredMonthlyPrice: matchedMonthlyPrice,
-    potentialMonthlySaving: monthlySaving,
-    potentialAnnualSaving: annualSaving,
+    offeredMonthlyPrice: normalizedOffer.monthlyPrice,
+    effectiveMonthlyPrice: normalizedOffer.effectiveMonthlyPrice,
+    firstYearCost: normalizedOffer.firstYearCost,
+    potentialMonthlySaving: recalculatedMonthlySaving,
+    potentialAnnualSaving: recalculatedAnnualSaving,
     commissionType: normalizedOffer.commissionType,
     commissionValue: normalizedOffer.commissionValue,
     commercialAgreementActive: normalizedOffer.commercialAgreementActive,
@@ -138,7 +151,7 @@ exports.acceptSavingsOpportunity = onCall(
       if (!action) {
         throw new HttpsError(
           "failed-precondition",
-          "The provider offer changed or can no longer be verified."
+          "The provider offer changed, is not eligible, or can no longer be verified."
         );
       }
 
@@ -160,6 +173,8 @@ exports.acceptSavingsOpportunity = onCall(
         offerId: action.offerId,
         currentMonthlyCost: action.currentMonthlyCost,
         offeredMonthlyPrice: action.offeredMonthlyPrice,
+        effectiveMonthlyPrice: action.effectiveMonthlyPrice,
+        firstYearCost: action.firstYearCost,
         potentialMonthlySaving: action.potentialMonthlySaving,
         potentialAnnualSaving: action.potentialAnnualSaving,
         consentVersion: input.consentVersion,
