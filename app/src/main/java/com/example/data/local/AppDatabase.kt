@@ -3,11 +3,8 @@ package com.example.data.local
 import android.content.Context
 import androidx.room.Database
 import androidx.room.Dao
-import androidx.room.Entity
-import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
-import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -83,6 +80,9 @@ interface InvoiceDao {
 
     @Query("DELETE FROM invoice_items WHERE id = :id")
     suspend fun deleteInvoice(id: Long)
+
+    @Query("DELETE FROM invoice_items")
+    suspend fun deleteAllInvoices()
 
     @Query("SELECT COUNT(*) FROM invoice_items")
     suspend fun getCount(): Int
