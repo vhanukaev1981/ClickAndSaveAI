@@ -2,6 +2,7 @@ package com.example
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -42,6 +43,8 @@ import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.Scope
 import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.functions.FirebaseFunctions
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
@@ -98,6 +101,33 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+
+        maybeTriggerDebugTestPush(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        maybeTriggerDebugTestPush(intent)
+    }
+
+    private fun maybeTriggerDebugTestPush(intent: Intent?) {
+        if (!BuildConfig.DEBUG || intent?.getBooleanExtra(DEBUG_SEND_TEST_PUSH, false) != true) return
+        intent.removeExtra(DEBUG_SEND_TEST_PUSH)
+        if (FirebaseAuth.getInstance().currentUser == null) {
+            Log.w("TestPush", "Debug test push skipped because no Firebase user is signed in")
+            return
+        }
+        PushRegistration.registerCurrentToken()
+        FirebaseFunctions.getInstance("europe-west1")
+            .getHttpsCallable("sendTestPush")
+            .call()
+            .addOnSuccessListener { result ->
+                Log.i("TestPush", "sendTestPush succeeded: ${result.data}")
+            }
+            .addOnFailureListener { error ->
+                Log.e("TestPush", "sendTestPush failed", error)
+            }
     }
 
     private fun configureFirebaseAndAppCheck() {
@@ -173,6 +203,7 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+        const val DEBUG_SEND_TEST_PUSH = "debugSendTestPush"
     }
 }
 
