@@ -45,9 +45,10 @@ function providerOffer(overrides = {}) {
   };
 }
 
-test("opportunity action requires explicit versioned consent", () => {
+test("opportunity action requires explicit versioned consent and exact offer id", () => {
   assert.throws(() => validateOpportunityActionInput({
     opportunityId: "opp-1",
+    expectedOfferId: "offer-1",
     contactName: "Test User",
     phone: "0501234567",
     contactEmail: "test@example.com",
@@ -57,6 +58,7 @@ test("opportunity action requires explicit versioned consent", () => {
 
   const validated = validateOpportunityActionInput({
     opportunityId: "opp-1",
+    expectedOfferId: "offer-1",
     contactName: "Test User",
     phone: "0501234567",
     contactEmail: "test@example.com",
@@ -64,11 +66,12 @@ test("opportunity action requires explicit versioned consent", () => {
     consentVersion: OPPORTUNITY_ACTION_CONSENT_VERSION,
   });
   assert.equal(validated.opportunityId, "opp-1");
+  assert.equal(validated.expectedOfferId, "offer-1");
   assert.equal(validated.contactEmail, "test@example.com");
 });
 
 test("verified action snapshot carries user saving and commercial attribution separately", () => {
-  const snapshot = verifiedActionSnapshot(opportunity(), providerOffer());
+  const snapshot = verifiedActionSnapshot(opportunity(), providerOffer(), "offer-1");
   assert.ok(snapshot);
   assert.equal(snapshot.requestedProvider, "Provider A");
   assert.equal(snapshot.potentialMonthlySaving, 40);
@@ -77,21 +80,35 @@ test("verified action snapshot carries user saving and commercial attribution se
   assert.equal(snapshot.commercialAgreementActive, true);
 });
 
+test("action is rejected when the opportunity no longer points to the offer the user saw", () => {
+  const snapshot = verifiedActionSnapshot(opportunity(), providerOffer(), "offer-old");
+  assert.equal(snapshot, null);
+});
+
 test("opportunity cannot be accepted when the official offer changed price", () => {
   const snapshot = verifiedActionSnapshot(
     opportunity(),
-    providerOffer({ monthlyPrice: 99 })
+    providerOffer({ monthlyPrice: 99 }),
+    "offer-1"
   );
   assert.equal(snapshot, null);
 });
 
 test("opportunity cannot be accepted against expired or unverified offer", () => {
   assert.equal(
-    verifiedActionSnapshot(opportunity(), providerOffer({ officialSourceVerified: false })),
+    verifiedActionSnapshot(
+      opportunity(),
+      providerOffer({ officialSourceVerified: false }),
+      "offer-1"
+    ),
     null
   );
   assert.equal(
-    verifiedActionSnapshot(opportunity(), providerOffer({ validUntil: "2026-01-01T00:00:00Z" })),
+    verifiedActionSnapshot(
+      opportunity(),
+      providerOffer({ validUntil: "2026-01-01T00:00:00Z" }),
+      "offer-1"
+    ),
     null
   );
 });
