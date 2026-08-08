@@ -69,3 +69,20 @@ test("savings claim appears only after a verified compatible offer is matched", 
   assert.equal(matched.potentialAnnualSaving, 480);
   assert.equal(matched.truthfulness.savingsClaimAvailable, true);
 });
+
+test("Firestore Timestamp-like dates are accepted for verified provider offers", () => {
+  const verifiedAtSeconds = Math.floor(Date.parse("2026-08-08T08:00:00Z") / 1000);
+  const validUntilSeconds = Math.floor(Date.parse("2026-09-08T08:00:00Z") / 1000);
+  const matches = matchVerifiedOffers(opportunity, [
+    offer({
+      offerId: "firestore-timestamp",
+      monthlyPrice: 89,
+      verifiedAt: { seconds: verifiedAtSeconds, nanoseconds: 0 },
+      validUntil: { seconds: validUntilSeconds, nanoseconds: 0 },
+    }),
+  ], { nowMs });
+
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].offerId, "firestore-timestamp");
+  assert.equal(matches[0].monthlySaving, 40);
+});
