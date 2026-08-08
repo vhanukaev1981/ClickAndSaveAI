@@ -42,6 +42,9 @@ jobs:
   android-build:
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    env:
+      STAGING_DEBUG_KEYSTORE_B64: ${{ secrets.STAGING_DEBUG_KEYSTORE_B64 }}
+      STAGING_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.STAGING_DEBUG_KEYSTORE_PASSWORD }}
 
     steps:
       - name: Check out repository
@@ -69,6 +72,29 @@ jobs:
       - name: Install required Android SDK packages
         run: sdkmanager 'platforms;android-36.1' 'build-tools;36.0.0'
 
+      - name: Restore and verify staging debug signing key
+        shell: bash
+        run: |
+          if [[ -z "$STAGING_DEBUG_KEYSTORE_B64" || -z "$STAGING_DEBUG_KEYSTORE_PASSWORD" ]]; then
+            echo 'STAGING_SIGNING_READY=false' >> "$GITHUB_ENV"
+            echo '::notice::Stable staging debug signing secrets are not configured. CI will build with the runner debug key and will not publish an OAuth E2E APK artifact.'
+            exit 0
+          fi
+
+          KEYSTORE="$RUNNER_TEMP/clickandsaveai-staging.jks"
+          printf '%s' "$STAGING_DEBUG_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+
+          EXPECTED_SHA256='6174F51669193851CD037BDE87574122157ECFA4AFDDE0DCD513A91605F3A6AA'
+          CERT_OUTPUT="$(keytool -list -v -keystore "$KEYSTORE" -storepass "$STAGING_DEBUG_KEYSTORE_PASSWORD" -alias clickandsaveai-staging)"
+          NORMALIZED_CERT_OUTPUT="$(printf '%s' "$CERT_OUTPUT" | tr '[:lower:]' '[:upper:]' | tr -d ':')"
+          if ! printf '%s' "$NORMALIZED_CERT_OUTPUT" | grep -q "$EXPECTED_SHA256"; then
+            echo 'Staging debug keystore SHA-256 does not match the fingerprint registered in Firebase.' >&2
+            exit 1
+          fi
+
+          echo "STAGING_DEBUG_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          echo 'STAGING_SIGNING_READY=true' >> "$GITHUB_ENV"
+
       - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v6
         with:
@@ -83,7 +109,26 @@ jobs:
       - name: Assemble debug APK
         run: gradle --no-daemon assembleDebug --stacktrace
 
-      - name: Upload staging debug APK
+      - name: Verify staging debug APK signing certificate
+        if: ${{ env.STAGING_SIGNING_READY == 'true' }}
+        shell: bash
+        run: |
+          APK="$(find app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          if [[ -z "$APK" ]]; then
+            echo 'Debug APK was not found.' >&2
+            exit 1
+          fi
+
+          CERT_OUTPUT="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK")"
+          EXPECTED_SHA256='6174f51669193851cd037bde87574122157ecfa4afdde0dcd513a91605f3a6aa'
+          NORMALIZED_CERT_OUTPUT="$(printf '%s' "$CERT_OUTPUT" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          if ! printf '%s' "$NORMALIZED_CERT_OUTPUT" | grep -q "$EXPECTED_SHA256"; then
+            echo 'Built debug APK is not signed with the Firebase-registered staging certificate.' >&2
+            exit 1
+          fi
+
+      - name: Upload OAuth E2E-ready staging debug APK
+        if: ${{ env.STAGING_SIGNING_READY == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: clickandsaveai-staging-debug-${{ github.sha }}
