@@ -1,5 +1,7 @@
 "use strict";
 
+const { extractServiceType, normalizeServiceType } = require("./serviceProfile");
+
 // Prefer amounts next to billing labels before falling back to any currency-looking amount.
 // This reduces false positives from promotional prices that may appear elsewhere in the email.
 const AMOUNT_PATTERNS = [
@@ -184,6 +186,10 @@ function normalizeDocumentCategory(value) {
   return identifyCategory(normalized);
 }
 
+function withOptionalServiceType(invoice, serviceType) {
+  return serviceType ? { ...invoice, serviceType } : invoice;
+}
+
 function normalizePdfInvoiceCandidate(candidate, message, sourceDocumentId = "") {
   if (!candidate || candidate.isInvoice !== true || !message?.id) return null;
 
@@ -200,17 +206,18 @@ function normalizePdfInvoiceCandidate(candidate, message, sourceDocumentId = "")
     fallbackCategoryForProvider(providerName) ||
     "אחר";
   const monthlyCost = Number(candidate.monthlyCost);
+  const serviceType = normalizeServiceType(category, candidate.serviceType);
 
   if (!Number.isFinite(monthlyCost) || monthlyCost <= 0 || monthlyCost >= 1_000_000) return null;
 
-  return {
+  return withOptionalServiceType({
     sourceMessageId: String(sourceDocumentId || message.id),
     providerName,
     category,
     monthlyCost,
     receivedDate: String(candidate.receivedDate || headerDate || "").slice(0, 120),
     verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
-  };
+  }, serviceType);
 }
 
 function parseGmailMessage(message) {
@@ -228,16 +235,18 @@ function parseGmailMessage(message) {
 
   if (!message?.id || amount == null || category == null) return null;
 
-  // Persist only the minimum fields needed for invoice deduplication and display.
+  const serviceType = extractServiceType(category, searchableText);
+
+  // Persist only the minimum fields needed for invoice deduplication, financial context and display.
   // Raw Gmail subject, sender, snippet and body text are deliberately not returned or stored.
-  return {
+  return withOptionalServiceType({
     sourceMessageId: String(message.id),
     providerName,
     category,
     monthlyCost: amount,
     receivedDate: date.slice(0, 120),
     verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
-  };
+  }, serviceType);
 }
 
 module.exports = {
