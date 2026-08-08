@@ -18,6 +18,7 @@ function validOffer(overrides = {}) {
     offerId: "internet-provider-a-1g-202608",
     providerName: "Provider A",
     category: "אינטרנט",
+    pricingModel: "FIXED_MONTHLY",
     country: "IL",
     serviceType: "1Gbps fiber",
     monthlyPrice: 89,
@@ -34,13 +35,43 @@ function validOffer(overrides = {}) {
   };
 }
 
-test("catalog accepts a current Israeli offer and stores a canonical service profile", () => {
+test("catalog accepts a current Israeli fixed-monthly offer and stores a canonical service profile", () => {
   const result = validateProviderOfferInput(validOffer(), nowMs);
   assert.equal(result.offerId, "internet-provider-a-1g-202608");
   assert.equal(result.monthlyPrice, 89);
   assert.equal(result.category, "אינטרנט");
+  assert.equal(result.pricingModel, "FIXED_MONTHLY");
   assert.equal(result.serviceType, "INTERNET_1000_MBPS");
   assert.equal(result.commissionType, "CPA");
+});
+
+test("insurance and electricity cannot masquerade as fixed-monthly comparable offers", () => {
+  assert.throws(
+    () => validateProviderOfferInput(validOffer({
+      offerId: "insurance-fake-fixed",
+      category: "ביטוח",
+      serviceType: "ביטוח רכב",
+      monthlyPrice: 250,
+    }), nowMs),
+    /category-specific pricing model/i
+  );
+
+  assert.throws(
+    () => validateProviderOfferInput(validOffer({
+      offerId: "electricity-fake-fixed",
+      category: "חשמל",
+      serviceType: "ANY",
+      monthlyPrice: 300,
+    }), nowMs),
+    /category-specific pricing model/i
+  );
+});
+
+test("unsupported pricing models are rejected until their calculation engine exists", () => {
+  assert.throws(
+    () => validateProviderOfferInput(validOffer({ pricingModel: "PERCENT_DISCOUNT" }), nowMs),
+    /not implemented/i
+  );
 });
 
 test("catalog rejects non-HTTPS or malformed source links", () => {
