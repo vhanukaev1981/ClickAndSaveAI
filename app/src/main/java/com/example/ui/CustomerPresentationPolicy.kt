@@ -35,14 +35,21 @@ object CustomerPresentationPolicy {
         val raw = rawStatus.orEmpty().trim()
         if (raw.isBlank()) return "המידע מתעדכן"
         val upper = raw.uppercase()
+
         if (upper.contains("UNVERIFIED") || upper.contains("PENDING") || upper.contains("PROCESSING")) {
             return "נמצא בבדיקה"
         }
         if (upper.contains("FAILED") || upper.contains("ERROR") || upper.contains("EXCEPTION")) {
             return "לא הצלחנו לעדכן כרגע"
         }
+        if (upper in setOf("VERIFIED", "VALIDATED", "READY")) {
+            return "המידע אומת"
+        }
         if (containsInternalSignal(raw, upper)) return "המידע מתעדכן"
-        return raw.take(120)
+
+        // Closed-world presentation: unknown backend/domain text is never passed through
+        // to the customer just because it does not look technical yet.
+        return "המידע מתעדכן"
     }
 
     fun safeError(rawMessage: String?): String {
