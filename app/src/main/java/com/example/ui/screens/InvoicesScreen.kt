@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.data.local.InvoiceItem
+import com.example.ui.CustomerPresentationPolicy
 import com.example.ui.MainViewModel
 import com.example.ui.theme.TechBluePrimary
 
@@ -51,7 +52,6 @@ import com.example.ui.theme.TechBluePrimary
 fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
     val invoices by viewModel.invoices.collectAsState()
     val totalMonthlyCost by viewModel.totalMonthlyCost.collectAsState()
-    val verifiedSavings by viewModel.totalMonthlySavingsPotential.collectAsState()
     var selectedCategory by remember { mutableStateOf("הכל") }
     var showAddDialog by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<InvoiceItem?>(null) }
@@ -117,6 +117,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
 
         item {
             Card(
+                modifier = Modifier.testTag("bills_monthly_overview"),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                 shape = RoundedCornerShape(22.dp)
             ) {
@@ -141,26 +142,21 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        OutlinedButton(onClick = { showAddDialog = true }) {
+                        OutlinedButton(
+                            onClick = { showAddDialog = true },
+                            modifier = Modifier.testTag("add_manual_bill")
+                        ) {
                             Icon(Icons.Default.Add, contentDescription = null)
                             Spacer(Modifier.size(4.dp))
                             Text("הוסף ידנית")
                         }
                     }
 
-                    if (verifiedSavings > 0.0) {
-                        Text(
-                            "חיסכון חודשי מאומת: ${money(verifiedSavings)}",
-                            color = TechBluePrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    } else {
-                        Text(
-                            "אנחנו בודקים את השירותים ברקע. סכום חיסכון יוצג רק לאחר שנמצאה הצעה מתאימה שניתן לאמת.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        "החשבונות כאן מתארים את ההוצאות שזוהו. סכומי חיסכון מוצגים באזור החיסכון רק לאחר שנמצאה הצעה מתאימה שניתן לאמת.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -188,7 +184,10 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
         }
 
         item {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            LazyRow(
+                modifier = Modifier.testTag("bill_category_filters"),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 items(categories) { category ->
                     FilterChip(
                         selected = selectedCategory == category,
@@ -202,7 +201,9 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
         if (filteredInvoices.isEmpty()) {
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("bills_empty_state"),
                     shape = RoundedCornerShape(18.dp)
                 ) {
                     Row(
@@ -232,6 +233,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
 
         item {
             Card(
+                modifier = Modifier.testTag("bills_automatic_savings_explainer"),
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
@@ -285,7 +287,10 @@ private fun CategorySpendCard(
 
 @Composable
 private fun InvoiceCard(invoice: InvoiceItem, onDelete: () -> Unit) {
-    Card(shape = RoundedCornerShape(18.dp)) {
+    Card(
+        modifier = Modifier.testTag("bill_${invoice.id}"),
+        shape = RoundedCornerShape(18.dp)
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -303,7 +308,10 @@ private fun InvoiceCard(invoice: InvoiceItem, onDelete: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(onClick = onDelete) {
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.testTag("delete_bill_${invoice.id}")
+                ) {
                     Icon(Icons.Default.DeleteOutline, contentDescription = "מחק חשבון")
                 }
             }
@@ -322,10 +330,10 @@ private fun InvoiceCard(invoice: InvoiceItem, onDelete: () -> Unit) {
 }
 
 private fun customerStatus(invoice: InvoiceItem): String {
-    val raw = "${invoice.status} ${invoice.verificationStatus}".uppercase()
-    return when {
-        raw.contains("LEAD") || raw.contains("CRM") || raw.contains("ליד") -> "בקשת חיסכון קודמת נמצאת בטיפול"
-        raw.contains("UNVERIFIED") || raw.contains("NOT_FOUND") || raw.contains("GMAIL_READONLY") -> "החשבון זוהה ונמצא בבדיקה"
+    val raw = "${invoice.status} ${invoice.verificationStatus}"
+    val safe = CustomerPresentationPolicy.safeStatus(raw)
+    return when (safe) {
+        "המידע מתעדכן", "נמצא בבדיקה" -> "החשבון זוהה ונמצא בבדיקה"
         else -> "נבדק אוטומטית להזדמנויות חיסכון"
     }
 }
@@ -345,10 +353,16 @@ private fun DeleteInvoiceDialog(
             )
         },
         confirmButton = {
-            Button(onClick = onConfirm) { Text("הסר") }
+            Button(
+                onClick = onConfirm,
+                modifier = Modifier.testTag("confirm_delete_bill")
+            ) { Text("הסר") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("ביטול") }
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("cancel_delete_bill")
+            ) { Text("ביטול") }
         }
     )
 }
@@ -373,7 +387,9 @@ private fun ManualInvoiceDialog(onDismiss: () -> Unit, onAdd: (String, String, D
                     provider,
                     { provider = it },
                     label = { Text("ספק") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("manual_bill_provider")
                 )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(categories) { item ->
@@ -389,19 +405,27 @@ private fun ManualInvoiceDialog(onDismiss: () -> Unit, onAdd: (String, String, D
                     { amount = it },
                     label = { Text("סכום חודשי") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("manual_bill_amount")
                 )
             }
         },
         confirmButton = {
             Button(
                 onClick = { onAdd(provider, category, amount.toDoubleOrNull() ?: 0.0) },
-                enabled = provider.isNotBlank() && (amount.toDoubleOrNull() ?: 0.0) > 0.0
+                enabled = provider.isNotBlank() && (amount.toDoubleOrNull() ?: 0.0) > 0.0,
+                modifier = Modifier.testTag("save_manual_bill")
             ) {
                 Text("שמור")
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("ביטול") } }
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("cancel_manual_bill")
+            ) { Text("ביטול") }
+        }
     )
 }
 
