@@ -1,0 +1,61 @@
+name: Validate Staging Device Preflight
+
+on:
+  push:
+    branches:
+      - ops/staging-device-preflight
+    paths:
+      - scripts/staging-device-preflight.ps1
+      - .github/workflows/ops-device-preflight-ci.yml
+  pull_request:
+    paths:
+      - scripts/staging-device-preflight.ps1
+      - .github/workflows/ops-device-preflight-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Parse PowerShell script
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path scripts/staging-device-preflight.ps1),
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+      - name: Enforce locked E2E artifact and package guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCRIPT=scripts/staging-device-preflight.ps1
+          grep -Fq 'cbd841ed22f51f7fc1216ee1dd23148fb468965659e9ff3d5aa1831736adfd0a' "$SCRIPT"
+          grep -Fq 'com.aistudio.clickandsaveai.app' "$SCRIPT"
+          grep -Fq 'com.example.MainActivity' "$SCRIPT"
+          grep -Fq 'adb.exe' "$SCRIPT"
+          grep -Fq 'install -r' "$SCRIPT"
+          grep -Fq 'Get-FileHash -Algorithm SHA256' "$SCRIPT"
+          grep -Fq 'logcat -c' "$SCRIPT"
+          grep -Fq 'force-stop' "$SCRIPT"
+
+          if grep -Fq 'uninstall' "$SCRIPT"; then
+            echo 'Device preflight must not uninstall the app or destroy local E2E state.' >&2
+            exit 1
+          fi
+          if grep -Fq '?.' "$SCRIPT" || grep -Fq '??' "$SCRIPT"; then
+            echo 'Keep the helper compatible with Windows PowerShell 5.1 syntax.' >&2
+            exit 1
+          fi
