@@ -1,12 +1,9 @@
 package com.example
 
-import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.data.local.AppDatabase
@@ -21,9 +18,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-
-private const val PUSH_CHANNEL_ID = "savings_opportunities"
-private const val PUSH_CHANNEL_NAME = "הזדמנויות חיסכון"
 
 object PushRegistration {
     fun registerCurrentToken() {
@@ -87,19 +81,8 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
     }
 
     private fun showNotification(title: String, body: String, pushType: String?) {
+        FinancialNotificationChannels.ensureCreated(this)
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            notificationManager.createNotificationChannel(
-                NotificationChannel(
-                    PUSH_CHANNEL_ID,
-                    PUSH_CHANNEL_NAME,
-                    NotificationManager.IMPORTANCE_DEFAULT
-                ).apply {
-                    description = "התראות על חשבוניות והזדמנויות חיסכון חדשות"
-                    lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-                }
-            )
-        }
 
         val destinationTab = destinationTabForPushType(pushType)
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
@@ -121,7 +104,7 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, PUSH_CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, FINANCIAL_PUSH_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(body)
