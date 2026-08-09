@@ -105,6 +105,7 @@ class CustomerUiSourceGuardTest {
             "savings_loading_state",
             "savings_under_review_state",
             "savings_error_state",
+            "savings_action_submitting",
             "accept_savings_",
             "savings_contact_consent",
             "submit_savings_request",
@@ -112,6 +113,9 @@ class CustomerUiSourceGuardTest {
         ).forEach { tag -> assertTrue("Savings lost E2E hook $tag", savings.contains(tag)) }
 
         listOf(
+            "profile_sign_out",
+            "confirm_profile_sign_out",
+            "cancel_profile_sign_out",
             "open_savings_preferences",
             "open_privacy_connections",
             "privacy_connections_screen",
@@ -135,15 +139,34 @@ class CustomerUiSourceGuardTest {
     }
 
     @Test
-    fun documentSourceDisconnectRemainsExplicitlyConfirmed() {
+    fun destructiveProfileActionsRemainExplicitlyConfirmed() {
         val profile = File(screenPaths[3]).readText()
+
+        assertTrue(profile.contains("showSignOutConfirmation"))
+        assertTrue(profile.contains("confirm_profile_sign_out"))
+        assertTrue(profile.contains("cancel_profile_sign_out"))
+        assertFalse(
+            "Sign-out CTA must not invoke signOut directly",
+            profile.contains("onClick = viewModel::signOut")
+        )
+
         assertTrue(profile.contains("showDisconnectConfirmation"))
         assertTrue(profile.contains("confirm_disconnect_document_source"))
         assertTrue(profile.contains("cancel_disconnect_document_source"))
         assertFalse(
-            "Disconnect CTA must not call the repository action directly",
+            "Disconnect CTA must not call disconnect directly",
             profile.contains("onClick = viewModel::disconnectGmail")
         )
+    }
+
+    @Test
+    fun savingsSubmissionExposesProgressAndBlocksDuplicateActions() {
+        val savings = File(screenPaths[2]).readText()
+        assertTrue(savings.contains("actionSubmitting"))
+        assertTrue(savings.contains("savings_action_submitting"))
+        assertTrue(savings.contains("actionEnabled = !actionSubmitting"))
+        assertTrue(savings.contains("enabled = actionEnabled"))
+        assertTrue(savings.contains("if (actionSubmitting) return@SavingsActionDialog"))
     }
 
     @Test
