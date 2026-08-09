@@ -35,13 +35,13 @@ object CustomerPresentationPolicy {
         val raw = rawStatus.orEmpty().trim()
         if (raw.isBlank()) return "המידע מתעדכן"
         val upper = raw.uppercase()
-        if (containsInternalSignal(raw, upper)) return "המידע מתעדכן"
         if (upper.contains("UNVERIFIED") || upper.contains("PENDING") || upper.contains("PROCESSING")) {
             return "נמצא בבדיקה"
         }
         if (upper.contains("FAILED") || upper.contains("ERROR") || upper.contains("EXCEPTION")) {
             return "לא הצלחנו לעדכן כרגע"
         }
+        if (containsInternalSignal(raw, upper)) return "המידע מתעדכן"
         return raw.take(120)
     }
 
