@@ -9,7 +9,11 @@ $ProjectId = "clickandsaveai-staging"
 $ExpectedStreamBranch = "origin/agent/ai-native-financial-core"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $FirebaseCmd = Join-Path $env:APPDATA "npm\firebase.cmd"
-$NpmCmd = (Get-Command npm.cmd -ErrorAction SilentlyContinue)?.Source
+$NpmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
+$NpmCmd = $null
+if ($NpmCommand) {
+    $NpmCmd = $NpmCommand.Source
+}
 $WorktreeRoot = Join-Path $env:TEMP ("ClickAndSaveAI-staging-" + $SourceSha.Substring(0, [Math]::Min(8, $SourceSha.Length)))
 $LocalStagingEnv = Join-Path $RepoRoot "functions\.env.clickandsaveai-staging"
 
