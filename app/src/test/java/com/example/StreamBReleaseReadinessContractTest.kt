@@ -67,6 +67,7 @@ class StreamBReleaseReadinessContractTest {
             "StreamBAccessibilityContractTest.kt",
             "StreamBConsentPrivacyContractTest.kt",
             "StreamBBoundaryContractTest.kt",
+            "StreamBManagerBlockerContractTest.kt",
             "StreamBPostRebaseContractTest.kt",
             "StreamBWorkstreamBoundaryContractTest.kt"
         ).forEach { fileName ->
