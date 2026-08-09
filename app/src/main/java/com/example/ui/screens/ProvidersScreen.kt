@@ -39,7 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.example.data.repository.BackendRepository
 import com.example.data.repository.FinancialHomeResult
 import com.example.data.repository.FinancialOpportunity
@@ -48,6 +47,7 @@ import com.example.ui.CustomerPresentationPolicy
 import com.example.ui.FinancialUiState
 import com.example.ui.FinancialUiStatePolicy
 import com.example.ui.MainViewModel
+import com.example.ui.theme.FinancialDesignTokens
 import com.example.ui.theme.TechBluePrimary
 import kotlinx.coroutines.launch
 
@@ -99,22 +99,22 @@ fun ProvidersScreen(viewModel: MainViewModel) {
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = savingsScreenPadding(),
+            verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.sectionSpacing)
         ) {
             item {
                 Card(
                     modifier = Modifier.testTag("savings_screen_intro"),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                    shape = RoundedCornerShape(22.dp)
+                    shape = RoundedCornerShape(FinancialDesignTokens.cardRadius)
                 ) {
                     Column(
-                        modifier = Modifier.padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
+                        verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = TechBluePrimary)
-                            Spacer(modifier = Modifier.size(8.dp))
+                            Spacer(modifier = Modifier.size(FinancialDesignTokens.cardSpacing))
                             Text(
                                 "הזדמנויות החיסכון שלך",
                                 style = MaterialTheme.typography.titleLarge,
@@ -195,11 +195,27 @@ fun ProvidersScreen(viewModel: MainViewModel) {
             if (hasError) {
                 item {
                     val message = FinancialUiStatePolicy.message(FinancialUiState.ERROR)
-                    MessageCard(
-                        title = message.title,
-                        body = message.body,
-                        testTag = "savings_error_state"
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)) {
+                        MessageCard(
+                            title = message.title,
+                            body = message.body,
+                            testTag = "savings_error_state"
+                        )
+                        TextButton(
+                            onClick = {
+                                hasError = false
+                                actionMessage = ""
+                                financialHome = null
+                                refreshKey += 1
+                            },
+                            enabled = !actionSubmitting,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("savings_retry_refresh")
+                        ) {
+                            Text("נסה שוב")
+                        }
+                    }
                 }
             }
         }
@@ -270,11 +286,11 @@ private fun OpportunityCard(
 
     Card(
         modifier = Modifier.testTag("savings_opportunity_${opportunity.id}"),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(FinancialDesignTokens.cardRadius)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -282,7 +298,7 @@ private fun OpportunityCard(
                     contentDescription = null,
                     tint = TechBluePrimary
                 )
-                Spacer(modifier = Modifier.size(8.dp))
+                Spacer(modifier = Modifier.size(FinancialDesignTokens.cardSpacing))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         "${opportunity.providerName} • ${opportunity.category}",
@@ -400,7 +416,7 @@ private fun SavingsActionDialog(
         onDismissRequest = onDismiss,
         title = { Text("אישור פנייה להצעה") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)) {
                 Text(
                     "נעביר לנותן השירות רק את פרטי הקשר הדרושים ואת ההצעה שבחרת. תוכן תיבת הדואר ותמונת ההוצאות המלאה שלך אינם נשלחים."
                 )
@@ -468,14 +484,20 @@ private fun MessageCard(
 ) {
     Card(
         modifier = Modifier.testTag(testTag),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
+            verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)
+        ) {
             if (showProgress) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Spacer(modifier = Modifier.size(10.dp))
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(FinancialDesignTokens.cardRadius),
+                        strokeWidth = FinancialDesignTokens.compactSpacing / 3
+                    )
+                    Spacer(modifier = Modifier.size(FinancialDesignTokens.cardSpacing))
                     Text(title, fontWeight = FontWeight.Bold)
                 }
             } else {
@@ -485,5 +507,12 @@ private fun MessageCard(
         }
     }
 }
+
+private fun savingsScreenPadding() = PaddingValues(
+    start = FinancialDesignTokens.screenHorizontalPadding,
+    top = FinancialDesignTokens.screenTopPadding,
+    end = FinancialDesignTokens.screenHorizontalPadding,
+    bottom = FinancialDesignTokens.screenBottomNavigationClearance
+)
 
 private fun money(value: Double): String = "₪${String.format("%.2f", value)}"
