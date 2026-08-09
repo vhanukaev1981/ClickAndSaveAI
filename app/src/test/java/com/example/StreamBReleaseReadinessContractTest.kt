@@ -52,6 +52,9 @@ class StreamBReleaseReadinessContractTest {
         assertTrue(releaseGate.contains("exact green SHA"))
         assertTrue(releaseGate.contains("real Android device"))
         assertTrue(releaseGate.contains("Historical green CI does not validate a newer HEAD"))
+        assertTrue(releaseGate.contains("dedicated savings-success green semantic"))
+        assertTrue(releaseGate.contains("Authorization failures must remain customer-safe"))
+        assertTrue(releaseGate.contains("StreamBDeviceE2EContractTest"))
     }
 
     @Test
