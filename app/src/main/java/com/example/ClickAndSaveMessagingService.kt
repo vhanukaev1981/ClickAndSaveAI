@@ -19,7 +19,6 @@ import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 private const val PUSH_CHANNEL_ID = "savings_opportunities"
@@ -48,6 +47,8 @@ object PushRegistration {
 }
 
 class ClickAndSaveMessagingService : FirebaseMessagingService() {
+    // This is an acceleration path only. Android may reclaim the process after an FCM
+    // callback; authoritative reconciliation is guaranteed again on authenticated startup.
     private val refreshScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onNewToken(token: String) {
@@ -70,11 +71,6 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
         showNotification(title, body)
     }
 
-    override fun onDestroy() {
-        refreshScope.cancel()
-        super.onDestroy()
-    }
-
     private fun refreshObservedBillsFromBackend() {
         if (FirebaseAuth.getInstance().currentUser == null) return
         val shoppingRepository = ShoppingRepository(AppDatabase.getDatabase(applicationContext))
@@ -82,8 +78,8 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
         refreshScope.launch {
             runCatching { observedBillsRepository.refreshObservedBills() }
                 .onFailure { error ->
-                    // The push notification remains useful even when the lightweight local
-                    // reconciliation is temporarily unavailable. App startup will retry it.
+                    // The push notification remains useful even when this best-effort local
+                    // reconciliation is unavailable. Authenticated app startup retries it.
                     Log.w("ObservedBillsRefresh", "NEW_INVOICE snapshot refresh failed", error)
                 }
         }
