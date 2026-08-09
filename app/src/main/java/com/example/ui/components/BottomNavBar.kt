@@ -20,6 +20,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
@@ -93,10 +95,10 @@ private fun FinancialNavItem(
         label = { Text(label) },
         alwaysShowLabel = true,
         colors = navColors(),
-        modifier = Modifier.testTag(testTag)
+        modifier = Modifier
+            .testTag(testTag)
+            .semantics { this.contentDescription = contentDescription }
     )
-    @Suppress("UNUSED_VARIABLE")
-    val accessibilityLabel = contentDescription
 }
 
 @Composable
