@@ -29,6 +29,15 @@ class SettingsProductContractTest {
         assertFalse(settings.contains("Toast.makeText"))
         assertTrue(settings.contains("הם לא מבטיחים תוצאה"))
         assertTrue(settings.contains("ההמלצה עדיין תתבסס על התאמה, מחיר ותנאים שניתן לאמת"))
+        assertTrue(settings.contains("autoSwitch = false"))
+    }
+
+    @Test
+    fun saveIsEnabledOnlyForValidUnsavedChanges() {
+        val settings = File(settingsPath).readText()
+
+        assertTrue(settings.contains("enabled = canSave && hasUnsavedChanges"))
+        assertTrue(settings.contains("currentSignature != persistedSignature"))
     }
 
     @Test
@@ -55,6 +64,14 @@ class SettingsProductContractTest {
         ).forEach { tag ->
             assertTrue("Settings lost preference hook $tag", settings.contains(tag))
         }
+    }
+
+    @Test
+    fun everyPreferenceOptionGetsDeterministicE2EHook() {
+        val settings = File(settingsPath).readText()
+
+        assertTrue(settings.contains("options.forEachIndexed { index, option ->"))
+        assertTrue(settings.contains("testTag(\"${'$'}{testTag}_option_${'$'}index\")"))
     }
 
     @Test
