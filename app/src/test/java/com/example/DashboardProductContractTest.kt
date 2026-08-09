@@ -61,4 +61,26 @@ class DashboardProductContractTest {
         assertFalse(dashboard.contains("recurringServiceCount ?: invoices.size"))
         assertTrue(dashboard.contains("לא בהכרח חיוב חוזר"))
     }
+
+    @Test
+    fun dashboardUsesSharedFinancialDesignSystem() {
+        val dashboard = File(dashboardPath).readText()
+
+        listOf(
+            "FinancialDesignTokens.screenHorizontalPadding",
+            "FinancialDesignTokens.screenTopPadding",
+            "FinancialDesignTokens.screenBottomNavigationClearance",
+            "FinancialDesignTokens.sectionSpacing",
+            "FinancialDesignTokens.cardRadius",
+            "FinancialDesignTokens.cardPadding",
+            "FinancialDesignTokens.heroRadius",
+            "FinancialDesignTokens.heroPadding",
+            "dashboardScreenPadding()"
+        ).forEach { token ->
+            assertTrue("Dashboard lost shared financial design token $token", dashboard.contains(token))
+        }
+
+        assertFalse(dashboard.contains("PaddingValues(start = 16.dp"))
+        assertFalse(dashboard.contains("bottom = 96.dp"))
+    }
 }
