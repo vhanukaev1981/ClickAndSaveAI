@@ -11,20 +11,42 @@ permissions:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      STAGING_GOOGLE_SERVICES_JSON_B64: ${{ secrets.STAGING_GOOGLE_SERVICES_JSON_B64 }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Restore staging Firebase config
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$STAGING_GOOGLE_SERVICES_JSON_B64" ]]; then
+            echo 'STAGING_GOOGLE_SERVICES_JSON_B64 is required for diagnostics.' >&2
+            exit 1
+          fi
+          printf '%s' "$STAGING_GOOGLE_SERVICES_JSON_B64" | base64 --decode > app/google-services.json
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install required Android SDK packages
+        run: sdkmanager 'platforms;android-36.1' 'build-tools;36.0.0'
+
+      - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.3.1'
+
       - name: Run Android unit tests with diagnostics
         id: tests
         continue-on-error: true
-        run: gradle testDebugUnitTest --stacktrace --info
+        run: gradle --no-daemon testDebugUnitTest --stacktrace --info
+
       - name: Emit failing JUnit assertions
         if: always()
         shell: bash
@@ -53,6 +75,7 @@ jobs:
                   message = (node.attrib.get('message') or (node.text or '')).strip().replace('\n', ' ')[:1500]
                   print(f'::error file={path}::{cls}.{name}: {message}')
           PY
+
       - name: Upload unit-test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -63,6 +86,7 @@ jobs:
           path: |
             app/build/test-results/testDebugUnitTest/**
             app/build/reports/tests/testDebugUnitTest/**
+
       - name: Fail if unit tests failed
         if: steps.tests.outcome != 'success'
         run: exit 1
