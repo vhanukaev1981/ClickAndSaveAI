@@ -284,7 +284,7 @@ fun SettingsScreen(
                     )
                     savedSignature = currentSignature
                 },
-                enabled = canSave,
+                enabled = canSave && hasUnsavedChanges,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("save_savings_preferences")
@@ -337,13 +337,14 @@ private fun PreferencePicker(
             Text(selected.ifBlank { "לא נבחר" })
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { option ->
+            options.forEachIndexed { index, option ->
                 DropdownMenuItem(
                     text = { Text(option) },
                     onClick = {
                         onSelected(option)
                         expanded = false
-                    }
+                    },
+                    modifier = Modifier.testTag("${testTag}_option_$index")
                 )
             }
         }
