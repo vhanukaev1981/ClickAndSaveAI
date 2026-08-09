@@ -16,7 +16,10 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 - No customer-facing `lead`, CRM, Firebase, App Check, Gmail scope code, internal ID or backend exception is visible.
 - `bills_monthly_overview` shows identified spend only; it does not claim unverified savings.
 - Manual add (`add_manual_bill`) is secondary and functional.
+- Saving a valid manual bill closes the dialog and `bills_action_feedback` confirms the bill was added.
 - Delete requires explicit confirmation (`confirm_delete_bill` / `cancel_delete_bill`).
+- Confirming delete removes the bill from the visible list and `bills_action_feedback` confirms removal.
+- Cancelling delete leaves the bill unchanged.
 - Category filters remain usable in RTL.
 
 ## Savings
@@ -28,12 +31,20 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 - `accept_savings_*` opens the explicit consent form.
 - `submit_savings_request` is disabled until required contact data and consent are present.
 - The consent copy states that mailbox content and the full spending picture are not sent.
-- Raw backend errors never appear; `savings_error_state` uses generic customer-safe wording.
+- After submission starts, `savings_action_submitting` is visible and all opportunity action buttons are disabled until the request finishes.
+- Repeated taps cannot create a second in-flight submission from the same UI state.
+- Success shows `savings_action_success`; failure shows customer-safe `savings_error_state` without raw backend text.
 
 ## Profile / privacy / preferences
 - `profile_screen` contains account, savings goals/preferences and privacy — no permanent technical Gmail card.
+- `profile_sign_out` does not sign out immediately; it opens a confirmation dialog.
+- `cancel_profile_sign_out` keeps the session active.
+- `confirm_profile_sign_out` invokes the existing sign-out action only after explicit confirmation.
 - `open_savings_preferences` opens the preferences screen.
-- `settings_back` returns to Profile.
+- `settings_back` returns directly only when there are no unsaved changes.
+- After editing any preference without saving, `settings_back` opens the unsaved-changes dialog.
+- `keep_editing_preferences` closes the dialog and preserves edits.
+- `discard_preferences_changes` exits without saving the edited values.
 - `monthly_savings_goal` and `minimum_savings_threshold` accept only bounded numeric input.
 - `preference_electricity`, `preference_cellular`, `preference_internet`, `preference_insurance` and `preference_streaming` each open and select a value.
 - `save_savings_preferences` persists the current choices without authorizing any provider switch.
@@ -54,4 +65,4 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 - Every bottom navigation destination keeps at least the shared 48dp minimum touch target.
 
 ## Acceptance rule
-A Stream B build is accepted only if the app feels like one coherent financial product: spend is shown as spend, verified savings as verified savings, under-review states do not invent money, every visible CTA works, destructive privacy actions require confirmation, and implementation/business terminology remains behind the scenes.
+A Stream B build is accepted only if the app feels like one coherent financial product: spend is shown as spend, verified savings as verified savings, under-review states do not invent money, every visible CTA works, destructive account/privacy actions require confirmation, in-flight actions cannot be double-submitted, unsaved edits are protected, and implementation/business terminology remains behind the scenes.
