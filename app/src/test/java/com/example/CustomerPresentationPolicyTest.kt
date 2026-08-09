@@ -16,16 +16,23 @@ class CustomerPresentationPolicyTest {
     }
 
     @Test
-    fun positiveMonthlySavingProducesCustomerFacingLabel() {
+    fun positiveMonthlyAndAnnualSavingProduceCustomerFacingLabel() {
         val label = CustomerPresentationPolicy.verifiedSavingsLabel(25.0, 300.0)
         assertTrue(label.orEmpty().contains("₪25.00"))
         assertTrue(label.orEmpty().contains("₪300.00"))
     }
 
     @Test
-    fun annualSavingFallsBackToVerifiedMonthlyTimesTwelve() {
+    fun missingAnnualSavingShowsVerifiedMonthlyOnly() {
         val label = CustomerPresentationPolicy.verifiedSavingsLabel(25.0, null)
-        assertTrue(label.orEmpty().contains("₪300.00"))
+        assertEquals("אפשר לחסוך ₪25.00 בחודש", label)
+        assertFalse(label.orEmpty().contains("₪300.00"))
+        assertFalse(label.orEmpty().contains("בשנה"))
+    }
+
+    @Test
+    fun nonPositiveAnnualSavingIsNotInventedFromMonthlySaving() {
+        assertEquals("אפשר לחסוך ₪25.00 בחודש", CustomerPresentationPolicy.verifiedSavingsLabel(25.0, 0.0))
     }
 
     @Test
