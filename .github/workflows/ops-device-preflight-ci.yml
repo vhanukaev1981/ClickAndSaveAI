@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - ops/staging-device-preflight
+      - ops/redact-e2e-secrets
     paths:
       - scripts/staging-device-preflight.ps1
       - .github/workflows/ops-device-preflight-ci.yml
@@ -37,7 +38,7 @@ jobs:
             exit 1
           }
 
-      - name: Enforce locked E2E artifact and package guards
+      - name: Enforce locked E2E artifact, privacy and package guards
         shell: bash
         run: |
           set -euo pipefail
@@ -50,6 +51,11 @@ jobs:
           grep -Fq 'Get-FileHash -Algorithm SHA256' "$SCRIPT"
           grep -Fq 'logcat -c' "$SCRIPT"
           grep -Fq 'force-stop' "$SCRIPT"
+          grep -Fq 'Redact-SensitiveLogLine' "$SCRIPT"
+          grep -Fq '[REDACTED_APP_CHECK_SECRET]' "$SCRIPT"
+          grep -Fq '[REDACTED_TOKEN]' "$SCRIPT"
+          grep -Fq '[REDACTED_JWT]' "$SCRIPT"
+          grep -Fq 'credentials redacted' "$SCRIPT"
 
           if grep -Fq 'uninstall' "$SCRIPT"; then
             echo 'Device preflight must not uninstall the app or destroy local E2E state.' >&2
