@@ -25,6 +25,34 @@ jobs:
         id: tests
         continue-on-error: true
         run: gradle testDebugUnitTest --stacktrace --info
+      - name: Emit failing JUnit assertions
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          roots = list(Path('app/build/test-results/testDebugUnitTest').glob('TEST-*.xml'))
+          if not roots:
+              print('::warning::No JUnit XML files were produced.')
+          for path in roots:
+              try:
+                  root = ET.parse(path).getroot()
+              except Exception as exc:
+                  print(f'::warning file={path}::Could not parse JUnit XML: {exc}')
+                  continue
+              for case in root.findall('.//testcase'):
+                  failure = case.find('failure')
+                  error = case.find('error')
+                  node = failure if failure is not None else error
+                  if node is None:
+                      continue
+                  cls = case.attrib.get('classname', '')
+                  name = case.attrib.get('name', '')
+                  message = (node.attrib.get('message') or (node.text or '')).strip().replace('\n', ' ')[:1500]
+                  print(f'::error file={path}::{cls}.{name}: {message}')
+          PY
       - name: Upload unit-test reports
         if: always()
         uses: actions/upload-artifact@v4
