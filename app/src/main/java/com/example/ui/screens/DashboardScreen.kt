@@ -92,14 +92,33 @@ fun DashboardScreen(
         (it.potentialMonthlySaving ?: 0.0) > 0.0 && it.matchedOffer != null
     }
     val verifiedMonthlySavings = verifiedOpportunities.sumOf { it.potentialMonthlySaving ?: 0.0 }
-    val verifiedAnnualSavings = verifiedOpportunities.sumOf {
-        it.potentialAnnualSaving?.takeIf { annual -> annual > 0.0 }
-            ?: ((it.potentialMonthlySaving ?: 0.0) * 12.0)
+    val verifiedAnnualValues = verifiedOpportunities.mapNotNull {
+        it.potentialAnnualSaving?.takeIf { annual -> annual.isFinite() && annual > 0.0 }
     }
-    val observedMonthlySpend = financialHome?.context?.observedRecurringMonthlySpend
-        ?.takeIf { it > 0.0 }
-        ?: localTotalMonthlyCost
-    val recurringServiceCount = financialHome?.context?.recurringServiceCount ?: invoices.size
+    val verifiedAnnualSavings = if (
+        verifiedOpportunities.isNotEmpty() && verifiedAnnualValues.size == verifiedOpportunities.size
+    ) {
+        verifiedAnnualValues.sum()
+    } else {
+        null
+    }
+
+    val authoritativeRecurringSpend = financialHome?.context?.observedRecurringMonthlySpend
+        ?.takeIf { it.isFinite() && it > 0.0 }
+    val localObservedSpend = localTotalMonthlyCost.takeIf { it.isFinite() && it > 0.0 }
+    val displayedMonthlySpend = authoritativeRecurringSpend ?: localObservedSpend
+    val recurringServiceCount = financialHome?.context?.recurringServiceCount
+    val spendTitle = if (authoritativeRecurringSpend != null) {
+        "הוצאה חודשית חוזרת"
+    } else {
+        "חיובים חודשיים שנצפו"
+    }
+    val spendSupporting = when {
+        authoritativeRecurringSpend != null -> "שירותים חוזרים שאומתו"
+        localObservedSpend != null -> "מהחשבונות שנקלטו; לא בהכרח חיוב חוזר"
+        else -> "ממתינים לנתונים"
+    }
+
     val categoryTotals = invoices
         .groupBy { it.category.ifBlank { "אחר" } }
         .mapValues { (_, items) -> items.sumOf { it.monthlyCost } }
@@ -168,15 +187,19 @@ fun DashboardScreen(
             ) {
                 MetricCard(
                     modifier = Modifier.weight(1f),
-                    title = "הוצאה חודשית",
-                    value = money(observedMonthlySpend),
-                    supporting = "חיובים חוזרים שזוהו"
+                    title = spendTitle,
+                    value = displayedMonthlySpend?.let(::money) ?: "—",
+                    supporting = spendSupporting
                 )
                 MetricCard(
                     modifier = Modifier.weight(1f),
-                    title = "שירותים במעקב",
-                    value = recurringServiceCount.toString(),
-                    supporting = "נבדקים אוטומטית"
+                    title = "שירותים חוזרים",
+                    value = recurringServiceCount?.toString() ?: "—",
+                    supporting = if (recurringServiceCount == null) {
+                        "ממתינים לניתוח"
+                    } else {
+                        "שאומתו כחוזרים"
+                    }
                 )
             }
         }
@@ -485,13 +508,13 @@ private fun InitialGmailOnboardingCard(
 
 @Composable
 private fun SavingsHeroCard(
-    annualSavings: Double,
+    annualSavings: Double?,
     monthlySavings: Double,
     opportunities: Int,
     onOpenSavings: () -> Unit
 ) {
     val verified = opportunities > 0 && monthlySavings > 0.0
-    val displayAnnual = annualSavings.takeIf { it > 0.0 } ?: (monthlySavings * 12.0)
+    val verifiedAnnual = annualSavings?.takeIf { it.isFinite() && it > 0.0 }
     Card(
         onClick = onOpenSavings,
         modifier = Modifier.testTag("dashboard_savings_hero"),
@@ -512,16 +535,20 @@ private fun SavingsHeroCard(
                 )
             }
             Text(
-                if (verified) money(displayAnnual) else "עדיין בבדיקה",
+                when {
+                    !verified -> "עדיין בבדיקה"
+                    verifiedAnnual != null -> money(verifiedAnnual)
+                    else -> money(monthlySavings)
+                },
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimary
             )
             Text(
-                if (verified) {
-                    "בשנה • ${money(monthlySavings)} בחודש"
-                } else {
-                    "נציג כאן סכום רק אחרי שנמצא ונאמת חיסכון אמיתי"
+                when {
+                    !verified -> "נציג כאן סכום רק אחרי שנמצא ונאמת חיסכון אמיתי"
+                    verifiedAnnual != null -> "בשנה • ${money(monthlySavings)} בחודש"
+                    else -> "בחודש • חיסכון שנתי יוצג רק לאחר אימות"
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimary
