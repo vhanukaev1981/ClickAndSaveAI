@@ -68,6 +68,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
     val scope = rememberCoroutineScope()
     var financialHome by remember { mutableStateOf<FinancialHomeResult?>(null) }
     var loading by remember { mutableStateOf(false) }
+    var actionIntentStarting by remember { mutableStateOf(false) }
     var actionSubmitting by remember { mutableStateOf(false) }
     var hasError by remember { mutableStateOf(false) }
     var selectedOpportunity by remember { mutableStateOf<FinancialOpportunity?>(null) }
@@ -162,10 +163,34 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                     items(opportunities, key = { it.id }) { opportunity ->
                         OpportunityCard(
                             opportunity = opportunity,
-                            actionEnabled = !actionSubmitting,
+                            actionEnabled = !actionIntentStarting && !actionSubmitting,
                             onAccept = {
-                                if (!actionSubmitting && opportunity.actionMode == IN_APP_PROVIDER_REQUEST) {
-                                    selectedOpportunity = opportunity
+                                if (
+                                    !actionIntentStarting &&
+                                    !actionSubmitting &&
+                                    opportunity.actionMode == IN_APP_PROVIDER_REQUEST
+                                ) {
+                                    val displayedOfferId = opportunity.matchedOffer?.offerId.orEmpty()
+                                    if (displayedOfferId.isBlank()) {
+                                        hasError = true
+                                    } else {
+                                        actionIntentStarting = true
+                                        actionMessage = ""
+                                        hasError = false
+                                        scope.launch {
+                                            runCatching {
+                                                actionRepository.recordSavingsActionStarted(
+                                                    opportunityId = opportunity.id,
+                                                    expectedOfferId = displayedOfferId
+                                                )
+                                            }.onSuccess {
+                                                selectedOpportunity = opportunity
+                                            }.onFailure {
+                                                hasError = true
+                                            }
+                                            actionIntentStarting = false
+                                        }
+                                    }
                                 }
                             }
                         )
@@ -173,6 +198,16 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                 }
             }
 
+            if (actionIntentStarting) {
+                item {
+                    MessageCard(
+                        title = "בודקים שההצעה עדיין זמינה",
+                        body = "מאמתים את ההצעה שבחרת לפני שנבקש ממך אישור להעברת פרטי קשר.",
+                        testTag = "savings_action_starting",
+                        showProgress = true
+                    )
+                }
+            }
             if (actionSubmitting) {
                 item {
                     MessageCard(
@@ -215,6 +250,11 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                 onSubmit = { name, phone, email ->
                     if (actionSubmitting) return@SavingsActionDialog
                     val displayedOfferId = opportunity.matchedOffer?.offerId.orEmpty()
+                    if (displayedOfferId.isBlank()) {
+                        selectedOpportunity = null
+                        hasError = true
+                        return@SavingsActionDialog
+                    }
                     selectedOpportunity = null
                     actionMessage = ""
                     hasError = false
@@ -231,7 +271,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                         }.onSuccess { result ->
                             val savingLabel = CustomerPresentationPolicy.verifiedSavingsLabel(
                                 result.potentialMonthlySaving,
-                                result.potentialMonthlySaving * 12.0
+                                result.potentialAnnualSaving
                             ) ?: "הבקשה נשמרה וההצעה תיבדק שוב לפני המשך הטיפול."
                             actionMessage = "הבקשה להצעה של ${opportunity.matchedOffer?.providerName.orEmpty()} נקלטה. $savingLabel"
                             hasError = false
@@ -347,7 +387,7 @@ private fun OpportunityCard(
                                 .fillMaxWidth()
                                 .testTag("accept_savings_${opportunity.id}")
                         ) {
-                            Text(if (actionEnabled) "אני רוצה לחסוך ${money(monthlySaving)} בחודש" else "הבקשה נשלחת…")
+                            Text(if (actionEnabled) "אני רוצה לחסוך ${money(monthlySaving)} בחודש" else "הבקשה נבדקת…")
                         }
                     }
                     else -> {
