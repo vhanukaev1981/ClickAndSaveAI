@@ -55,6 +55,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
     var selectedCategory by remember { mutableStateOf("הכל") }
     var showAddDialog by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<InvoiceItem?>(null) }
+    var actionFeedback by remember { mutableStateOf<String?>(null) }
 
     val categories = listOf("הכל") + invoices
         .map { it.category.trim() }
@@ -77,6 +78,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
             onDismiss = { showAddDialog = false },
             onAdd = { provider, category, cost ->
                 viewModel.addManualInvoice(provider, category, cost, "", 0.0, 0.0)
+                actionFeedback = "החשבון של ${provider.trim()} נוסף לתמונה החודשית שלך."
                 showAddDialog = false
             }
         )
@@ -88,6 +90,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
             onDismiss = { pendingDelete = null },
             onConfirm = {
                 viewModel.deleteInvoice(invoice.id)
+                actionFeedback = "החשבון של ${invoice.providerName} הוסר מהתצוגה."
                 pendingDelete = null
             }
         )
@@ -143,7 +146,10 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                             )
                         }
                         OutlinedButton(
-                            onClick = { showAddDialog = true },
+                            onClick = {
+                                actionFeedback = null
+                                showAddDialog = true
+                            },
                             modifier = Modifier.testTag("add_manual_bill")
                         ) {
                             Icon(Icons.Default.Add, contentDescription = null)
@@ -156,6 +162,25 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                         "החשבונות כאן מתארים את ההוצאות שזוהו. סכומי חיסכון מוצגים באזור החיסכון רק לאחר שנמצאה הצעה מתאימה שניתן לאמת.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        actionFeedback?.let { feedback ->
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("bills_action_feedback"),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Text(
+                        feedback,
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
@@ -226,7 +251,10 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
             items(filteredInvoices, key = { it.id }) { invoice ->
                 InvoiceCard(
                     invoice = invoice,
-                    onDelete = { pendingDelete = invoice }
+                    onDelete = {
+                        actionFeedback = null
+                        pendingDelete = invoice
+                    }
                 )
             }
         }
