@@ -5,6 +5,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 
 /**
  * Owns privacy-sensitive lifecycle handling for the current device's FCM registration.
@@ -16,26 +17,28 @@ import kotlinx.coroutines.tasks.await
  */
 object PushTokenLifecycle {
     private const val TAG = "PushTokenLifecycle"
+    private const val FCM_OPERATION_TIMEOUT_MS = 5_000L
 
     suspend fun revokeCurrentDeviceBeforeSignOut(): Result<Unit> {
         val messaging = FirebaseMessaging.getInstance()
         val authenticated = FirebaseAuth.getInstance().currentUser != null
 
         var firstFailure: Throwable? = null
-        val token = runCatching { messaging.token.await().trim() }
-            .onFailure { error ->
-                firstFailure = error
-                Log.w(TAG, "Unable to resolve current FCM token before sign-out", error)
-            }
-            .getOrNull()
-            .orEmpty()
+        val token = runCatching {
+            withTimeout(FCM_OPERATION_TIMEOUT_MS) { messaging.token.await().trim() }
+        }.onFailure { error ->
+            firstFailure = error
+            Log.w(TAG, "Unable to resolve current FCM token before sign-out", error)
+        }.getOrNull().orEmpty()
 
         if (authenticated && token.isNotEmpty()) {
             runCatching {
-                FirebaseFunctions.getInstance("europe-west1")
-                    .getHttpsCallable("unregisterPushToken")
-                    .call(mapOf("token" to token))
-                    .await()
+                withTimeout(FCM_OPERATION_TIMEOUT_MS) {
+                    FirebaseFunctions.getInstance("europe-west1")
+                        .getHttpsCallable("unregisterPushToken")
+                        .call(mapOf("token" to token))
+                        .await()
+                }
             }.onFailure { error ->
                 if (firstFailure == null) firstFailure = error
                 Log.w(TAG, "Backend FCM token revocation failed before sign-out", error)
@@ -45,11 +48,12 @@ object PushTokenLifecycle {
         // Always try to delete the local token even when the authenticated backend revocation
         // fails. Firebase will mint a fresh token on a later authenticated session, while the
         // server delivery path already deletes registrations that FCM reports as invalid.
-        runCatching { messaging.deleteToken().await() }
-            .onFailure { error ->
-                if (firstFailure == null) firstFailure = error
-                Log.w(TAG, "Local FCM token deletion failed during sign-out", error)
-            }
+        runCatching {
+            withTimeout(FCM_OPERATION_TIMEOUT_MS) { messaging.deleteToken().await() }
+        }.onFailure { error ->
+            if (firstFailure == null) firstFailure = error
+            Log.w(TAG, "Local FCM token deletion failed during sign-out", error)
+        }
 
         return firstFailure?.let(Result.Companion::failure) ?: Result.success(Unit)
     }
