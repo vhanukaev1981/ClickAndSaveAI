@@ -35,7 +35,8 @@ data class GmailWatchResult(
 data class GmailScanResult(
     val invoices: List<BackendInvoice>,
     val scannedMessages: Int,
-    val importedCount: Int
+    val importedCount: Int,
+    val removedSourceMessageIds: List<String>
 )
 
 data class ProviderLeadRequest(
@@ -227,10 +228,17 @@ class BackendRepository(
                         ?: "UNVERIFIED_GMAIL_IMPORT"
                 )
             }
+        val removedSourceMessageIds = (response["removedSourceMessageIds"] as? List<*>)
+            .orEmpty()
+            .mapNotNull { it as? String }
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .distinct()
         return GmailScanResult(
             invoices = invoices,
             scannedMessages = (response["scannedMessages"] as? Number)?.toInt() ?: 0,
-            importedCount = (response["importedCount"] as? Number)?.toInt() ?: 0
+            importedCount = (response["importedCount"] as? Number)?.toInt() ?: 0,
+            removedSourceMessageIds = removedSourceMessageIds
         )
     }
 
