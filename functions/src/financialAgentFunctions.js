@@ -17,6 +17,7 @@ const {
   shouldRefreshCommerceMatch,
 } = require("./opportunityLifecycle");
 const { shouldRunAgentForImport } = require("./agentTriggerPolicy");
+const { gmailMessageIdFromInvoiceSource } = require("./gmailInvoiceSources");
 
 const db = getFirestore();
 const MAX_SOURCE_DOCS_PER_AGENT_RUN = 500;
@@ -49,16 +50,30 @@ async function loadObservedInvoices(uid) {
   ]);
 
   const bySourceId = new Map();
+  const authoritativeSourcesByMessage = new Map();
   for (const doc of importSnapshot.docs) {
+    const currentSourceIds = new Set();
     for (const invoice of collectInvoicesFromImportDoc(doc.data())) {
       const sourceMessageId = String(invoice.sourceMessageId || "").trim();
-      if (sourceMessageId) bySourceId.set(sourceMessageId, invoice);
+      if (sourceMessageId) {
+        currentSourceIds.add(sourceMessageId);
+        bySourceId.set(sourceMessageId, invoice);
+      }
     }
+    // The audit document is authoritative even when the current parser produced no
+    // invoice. This prevents a stale standalone gmailInvoices document from reviving.
+    authoritativeSourcesByMessage.set(String(doc.id), currentSourceIds);
   }
   for (const doc of invoiceSnapshot.docs) {
     const invoice = doc.data();
     const sourceMessageId = String(invoice.sourceMessageId || "").trim();
-    if (sourceMessageId) bySourceId.set(sourceMessageId, invoice);
+    if (!sourceMessageId) continue;
+    const gmailMessageId = gmailMessageIdFromInvoiceSource(sourceMessageId);
+    const authoritative = authoritativeSourcesByMessage.get(gmailMessageId);
+    if (authoritative && !authoritative.has(sourceMessageId)) {
+      continue;
+    }
+    bySourceId.set(sourceMessageId, invoice);
   }
   return [...bySourceId.values()];
 }
