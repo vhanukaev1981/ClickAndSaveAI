@@ -44,6 +44,9 @@ import com.example.data.repository.BackendRepository
 import com.example.data.repository.FinancialHomeResult
 import com.example.data.repository.FinancialOpportunity
 import com.example.data.repository.OpportunityActionRepository
+import com.example.ui.CustomerPresentationPolicy
+import com.example.ui.FinancialUiState
+import com.example.ui.FinancialUiStatePolicy
 import com.example.ui.MainViewModel
 import com.example.ui.theme.TechBluePrimary
 import kotlinx.coroutines.launch
@@ -65,7 +68,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
     val scope = rememberCoroutineScope()
     var financialHome by remember { mutableStateOf<FinancialHomeResult?>(null) }
     var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf("") }
+    var hasError by remember { mutableStateOf(false) }
     var selectedOpportunity by remember { mutableStateOf<FinancialOpportunity?>(null) }
     var actionMessage by remember { mutableStateOf("") }
     var refreshKey by remember { mutableStateOf(0) }
@@ -73,16 +76,17 @@ fun ProvidersScreen(viewModel: MainViewModel) {
     LaunchedEffect(session.isAuthenticated, isGmailConnected, refreshKey) {
         if (!session.isAuthenticated || !isGmailConnected) {
             financialHome = null
+            hasError = false
             return@LaunchedEffect
         }
         loading = true
         runCatching { backendRepository.getFinancialHome() }
             .onSuccess {
                 financialHome = it
-                error = ""
+                hasError = false
             }
             .onFailure {
-                error = it.localizedMessage ?: "לא ניתן לטעון כרגע את הזדמנויות החיסכון."
+                hasError = true
             }
         loading = false
     }
@@ -99,6 +103,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
         ) {
             item {
                 Card(
+                    modifier = Modifier.testTag("savings_screen_intro"),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                     shape = RoundedCornerShape(22.dp)
                 ) {
@@ -110,13 +115,13 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = TechBluePrimary)
                             Spacer(modifier = Modifier.size(8.dp))
                             Text(
-                                "הזדמנויות ש-Click&SaveAI מצאה",
+                                "הזדמנויות החיסכון שלך",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                         Text(
-                            "המערכת מדרגת לפי הערך עבורך. מעבר מתוך Click&SaveAI זמין רק כשקיים מסלול ספק מאומת שניתן לעקוב אחריו עד להשלמת העסקה.",
+                            "אנחנו בודקים את השירותים שלך ברקע ומציגים חיסכון רק כשההצעה מתאימה וניתנת לאימות. אם אפשר לפנות ישירות עבור ההצעה, תראה כאן פעולה ברורה.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
@@ -126,26 +131,30 @@ fun ProvidersScreen(viewModel: MainViewModel) {
             if (!session.isAuthenticated || !isGmailConnected) {
                 item {
                     MessageCard(
-                        title = "המערכת עדיין לא יכולה לעבוד ברקע",
-                        body = "התחבר וחבר Gmail פעם אחת. לאחר מכן Click&SaveAI תזהה ותבדוק הזדמנויות עבורך אוטומטית."
+                        title = "חיבור אחד כדי להתחיל",
+                        body = "חבר את מקור המסמכים פעם אחת דרך מסך הבית. לאחר מכן הבדיקה ממשיכה אוטומטית ברקע.",
+                        testTag = "savings_requires_connection"
                     )
                 }
             } else if (loading && financialHome == null) {
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
+                    val message = FinancialUiStatePolicy.message(FinancialUiState.LOADING)
+                    MessageCard(
+                        title = message.title,
+                        body = message.body,
+                        testTag = "savings_loading_state",
+                        showProgress = true
+                    )
                 }
             } else {
                 val opportunities = financialHome?.opportunities.orEmpty()
                 if (opportunities.isEmpty()) {
                     item {
+                        val message = FinancialUiStatePolicy.message(FinancialUiState.UNDER_REVIEW)
                         MessageCard(
-                            title = "ה-AI ממשיך לבדוק",
-                            body = "כרגע אין צורך לחפש ידנית. אם יזוהה שירות שניתן לייעל או תימצא הצעה מתאימה, היא תופיע כאן אוטומטית."
+                            title = message.title,
+                            body = message.body,
+                            testTag = "savings_under_review_state"
                         )
                     }
                 } else {
@@ -163,10 +172,23 @@ fun ProvidersScreen(viewModel: MainViewModel) {
             }
 
             if (actionMessage.isNotBlank()) {
-                item { MessageCard(title = "הבקשה נקלטה", body = actionMessage) }
+                item {
+                    MessageCard(
+                        title = "הבקשה נקלטה",
+                        body = actionMessage,
+                        testTag = "savings_action_success"
+                    )
+                }
             }
-            if (error.isNotBlank()) {
-                item { MessageCard(title = "לא ניתן להשלים את הבדיקה", body = error) }
+            if (hasError) {
+                item {
+                    val message = FinancialUiStatePolicy.message(FinancialUiState.ERROR)
+                    MessageCard(
+                        title = message.title,
+                        body = message.body,
+                        testTag = "savings_error_state"
+                    )
+                }
             }
         }
     }
@@ -192,11 +214,15 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                                 contactEmail = email
                             )
                         }.onSuccess { result ->
-                            actionMessage = "יצרנו בקשה מאומתת ל-${opportunity.matchedOffer?.providerName.orEmpty()}. החיסכון שנבדק: ${money(result.potentialMonthlySaving)} בחודש."
-                            error = ""
+                            val savingLabel = CustomerPresentationPolicy.verifiedSavingsLabel(
+                                result.potentialMonthlySaving,
+                                result.potentialMonthlySaving * 12.0
+                            ) ?: "הבקשה נשמרה וההצעה תיבדק שוב לפני המשך הטיפול."
+                            actionMessage = "הבקשה להצעה של ${opportunity.matchedOffer?.providerName.orEmpty()} נקלטה. $savingLabel"
+                            hasError = false
                             refreshKey += 1
-                        }.onFailure { throwable ->
-                            error = throwable.localizedMessage ?: "ההצעה השתנתה, אינה זמינה או שאין כרגע מסלול מעבר מאומת."
+                        }.onFailure {
+                            hasError = true
                         }
                         loading = false
                     }
@@ -214,19 +240,29 @@ private fun OpportunityCard(
     onAccept: () -> Unit
 ) {
     val matched = opportunity.matchedOffer
-    val monthlySaving = opportunity.potentialMonthlySaving
-    val verifiedSaving = matched != null && monthlySaving != null && monthlySaving > 0.0
+    val verifiedLabel = if (matched != null) {
+        CustomerPresentationPolicy.verifiedSavingsLabel(
+            opportunity.potentialMonthlySaving,
+            opportunity.potentialAnnualSaving
+        )
+    } else {
+        null
+    }
+    val monthlySaving = opportunity.potentialMonthlySaving?.takeIf { it > 0.0 }
     val lifecycleLocked = opportunity.status.uppercase() in lockedOpportunityStatuses
     val inAppActionAvailable = opportunity.actionMode == IN_APP_PROVIDER_REQUEST
 
-    Card(shape = RoundedCornerShape(20.dp)) {
+    Card(
+        modifier = Modifier.testTag("savings_opportunity_${opportunity.id}"),
+        shape = RoundedCornerShape(20.dp)
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    if (verifiedSaving) Icons.Default.Verified else Icons.Default.Savings,
+                    if (verifiedLabel != null) Icons.Default.Verified else Icons.Default.Savings,
                     contentDescription = null,
                     tint = TechBluePrimary
                 )
@@ -244,7 +280,7 @@ private fun OpportunityCard(
                 }
             }
 
-            if (verifiedSaving && matched != null) {
+            if (verifiedLabel != null && matched != null && monthlySaving != null) {
                 val effectiveMonthly = matched.effectiveMonthlyPrice ?: matched.monthlyPrice
                 if (effectiveMonthly != null) {
                     Text(
@@ -253,7 +289,7 @@ private fun OpportunityCard(
                     )
                 }
                 Text(
-                    "חיסכון מאומת: ${money(monthlySaving ?: 0.0)} בחודש • ${money(opportunity.potentialAnnualSaving ?: 0.0)} בשנה",
+                    verifiedLabel,
                     color = TechBluePrimary,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -288,13 +324,18 @@ private fun OpportunityCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Button(onClick = onAccept, modifier = Modifier.fillMaxWidth()) {
-                            Text("אני רוצה לחסוך ${money(monthlySaving ?: 0.0)} בחודש")
+                        Button(
+                            onClick = onAccept,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("accept_savings_${opportunity.id}")
+                        ) {
+                            Text("אני רוצה לחסוך ${money(monthlySaving)} בחודש")
                         }
                     }
                     else -> {
                         Text(
-                            "זו ההצעה הטובה ביותר שמצאנו כרגע. מעבר ישיר דרך Click&SaveAI עדיין לא זמין להצעה הזו, ולכן לא נשלח את פרטיך לספק.",
+                            "זו ההצעה הטובה ביותר שמצאנו כרגע. פעולה ישירה מתוך האפליקציה עדיין אינה זמינה להצעה הזו.",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium
                         )
@@ -302,13 +343,13 @@ private fun OpportunityCard(
                 }
             } else {
                 val detectionText = if (opportunity.type == "COMPARE_AFTER_PRICE_INCREASE") {
-                    "זוהתה עליית מחיר של ${String.format("%.1f", opportunity.percentIncrease)}%. Click&SaveAI מחפשת עבורך חלופה מתאימה."
+                    "זוהתה עליית מחיר של ${String.format("%.1f", opportunity.percentIncrease)}%. אנחנו מחפשים עבורך חלופה מתאימה."
                 } else {
-                    "זהו שירות חודשי חוזר. Click&SaveAI בודקת באופן יזום אם קיימת חלופה טובה ומתאימה יותר."
+                    "זהו שירות חודשי חוזר. אנחנו בודקים באופן יזום אם קיימת חלופה טובה ומתאימה יותר."
                 }
                 Text(detectionText, style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "לא נציג סכום חיסכון ולא נפנה לספק עד שתימצא הצעה שניתן לאמת ולהתאים לשירות שלך.",
+                    CustomerPresentationPolicy.underReviewLabel(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -319,8 +360,8 @@ private fun OpportunityCard(
 
 private fun opportunityLifecycleMessage(status: String): String = when (status.uppercase()) {
     "USER_ACCEPTED" -> "הבקשה נשלחה וננעלה להצעה שאישרת."
-    "PROVIDER_PROCESSING" -> "הספק מטפל בבקשה שלך."
-    "ACTIVATED" -> "השירות החדש הופעל. אנחנו ממתינים לאישור סופי של העסקה."
+    "PROVIDER_PROCESSING" -> "הבקשה שלך נמצאת בטיפול."
+    "ACTIVATED" -> "השירות החדש הופעל. אנחנו ממתינים לאישור סופי של השלמת התהליך."
     "COMPLETED" -> "המעבר הושלם והחיסכון נרשם."
     else -> ""
 }
@@ -340,59 +381,89 @@ private fun SavingsActionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("אישור פנייה לספק") },
+        title = { Text("אישור פנייה להצעה") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Text(
-                    "Click&SaveAI תעביר לספק רק את פרטי הקשר הדרושים ואת ההצעה שבחרת. לא נשלח תוכן Gmail."
+                    "נעביר לנותן השירות רק את פרטי הקשר הדרושים ואת ההצעה שבחרת. תוכן תיבת הדואר ותמונת ההוצאות המלאה שלך אינם נשלחים."
                 )
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("שם") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("savings_contact_name")
                 )
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
                     label = { Text("טלפון") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("savings_contact_phone")
                 )
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
                     label = { Text("אימייל") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("savings_contact_email")
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = accepted, onCheckedChange = { accepted = it })
-                    Text("אני מאשר/ת להעביר לספק את פרטי הקשר לצורך קבלת ההצעה.")
+                    Checkbox(
+                        checked = accepted,
+                        onCheckedChange = { accepted = it },
+                        modifier = Modifier.testTag("savings_contact_consent")
+                    )
+                    Text("אני מאשר/ת להעביר את פרטי הקשר לצורך קבלת ההצעה שבחרתי.")
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = { onSubmit(name.trim(), phone.trim(), email.trim()) },
-                enabled = accepted && name.isNotBlank() && phone.isNotBlank() && email.isNotBlank()
+                enabled = accepted && name.isNotBlank() && phone.isNotBlank() && email.isNotBlank(),
+                modifier = Modifier.testTag("submit_savings_request")
             ) {
                 Text("שלח בקשה")
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("ביטול") } }
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("cancel_savings_request")
+            ) { Text("ביטול") }
+        }
     )
 }
 
 @Composable
-private fun MessageCard(title: String, body: String) {
+private fun MessageCard(
+    title: String,
+    body: String,
+    testTag: String = "savings_message_card",
+    showProgress: Boolean = false
+) {
     Card(
+        modifier = Modifier.testTag(testTag),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(title, fontWeight = FontWeight.Bold)
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (showProgress) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.size(10.dp))
+                    Text(title, fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Text(title, fontWeight = FontWeight.Bold)
+            }
             Text(body, style = MaterialTheme.typography.bodyMedium)
         }
     }
