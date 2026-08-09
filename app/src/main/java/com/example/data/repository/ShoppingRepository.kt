@@ -24,6 +24,12 @@ internal fun mergeObservedGmailInvoice(existing: InvoiceItem, incoming: InvoiceI
     )
 }
 
+internal fun normalizeRemovedGmailSourceIds(sourceMessageIds: List<String>): List<String> =
+    sourceMessageIds
+        .map(String::trim)
+        .filter(String::isNotEmpty)
+        .distinct()
+
 class ShoppingRepository(private val db: AppDatabase) {
     val watchlistItems: Flow<List<WatchlistItem>> = db.watchlistDao().getAllWatchlistItems()
     val coupons: Flow<List<CouponItem>> = db.couponDao().getAllCoupons()
@@ -60,6 +66,12 @@ class ShoppingRepository(private val db: AppDatabase) {
                 db.invoiceDao().updateInvoice(mergeObservedGmailInvoice(concurrent, invoice))
             }
         }
+    }
+
+    suspend fun deleteObservedGmailInvoicesBySourceIds(sourceMessageIds: List<String>) {
+        val normalized = normalizeRemovedGmailSourceIds(sourceMessageIds)
+        if (normalized.isEmpty()) return
+        db.invoiceDao().deleteObservedGmailInvoicesBySourceIds(normalized)
     }
 
     suspend fun updateInvoice(invoice: InvoiceItem) = db.invoiceDao().updateInvoice(invoice)
