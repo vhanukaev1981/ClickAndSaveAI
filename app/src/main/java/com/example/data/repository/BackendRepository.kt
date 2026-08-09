@@ -18,6 +18,14 @@ data class GmailConnectionResult(
     val consentVersion: String
 )
 
+data class GmailSyncStatusResult(
+    val connected: Boolean,
+    val storedParserVersion: Int,
+    val activeParserVersion: Int,
+    val upgradeRequired: Boolean,
+    val lookback: String
+)
+
 data class GmailWatchResult(
     val watching: Boolean,
     val historyId: String = "",
@@ -27,7 +35,8 @@ data class GmailWatchResult(
 data class GmailScanResult(
     val invoices: List<BackendInvoice>,
     val scannedMessages: Int,
-    val importedCount: Int
+    val importedCount: Int,
+    val removedSourceMessageIds: List<String>
 )
 
 data class ProviderLeadRequest(
@@ -56,6 +65,86 @@ data class BackendDealAnalysis(
     val requiresVerification: Boolean
 )
 
+data class FinancialRecurringService(
+    val providerName: String,
+    val category: String,
+    val latestMonthlyCost: Double,
+    val observationCount: Int,
+    val observedMonths: Int
+)
+
+data class FinancialCategorySummary(
+    val category: String,
+    val observedMonthlySpend: Double
+)
+
+data class FinancialHomeContext(
+    val observedRecurringMonthlySpend: Double,
+    val recurringServiceCount: Int,
+    val isCompleteHouseholdSpend: Boolean,
+    val sourceCoverage: List<String>,
+    val recurringServices: List<FinancialRecurringService>,
+    val categories: List<FinancialCategorySummary>
+)
+
+data class FinancialInsight(
+    val id: String,
+    val type: String,
+    val providerName: String,
+    val category: String,
+    val currentMonthlyCost: Double,
+    val previousMonthlyCost: Double,
+    val monthlyIncrease: Double,
+    val percentIncrease: Double,
+    val severity: String
+)
+
+data class FinancialMatchedOffer(
+    val offerId: String,
+    val providerName: String,
+    val pricingModel: String,
+    val monthlyPrice: Double,
+    val effectiveMonthlyPrice: Double?,
+    val priceGuaranteedMonths: Int?,
+    val requiredRecurringFees: Double?,
+    val requiredRecurringFeesDescription: String,
+    val oneTimeFees: Double?,
+    val firstYearCost: Double?,
+    val serviceType: String,
+    val verifiedAt: String,
+    val validUntil: String,
+    val userFitScore: Double
+)
+
+data class FinancialOpportunity(
+    val id: String,
+    val type: String,
+    val status: String,
+    val actionMode: String,
+    val providerName: String,
+    val category: String,
+    val serviceType: String,
+    val currentMonthlyCost: Double,
+    val previousMonthlyCost: Double,
+    val monthlyIncrease: Double,
+    val percentIncrease: Double,
+    val potentialMonthlySaving: Double?,
+    val potentialAnnualSaving: Double?,
+    val recommendationAction: String,
+    val matchedOffer: FinancialMatchedOffer?
+)
+
+data class FinancialHomeResult(
+    val context: FinancialHomeContext,
+    val insights: List<FinancialInsight>,
+    val opportunities: List<FinancialOpportunity>
+)
+
+class FinancialHomeUnavailableException(cause: Throwable) : IllegalStateException(
+    "הנתונים הפיננסיים עדיין מתעדכנים. ננסה שוב אוטומטית.",
+    cause
+)
+
 class BackendRepository(
     private val functionsProvider: () -> FirebaseFunctions = {
         FirebaseFunctions.getInstance("europe-west1")
@@ -73,6 +162,21 @@ class BackendRepository(
             connected = response["connected"] as? Boolean ?: false,
             email = response["email"] as? String ?: "",
             consentVersion = response["consentVersion"] as? String ?: ""
+        )
+    }
+
+    suspend fun getGmailSyncStatus(): GmailSyncStatusResult {
+        val response = functions.getHttpsCallable("getGmailSyncStatus")
+            .call()
+            .await()
+            .data
+            .asStringMap()
+        return GmailSyncStatusResult(
+            connected = response["connected"] as? Boolean ?: false,
+            storedParserVersion = (response["storedParserVersion"] as? Number)?.toInt() ?: 0,
+            activeParserVersion = (response["activeParserVersion"] as? Number)?.toInt() ?: 0,
+            upgradeRequired = response["upgradeRequired"] as? Boolean ?: false,
+            lookback = response["lookback"] as? String ?: ""
         )
     }
 
@@ -124,11 +228,113 @@ class BackendRepository(
                         ?: "UNVERIFIED_GMAIL_IMPORT"
                 )
             }
+        val removedSourceMessageIds = (response["removedSourceMessageIds"] as? List<*>)
+            .orEmpty()
+            .mapNotNull { it as? String }
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .distinct()
         return GmailScanResult(
             invoices = invoices,
             scannedMessages = (response["scannedMessages"] as? Number)?.toInt() ?: 0,
-            importedCount = (response["importedCount"] as? Number)?.toInt() ?: 0
+            importedCount = (response["importedCount"] as? Number)?.toInt() ?: 0,
+            removedSourceMessageIds = removedSourceMessageIds
         )
+    }
+
+    suspend fun getFinancialHome(): FinancialHomeResult {
+        val response = try {
+            functions.getHttpsCallable("getFinancialHome").call().await().data.asStringMap()
+        } catch (error: Exception) {
+            throw FinancialHomeUnavailableException(error)
+        }
+        val contextMap = response["context"].asStringMapOrNull().orEmpty()
+        val recurringServices = (contextMap["recurringServices"] as? List<*>)
+            .orEmpty()
+            .mapNotNull { item ->
+                val map = item.asStringMapOrNull() ?: return@mapNotNull null
+                FinancialRecurringService(
+                    providerName = map["providerName"] as? String ?: return@mapNotNull null,
+                    category = map["category"] as? String ?: "",
+                    latestMonthlyCost = (map["latestMonthlyCost"] as? Number)?.toDouble() ?: 0.0,
+                    observationCount = (map["observationCount"] as? Number)?.toInt() ?: 0,
+                    observedMonths = (map["observedMonths"] as? Number)?.toInt() ?: 0
+                )
+            }
+        val categories = (contextMap["categories"] as? List<*>)
+            .orEmpty()
+            .mapNotNull { item ->
+                val map = item.asStringMapOrNull() ?: return@mapNotNull null
+                FinancialCategorySummary(
+                    category = map["category"] as? String ?: return@mapNotNull null,
+                    observedMonthlySpend = (map["observedMonthlySpend"] as? Number)?.toDouble() ?: 0.0
+                )
+            }
+        val context = FinancialHomeContext(
+            observedRecurringMonthlySpend = (contextMap["observedRecurringMonthlySpend"] as? Number)?.toDouble() ?: 0.0,
+            recurringServiceCount = (contextMap["recurringServiceCount"] as? Number)?.toInt() ?: 0,
+            isCompleteHouseholdSpend = contextMap["isCompleteHouseholdSpend"] as? Boolean ?: false,
+            sourceCoverage = (contextMap["sourceCoverage"] as? List<*>)?.map { it.toString() }.orEmpty(),
+            recurringServices = recurringServices,
+            categories = categories
+        )
+        val insights = (response["insights"] as? List<*>)
+            .orEmpty()
+            .mapNotNull { item ->
+                val map = item.asStringMapOrNull() ?: return@mapNotNull null
+                FinancialInsight(
+                    id = map["id"] as? String ?: return@mapNotNull null,
+                    type = map["type"] as? String ?: "",
+                    providerName = map["providerName"] as? String ?: "",
+                    category = map["category"] as? String ?: "",
+                    currentMonthlyCost = (map["currentMonthlyCost"] as? Number)?.toDouble() ?: 0.0,
+                    previousMonthlyCost = (map["previousMonthlyCost"] as? Number)?.toDouble() ?: 0.0,
+                    monthlyIncrease = (map["monthlyIncrease"] as? Number)?.toDouble() ?: 0.0,
+                    percentIncrease = (map["percentIncrease"] as? Number)?.toDouble() ?: 0.0,
+                    severity = map["severity"] as? String ?: "INFO"
+                )
+            }
+        val opportunities = (response["opportunities"] as? List<*>)
+            .orEmpty()
+            .mapNotNull { item ->
+                val map = item.asStringMapOrNull() ?: return@mapNotNull null
+                val matchedMap = map["matchedOffer"].asStringMapOrNull()
+                FinancialOpportunity(
+                    id = map["id"] as? String ?: return@mapNotNull null,
+                    type = map["type"] as? String ?: "",
+                    status = map["status"] as? String ?: "OPEN",
+                    actionMode = map["actionMode"] as? String ?: "VIEW_ONLY",
+                    providerName = map["providerName"] as? String ?: "",
+                    category = map["category"] as? String ?: "",
+                    serviceType = map["serviceType"] as? String ?: "",
+                    currentMonthlyCost = (map["currentMonthlyCost"] as? Number)?.toDouble() ?: 0.0,
+                    previousMonthlyCost = (map["previousMonthlyCost"] as? Number)?.toDouble() ?: 0.0,
+                    monthlyIncrease = (map["monthlyIncrease"] as? Number)?.toDouble() ?: 0.0,
+                    percentIncrease = (map["percentIncrease"] as? Number)?.toDouble() ?: 0.0,
+                    potentialMonthlySaving = (map["potentialMonthlySaving"] as? Number)?.toDouble(),
+                    potentialAnnualSaving = (map["potentialAnnualSaving"] as? Number)?.toDouble(),
+                    recommendationAction = map["recommendationAction"] as? String ?: "",
+                    matchedOffer = matchedMap?.let {
+                        FinancialMatchedOffer(
+                            offerId = it["offerId"] as? String ?: return@let null,
+                            providerName = it["providerName"] as? String ?: "",
+                            pricingModel = it["pricingModel"] as? String ?: "",
+                            monthlyPrice = (it["monthlyPrice"] as? Number)?.toDouble() ?: 0.0,
+                            effectiveMonthlyPrice = (it["effectiveMonthlyPrice"] as? Number)?.toDouble(),
+                            priceGuaranteedMonths = (it["priceGuaranteedMonths"] as? Number)?.toInt(),
+                            requiredRecurringFees = (it["requiredRecurringFees"] as? Number)?.toDouble(),
+                            requiredRecurringFeesDescription = it["requiredRecurringFeesDescription"] as? String ?: "",
+                            oneTimeFees = (it["oneTimeFees"] as? Number)?.toDouble(),
+                            firstYearCost = (it["firstYearCost"] as? Number)?.toDouble(),
+                            serviceType = it["serviceType"] as? String ?: "",
+                            verifiedAt = it["verifiedAt"] as? String ?: "",
+                            validUntil = it["validUntil"] as? String ?: "",
+                            userFitScore = (it["userFitScore"] as? Number)?.toDouble() ?: 0.0
+                        )
+                    }
+                )
+            }
+        return FinancialHomeResult(context, insights, opportunities)
     }
 
     suspend fun disconnectGmail() {

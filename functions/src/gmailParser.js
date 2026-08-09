@@ -1,5 +1,7 @@
 "use strict";
 
+const { extractServiceType, normalizeServiceType } = require("./serviceProfile");
+
 // Prefer amounts next to billing labels before falling back to any currency-looking amount.
 // This reduces false positives from promotional prices that may appear elsewhere in the email.
 const AMOUNT_PATTERNS = [
@@ -30,6 +32,24 @@ const SUPPORTED_CATEGORIES = new Map([
   ["אחר", "אחר"],
   ["other", "אחר"],
 ]);
+
+const INSURANCE_PROVIDERS = new Set([
+  "הראל",
+  "הפניקס",
+  "מגדל",
+  "כלל",
+  "מנורה מבטחים",
+  "AIG",
+  "ביטוח ישיר",
+  "ליברה",
+  "weSure",
+]);
+
+const GENERIC_PROVIDER_LABELS = [
+  /^(?:unknown|unknown provider|provider|service provider|billing provider|vendor|merchant|company)$/i,
+  /^(?:insurance|insurance company|insurance provider|insurer)$/i,
+  /^(?:ספק|ספק לא מזוהה|ספק שזוהה מהודעת gmail|ספק שירות|חברה|בית עסק|חברת ביטוח)$/i,
+];
 
 function firstHeader(headers, name) {
   if (!Array.isArray(headers)) return "";
@@ -161,11 +181,42 @@ function matchProvider(text, includeGenericPartner = false) {
   return providers.find(([, pattern]) => pattern.test(text))?.[0] || null;
 }
 
+function matchStrongProvider(text) {
+  const providers = [
+    ["הראל", /(harel|הראל)/i],
+    ["הפניקס", /(^|\W)(phoenix|fnx)(\W|$)|הפניקס/i],
+    ["מגדל", /(migdal|מגדל)/i],
+    ["כלל", /(clal|כלל\s*(?:ביטוח|insurance))/i],
+    ["מנורה מבטחים", /(menora|מנורה\s*מבטחים|מנורה)/i],
+    ["AIG", /(^|\W)aig(\W|$)/i],
+    ["ביטוח ישיר", /(ביטוח\s*ישיר|direct\s*insurance|555\.co\.il)/i],
+    ["ליברה", /(^|\W)libra(\W|$)|ליברה/i],
+    ["weSure", /(^|\W)wesure(\W|$)|ווישור/i],
+  ];
+  return providers.find(([, pattern]) => pattern.test(text))?.[0] || null;
+}
+
+function knownProviderFromText(text, includeGenericPartner = true) {
+  const normalized = String(text || "").trim();
+  if (!normalized) return null;
+  return matchProvider(normalized, includeGenericPartner) || matchStrongProvider(normalized);
+}
+
+function strongHeaderProvider(from, subject) {
+  return knownProviderFromText(`${from} ${subject}`, true);
+}
+
+function isGenericProviderLabel(value) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return true;
+  return GENERIC_PROVIDER_LABELS.some((pattern) => pattern.test(normalized));
+}
+
 function identifyProvider(from, subject, searchableText) {
-  // Sender/subject are strong brand signals. Body text is a weaker fallback because words such
-  // as the English "partner" can occur generically in unrelated receipts.
-  const strongText = `${from} ${subject}`.toLowerCase();
-  const strongMatch = matchProvider(strongText, true);
+  // Sender/subject are strong brand signals. Insurance brands are intentionally matched only
+  // here so a brand word in arbitrary receipt body text cannot turn an unrelated receipt into
+  // an insurance invoice.
+  const strongMatch = strongHeaderProvider(from, subject);
   if (strongMatch) return strongMatch;
 
   const bodyText = String(searchableText || "").toLowerCase();
@@ -174,6 +225,7 @@ function identifyProvider(from, subject, searchableText) {
 
 function fallbackCategoryForProvider(providerName) {
   if (["סלקום", "פרטנר", "HOT"].includes(providerName)) return "תקשורת";
+  if (INSURANCE_PROVIDERS.has(providerName)) return "ביטוח";
   return null;
 }
 
@@ -182,6 +234,10 @@ function normalizeDocumentCategory(value) {
   if (!normalized) return null;
   if (SUPPORTED_CATEGORIES.has(normalized)) return SUPPORTED_CATEGORIES.get(normalized);
   return identifyCategory(normalized);
+}
+
+function withOptionalServiceType(invoice, serviceType) {
+  return serviceType ? { ...invoice, serviceType } : invoice;
 }
 
 function normalizePdfInvoiceCandidate(candidate, message, sourceDocumentId = "") {
@@ -193,24 +249,43 @@ function normalizePdfInvoiceCandidate(candidate, message, sourceDocumentId = "")
   const from = firstHeader(headers, "From");
   const headerDate = firstHeader(headers, "Date");
   const providerText = String(candidate.providerName || "").trim().slice(0, 160);
-  const detectedProvider = identifyProvider(from, subject, providerText);
-  const providerName = providerText ||
-    (detectedProvider !== "ספק שזוהה מהודעת Gmail" ? detectedProvider : "ספק לא מזוהה");
+  const headerProvider = strongHeaderProvider(from, subject);
+  const pdfKnownProvider = knownProviderFromText(providerText, true);
+
+  let providerName;
+  if (headerProvider && (
+    isGenericProviderLabel(providerText) ||
+    pdfKnownProvider === headerProvider
+  )) {
+    // Strong sender/subject evidence wins over an empty/generic PDF label and also
+    // canonicalizes a PDF spelling variant of the same provider.
+    providerName = headerProvider;
+  } else if (pdfKnownProvider) {
+    // A different explicit known provider in the document may be legitimate (for
+    // example a forwarded invoice), so preserve the document evidence canonically.
+    providerName = pdfKnownProvider;
+  } else if (providerText && !isGenericProviderLabel(providerText)) {
+    providerName = providerText;
+  } else {
+    providerName = headerProvider || "ספק לא מזוהה";
+  }
+
   const category = normalizeDocumentCategory(candidate.category) ||
     fallbackCategoryForProvider(providerName) ||
     "אחר";
   const monthlyCost = Number(candidate.monthlyCost);
+  const serviceType = normalizeServiceType(category, candidate.serviceType);
 
   if (!Number.isFinite(monthlyCost) || monthlyCost <= 0 || monthlyCost >= 1_000_000) return null;
 
-  return {
+  return withOptionalServiceType({
     sourceMessageId: String(sourceDocumentId || message.id),
     providerName,
     category,
     monthlyCost,
     receivedDate: String(candidate.receivedDate || headerDate || "").slice(0, 120),
     verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
-  };
+  }, serviceType);
 }
 
 function parseGmailMessage(message) {
@@ -228,16 +303,18 @@ function parseGmailMessage(message) {
 
   if (!message?.id || amount == null || category == null) return null;
 
-  // Persist only the minimum fields needed for invoice deduplication and display.
+  const serviceType = extractServiceType(category, searchableText);
+
+  // Persist only the minimum fields needed for invoice deduplication, financial context and display.
   // Raw Gmail subject, sender, snippet and body text are deliberately not returned or stored.
-  return {
+  return withOptionalServiceType({
     sourceMessageId: String(message.id),
     providerName,
     category,
     monthlyCost: amount,
     receivedDate: date.slice(0, 120),
     verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
-  };
+  }, serviceType);
 }
 
 module.exports = {

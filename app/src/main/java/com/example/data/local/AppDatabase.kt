@@ -69,6 +69,9 @@ interface InvoiceDao {
     @Query("SELECT * FROM invoice_items ORDER BY dateAdded DESC")
     fun getAllInvoices(): Flow<List<InvoiceItem>>
 
+    @Query("SELECT * FROM invoice_items WHERE sourceMessageId = :sourceMessageId LIMIT 1")
+    suspend fun findBySourceMessageId(sourceMessageId: String): InvoiceItem?
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertInvoice(invoice: InvoiceItem): Long
 
@@ -80,6 +83,9 @@ interface InvoiceDao {
 
     @Query("DELETE FROM invoice_items WHERE id = :id")
     suspend fun deleteInvoice(id: Long)
+
+    @Query("DELETE FROM invoice_items WHERE sourceType = 'GMAIL_READONLY' AND sourceMessageId IN (:sourceMessageIds)")
+    suspend fun deleteObservedGmailInvoicesBySourceIds(sourceMessageIds: List<String>)
 
     @Query("DELETE FROM invoice_items")
     suspend fun deleteAllInvoices()
