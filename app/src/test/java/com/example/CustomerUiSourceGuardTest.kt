@@ -135,7 +135,9 @@ class CustomerUiSourceGuardTest {
             "preference_insurance",
             "preference_streaming",
             "save_savings_preferences",
-            "preferences_saved_confirmation"
+            "preferences_saved_confirmation",
+            "discard_preferences_changes",
+            "keep_editing_preferences"
         ).forEach { tag -> assertTrue("Settings lost E2E hook $tag", settings.contains(tag)) }
     }
 
@@ -179,10 +181,15 @@ class CustomerUiSourceGuardTest {
     }
 
     @Test
-    fun preferenceSaveKeepsVisibleInAppFeedback() {
+    fun preferenceSaveKeepsVisibleInAppFeedbackAndProtectsUnsavedChanges() {
         val settings = File(screenPaths[4]).readText()
         assertTrue(settings.contains("savedSignature"))
         assertTrue(settings.contains("preferences_saved_confirmation"))
+        assertTrue(settings.contains("persistedSignature"))
+        assertTrue(settings.contains("hasUnsavedChanges"))
+        assertTrue(settings.contains("showDiscardConfirmation"))
+        assertTrue(settings.contains("discard_preferences_changes"))
+        assertTrue(settings.contains("keep_editing_preferences"))
         assertFalse("Settings must not rely on system Toast feedback", settings.contains("Toast.makeText"))
     }
 
