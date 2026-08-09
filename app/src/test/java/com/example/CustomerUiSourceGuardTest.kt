@@ -98,7 +98,8 @@ class CustomerUiSourceGuardTest {
             "add_manual_bill",
             "save_manual_bill",
             "confirm_delete_bill",
-            "cancel_delete_bill"
+            "cancel_delete_bill",
+            "bills_action_feedback"
         ).forEach { tag -> assertTrue("Bills lost E2E hook $tag", bills.contains(tag)) }
 
         listOf(
@@ -157,6 +158,14 @@ class CustomerUiSourceGuardTest {
             "Disconnect CTA must not call disconnect directly",
             profile.contains("onClick = viewModel::disconnectGmail")
         )
+    }
+
+    @Test
+    fun billsMutationsKeepVisibleInAppFeedback() {
+        val bills = File(screenPaths[1]).readText()
+        assertTrue(bills.contains("actionFeedback"))
+        assertTrue(bills.contains("bills_action_feedback"))
+        assertTrue(bills.contains("החשבון של"))
     }
 
     @Test
