@@ -1,72 +1,70 @@
 package com.example.ui.theme
 
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
     primary = TechBlueLight,
     onPrimary = SurfaceLight,
-    secondary = EmeraldSavings,
+    secondary = EmeraldSavingsLight,
     onSecondary = SurfaceLight,
-    tertiary = AmberDeal,
-    background = BackgroundLight,
-    surface = SurfaceLight,
-    surfaceVariant = SurfaceVariantLight,
-    onBackground = TextPrimaryLight,
-    onSurface = TextPrimaryLight,
-    onSurfaceVariant = TextSecondaryLight
+    tertiary = AmberDealLight,
+    background = BackgroundDark,
+    surface = SurfaceDark,
+    surfaceVariant = SurfaceVariantDark,
+    onBackground = TextPrimaryDark,
+    onSurface = TextPrimaryDark,
+    onSurfaceVariant = TextSecondaryDark,
+    outline = SurfaceVariantDark
 )
 
 private val LightColorScheme = lightColorScheme(
     primary = TechBluePrimary,
     onPrimary = SurfaceLight,
+    primaryContainer = HeroBlueSurface,
+    onPrimaryContainer = BrandNavy,
     secondary = EmeraldSavings,
     onSecondary = SurfaceLight,
+    secondaryContainer = SavingsSurface,
+    onSecondaryContainer = EmeraldSavingsDark,
     tertiary = AmberDeal,
     background = BackgroundLight,
     surface = SurfaceLight,
     surfaceVariant = SurfaceVariantLight,
     onBackground = TextPrimaryLight,
     onSurface = TextPrimaryLight,
-    onSurfaceVariant = TextSecondaryLight
+    onSurfaceVariant = TextSecondaryLight,
+    outline = DividerLight
 )
 
 @Composable
 fun ClickAndSaveTheme(
-    darkTheme: Boolean = false, // Strictly Light Theme per user requirement
-    dynamicColor: Boolean = false, // Use clean brand palette
+    darkTheme: Boolean = false,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
+    // Brand consistency is deliberate: financial meaning must not change with
+    // OEM dynamic colors. Dark mode remains supported for compatibility, while
+    // the customer product currently defaults to the polished light experience.
+    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
         content = content
     )
+
+    @Suppress("UNUSED_VARIABLE")
+    val dynamicColorKeptForApiCompatibility = dynamicColor
 }
 
-// Alias for compatibility
 @Composable
 fun MyApplicationTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = false,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     ClickAndSaveTheme(darkTheme = darkTheme, dynamicColor = dynamicColor, content = content)
 }
-
