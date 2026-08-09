@@ -5,10 +5,15 @@ object CustomerPresentationPolicy {
         "NOT_FOUND",
         "GMAIL_READONLY",
         "FIREBASE",
+        "FIRESTORE",
         "APP_CHECK",
         "SECRET_MANAGER",
         "BACKEND",
         "CLOUD_FUNCTION",
+        "CLOUD_RUN",
+        "PUBSUB",
+        "WEBHOOK",
+        "CREDENTIAL",
         "FUNCTIONS_ERROR",
         "CRM",
         "LEAD_ID",
@@ -20,6 +25,7 @@ object CustomerPresentationPolicy {
     )
 
     private val internalCodePattern = Regex("^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")
+    private val hebrewCharacterPattern = Regex("[\u0590-\u05FF]")
 
     fun verifiedSavingsLabel(monthlySaving: Double?, annualSaving: Double?): String? {
         val monthly = monthlySaving?.takeIf { it.isFinite() && it > 0.0 } ?: return null
@@ -62,7 +68,8 @@ object CustomerPresentationPolicy {
             upper.contains("HTTP") ||
             upper.contains("STACK") ||
             upper.contains("TOKEN") ||
-            upper.contains("PERMISSION_DENIED")
+            upper.contains("PERMISSION_DENIED") ||
+            !hebrewCharacterPattern.containsMatchIn(raw)
         ) {
             genericError()
         } else {
