@@ -45,7 +45,53 @@ jobs:
       - name: Run Android unit tests with diagnostics
         id: tests
         continue-on-error: true
-        run: gradle --no-daemon testDebugUnitTest --stacktrace --info
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon testDebugUnitTest --stacktrace --info 2>&1 | tee /tmp/gradle-test.log
+
+      - name: Emit compile and Gradle failures
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('/tmp/gradle-test.log')
+          if not path.exists():
+              print('::warning::Gradle diagnostic log was not produced.')
+              raise SystemExit(0)
+          lines = path.read_text(errors='replace').splitlines()
+          patterns = (
+              re.compile(r'(^|\s)e:\s+file:///(.+?):(\d+):(\d+)\s+(.+)$'),
+              re.compile(r'(^|\s)(.+?\.kt):(\d+):(\d+):\s+error:\s+(.+)$', re.I),
+          )
+          emitted = 0
+          for line in lines:
+              for pattern in patterns:
+                  m = pattern.search(line)
+                  if not m:
+                      continue
+                  groups = m.groups()
+                  if len(groups) == 5 and 'file:///' in line:
+                      _, file_path, line_no, col_no, message = groups
+                  else:
+                      _, file_path, line_no, col_no, message = groups
+                  file_path = file_path.replace('%20', ' ')
+                  print(f'::error file={file_path},line={line_no},col={col_no}::{message[:1500]}')
+                  emitted += 1
+                  break
+          if emitted == 0:
+              interesting = [
+                  line.strip() for line in lines
+                  if ('FAILURE:' in line or 'Compilation error' in line or 'Execution failed for task' in line)
+              ]
+              if interesting:
+                  print('::error::' + ' | '.join(interesting[-8:])[:3000])
+              else:
+                  print('::warning::No compile error pattern found in Gradle output.')
+          PY
 
       - name: Emit failing JUnit assertions
         if: always()
@@ -76,7 +122,7 @@ jobs:
                   print(f'::error file={path}::{cls}.{name}: {message}')
           PY
 
-      - name: Upload unit-test reports
+      - name: Upload unit-test reports and Gradle log
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -84,6 +130,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 2
           path: |
+            /tmp/gradle-test.log
             app/build/test-results/testDebugUnitTest/**
             app/build/reports/tests/testDebugUnitTest/**
 
