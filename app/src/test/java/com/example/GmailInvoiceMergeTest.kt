@@ -2,6 +2,7 @@ package com.example
 
 import com.example.data.local.InvoiceItem
 import com.example.data.repository.mergeObservedGmailInvoice
+import com.example.data.repository.normalizeRemovedGmailSourceIds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -64,6 +65,16 @@ class GmailInvoiceMergeTest {
                 category = "ביטוח",
                 monthlyCost = 2.0,
                 sourceMessageId = "source-b"
+            )
+        )
+    }
+
+    @Test
+    fun removedGmailSourcesAreNormalizedBeforeRoomCleanup() {
+        assertEquals(
+            listOf("message-1", "message-1:pdf:old"),
+            normalizeRemovedGmailSourceIds(
+                listOf(" message-1 ", "", "message-1", "message-1:pdf:old")
             )
         )
     }
