@@ -14,6 +14,7 @@ class ObservedBillsSourceGuardTest {
         assertTrue(activity.contains("viewModel.gmailRepository.refreshConnectionStatusAndUpgradeIfNeeded()"))
         assertTrue(repository.contains("if (syncStatus?.upgradeRequired == true)"))
         assertTrue(repository.contains("scanInvoices()"))
+        assertTrue(repository.contains("refreshObservedBillsSnapshotIfConnected()"))
         assertTrue(repository.contains("observedBillsRepository.refreshObservedBills()"))
         assertTrue(repository.contains("Authoritative observed bills refresh unavailable"))
     }
@@ -21,12 +22,19 @@ class ObservedBillsSourceGuardTest {
     @Test
     fun lightweightSnapshotFailureDoesNotMarkValidGmailConnectionDisconnected() {
         val repository = File("src/main/java/com/example/data/repository/GmailRepository.kt").readText()
-        val normalRefreshSection = repository.substringAfter("} else {\n            // Normal app startup")
+        val snapshotMethod = repository
+            .substringAfter("suspend fun refreshObservedBillsSnapshotIfConnected()")
+            .substringBefore("suspend fun refreshConnectionStatusAndUpgradeIfNeeded()")
+        val normalStartupSection = repository
+            .substringAfter("} else {\n            // Normal app startup")
             .substringBefore("        }\n        return connectionResult")
 
-        assertTrue(normalRefreshSection.contains("observedBillsRepository.refreshObservedBills()"))
-        assertFalse(normalRefreshSection.contains("_isConnected.value = false"))
-        assertFalse(normalRefreshSection.contains("GmailSyncState.Error"))
+        assertTrue(snapshotMethod.contains("observedBillsRepository.refreshObservedBills()"))
+        assertTrue(snapshotMethod.contains("Authoritative observed bills refresh unavailable"))
+        assertFalse(snapshotMethod.contains("_isConnected.value = false"))
+        assertFalse(snapshotMethod.contains("GmailSyncState.Error"))
+        assertFalse(snapshotMethod.contains("scanInvoices()"))
+        assertTrue(normalStartupSection.contains("refreshObservedBillsSnapshotIfConnected()"))
     }
 
     @Test
@@ -39,10 +47,13 @@ class ObservedBillsSourceGuardTest {
     @Test
     fun newInvoicePushUsesOnlyLightweightObservedBillsRefresh() {
         val service = File("src/main/java/com/example/ClickAndSaveMessagingService.kt").readText()
-        assertTrue(service.contains("PUSH_TYPE_NEW_INVOICE = \"NEW_INVOICE\""))
-        assertTrue(service.contains("message.data[\"type\"] == PUSH_TYPE_NEW_INVOICE"))
+        val policy = File("src/main/java/com/example/PushNavigationPolicy.kt").readText()
+
+        assertTrue(policy.contains("PUSH_TYPE_NEW_INVOICE = \"NEW_INVOICE\""))
+        assertTrue(service.contains("val pushType = message.data[PUSH_TYPE_EXTRA]"))
+        assertTrue(service.contains("if (pushType == PUSH_TYPE_NEW_INVOICE)"))
         assertTrue(service.contains("observedBillsRepository.refreshObservedBills()"))
-        assertTrue(service.contains("Authenticated app startup retries it"))
+        assertTrue(service.contains("Authenticated app startup/resume retries it"))
         assertFalse("FCM must never trigger the six-month Gmail scan", service.contains("scanInvoices()"))
         assertFalse("FCM refresh failure must not disconnect Gmail", service.contains("_isConnected.value = false"))
     }
