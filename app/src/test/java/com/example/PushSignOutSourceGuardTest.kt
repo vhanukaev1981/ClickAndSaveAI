@@ -1,6 +1,7 @@
 package com.example
 
 import java.io.File
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -38,5 +39,28 @@ class PushSignOutSourceGuardTest {
 
         assertTrue(signOutSection.contains(".onFailure { Log.w(\"AuthRepository\", \"Push revocation incomplete during sign-out\", it) }"))
         assertTrue(signOutSection.contains("getFirebaseAuthSafe()?.signOut()"))
+    }
+
+    @Test
+    fun gmailDisconnectAloneDoesNotRevokeAccountPushRegistration() {
+        val gmailRepository = File("src/main/java/com/example/data/repository/GmailRepository.kt").readText()
+        val disconnectSection = gmailRepository
+            .substringAfter("suspend fun disconnectGmail()")
+            .substringBeforeLast("}\n")
+
+        assertFalse(disconnectSection.contains("PushTokenLifecycle"))
+        assertFalse(disconnectSection.contains("unregisterPushToken"))
+        assertFalse(disconnectSection.contains("deleteToken()"))
+    }
+
+    @Test
+    fun pushRegistrationRequiresAuthenticatedFirebaseUser() {
+        val service = File("src/main/java/com/example/ClickAndSaveMessagingService.kt").readText()
+        val registrationSection = service
+            .substringAfter("object PushRegistration")
+            .substringBefore("class ClickAndSaveMessagingService")
+
+        assertTrue(registrationSection.contains("if (FirebaseAuth.getInstance().currentUser == null) return"))
+        assertTrue(registrationSection.contains("if (FirebaseAuth.getInstance().currentUser == null || token.isBlank()) return"))
     }
 }
