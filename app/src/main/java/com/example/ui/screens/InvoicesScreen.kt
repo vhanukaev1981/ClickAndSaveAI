@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import com.example.data.local.InvoiceItem
 import com.example.ui.CustomerPresentationPolicy
 import com.example.ui.MainViewModel
+import com.example.ui.theme.FinancialDesignTokens
 import com.example.ui.theme.TechBluePrimary
 
 @Composable
@@ -100,8 +101,8 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .testTag("invoices_screen"),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = billsScreenPadding(),
+        verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.sectionSpacing)
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -122,11 +123,11 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
             Card(
                 modifier = Modifier.testTag("bills_monthly_overview"),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                shape = RoundedCornerShape(22.dp)
+                shape = RoundedCornerShape(FinancialDesignTokens.cardRadius)
             ) {
                 Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
+                    verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -153,7 +154,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                             modifier = Modifier.testTag("add_manual_bill")
                         ) {
                             Icon(Icons.Default.Add, contentDescription = null)
-                            Spacer(Modifier.size(4.dp))
+                            Spacer(Modifier.size(FinancialDesignTokens.compactSpacing))
                             Text("הוסף ידנית")
                         }
                     }
@@ -174,11 +175,11 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                         .fillMaxWidth()
                         .testTag("bills_action_feedback"),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                    shape = RoundedCornerShape(18.dp)
+                    shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius)
                 ) {
                     Text(
                         feedback,
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium
                     )
@@ -195,7 +196,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                 )
             }
             item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)) {
                     items(categoryTotals, key = { it.first }) { (category, total) ->
                         CategorySpendCard(
                             category = category,
@@ -211,7 +212,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
         item {
             LazyRow(
                 modifier = Modifier.testTag("bill_category_filters"),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)
             ) {
                 items(categories) { category ->
                     FilterChip(
@@ -229,14 +230,14 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("bills_empty_state"),
-                    shape = RoundedCornerShape(18.dp)
+                    shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius)
                 ) {
                     Row(
-                        modifier = Modifier.padding(18.dp),
+                        modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Default.Info, contentDescription = null)
-                        Spacer(Modifier.size(10.dp))
+                        Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
                         Text(
                             if (selectedCategory == "הכל") {
                                 "עדיין לא זוהו חשבונות. לאחר החיבור הראשוני מסמכים רלוונטיים ייקלטו אוטומטית, ואפשר גם להוסיף חשבון ידנית."
@@ -262,15 +263,15 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
         item {
             Card(
                 modifier = Modifier.testTag("bills_automatic_savings_explainer"),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Row(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
                     verticalAlignment = Alignment.Top
                 ) {
                     Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = TechBluePrimary)
-                    Spacer(Modifier.size(10.dp))
+                    Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
                     Text(
                         "לא צריך לבקש בדיקה מכל חשבון. אם נמצאת חלופה טובה ומאומתת, היא תופיע אוטומטית באזור החיסכון.",
                         style = MaterialTheme.typography.bodyMedium
@@ -293,14 +294,14 @@ private fun CategorySpendCard(
 ) {
     Card(
         onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius),
         colors = CardDefaults.cardColors(
             containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
         )
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
+            modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
+            verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)
         ) {
             Text(category, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             Text(money(monthlyAmount), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -317,11 +318,11 @@ private fun CategorySpendCard(
 private fun InvoiceCard(invoice: InvoiceItem, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.testTag("bill_${invoice.id}"),
-        shape = RoundedCornerShape(18.dp)
+        shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
+            verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -400,13 +401,20 @@ private fun ManualInvoiceDialog(onDismiss: () -> Unit, onAdd: (String, String, D
     var provider by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("חשמל") }
     var amount by remember { mutableStateOf("") }
-    val categories = listOf("חשמל", "סלולר", "אינטרנט", "תקשורת", "ביטוח", "טלוויזיה")
+    val categories = listOf(
+        "electricity" to "חשמל",
+        "cellular" to "סלולר",
+        "internet" to "אינטרנט",
+        "communications" to "תקשורת",
+        "insurance" to "ביטוח",
+        "television" to "טלוויזיה"
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("הוספת חשבון") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)) {
                 Text(
                     "אפשר להוסיף חיוב שלא הגיע דרך מקור מחובר. גם כאן חיסכון יוצג רק אם תימצא הצעה מתאימה ומאומתת.",
                     style = MaterialTheme.typography.bodyMedium
@@ -419,12 +427,13 @@ private fun ManualInvoiceDialog(onDismiss: () -> Unit, onAdd: (String, String, D
                         .fillMaxWidth()
                         .testTag("manual_bill_provider")
                 )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(categories) { item ->
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)) {
+                    items(categories) { (tag, label) ->
                         FilterChip(
-                            selected = category == item,
-                            onClick = { category = item },
-                            label = { Text(item) }
+                            selected = category == label,
+                            onClick = { category = label },
+                            label = { Text(label) },
+                            modifier = Modifier.testTag("manual_bill_category_$tag")
                         )
                     }
                 }
@@ -456,5 +465,12 @@ private fun ManualInvoiceDialog(onDismiss: () -> Unit, onAdd: (String, String, D
         }
     )
 }
+
+private fun billsScreenPadding() = PaddingValues(
+    start = FinancialDesignTokens.screenHorizontalPadding,
+    top = FinancialDesignTokens.screenTopPadding,
+    end = FinancialDesignTokens.screenHorizontalPadding,
+    bottom = FinancialDesignTokens.screenBottomNavigationClearance
+)
 
 private fun money(value: Double): String = "₪${String.format("%.2f", value)}"
