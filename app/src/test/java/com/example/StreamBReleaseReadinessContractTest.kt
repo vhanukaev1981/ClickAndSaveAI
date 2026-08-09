@@ -69,6 +69,7 @@ class StreamBReleaseReadinessContractTest {
             "StreamBBoundaryContractTest.kt",
             "StreamBManagerBlockerContractTest.kt",
             "StreamBPostRebaseContractTest.kt",
+            "StreamBDeviceE2EContractTest.kt",
             "StreamBWorkstreamBoundaryContractTest.kt"
         ).forEach { fileName ->
             val file = File("src/test/java/com/example/$fileName")
