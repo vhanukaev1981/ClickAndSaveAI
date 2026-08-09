@@ -96,7 +96,10 @@ fun SettingsScreen(
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (onBackClick != null) {
-                    IconButton(onClick = onBackClick) {
+                    IconButton(
+                        onClick = onBackClick,
+                        modifier = Modifier.testTag("settings_back")
+                    ) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "חזרה")
                     }
                     Spacer(modifier = Modifier.size(6.dp))
@@ -185,11 +188,11 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    PreferencePicker("חשמל", electricity, electricityOptions) { electricity = it }
-                    PreferencePicker("סלולר", cellular, cellularOptions) { cellular = it }
-                    PreferencePicker("אינטרנט", internet, internetOptions) { internet = it }
-                    PreferencePicker("ביטוח", insurance, insuranceOptions) { insurance = it }
-                    PreferencePicker("טלוויזיה / סטרימינג", streaming, streamingOptions) { streaming = it }
+                    PreferencePicker("חשמל", electricity, electricityOptions, "preference_electricity") { electricity = it }
+                    PreferencePicker("סלולר", cellular, cellularOptions, "preference_cellular") { cellular = it }
+                    PreferencePicker("אינטרנט", internet, internetOptions, "preference_internet") { internet = it }
+                    PreferencePicker("ביטוח", insurance, insuranceOptions, "preference_insurance") { insurance = it }
+                    PreferencePicker("טלוויזיה / סטרימינג", streaming, streamingOptions, "preference_streaming") { streaming = it }
                 }
             }
         }
@@ -262,13 +265,19 @@ private fun PreferencePicker(
     label: String,
     selected: String,
     options: List<String>,
+    testTag: String,
     onSelected: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(label, style = MaterialTheme.typography.labelLarge)
         Spacer(modifier = Modifier.height(4.dp))
-        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(testTag)
+        ) {
             Text(selected.ifBlank { "לא נבחר" })
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
