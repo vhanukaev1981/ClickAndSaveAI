@@ -54,6 +54,9 @@ async function sendPushToUser(uid, { title, body, data = {} }) {
       priority: "high",
       notification: {
         channelId: "savings_opportunities",
+        // Financial notifications may contain a provider and an amount. Explicitly mark the
+        // notification private so Android can hide sensitive content on a secured lock screen.
+        visibility: "private",
       },
     },
   });
