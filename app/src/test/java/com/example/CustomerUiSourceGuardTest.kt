@@ -43,6 +43,26 @@ class CustomerUiSourceGuardTest {
     }
 
     @Test
+    fun customerScreensContainNoDeadOrComingSoonActions() {
+        val emptyClick = Regex("onClick\\s*=\\s*\\{\\s*}")
+        val forbiddenImplementationMarkers = listOf(
+            "TODO(",
+            "NotImplementedError",
+            "Coming soon",
+            "coming soon",
+            "בקרוב"
+        )
+
+        screenPaths.forEach { path ->
+            val text = File(path).readText()
+            assertFalse("$path contains an empty onClick handler", emptyClick.containsMatchIn(text))
+            forbiddenImplementationMarkers.forEach { marker ->
+                assertFalse("$path contains unfinished customer action marker: $marker", text.contains(marker))
+            }
+        }
+    }
+
+    @Test
     fun coreFinancialDestinationsKeepStableTestHooks() {
         val dashboard = File(screenPaths[0]).readText()
         val bills = File(screenPaths[1]).readText()
