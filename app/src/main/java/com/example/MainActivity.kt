@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -31,6 +32,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
 import com.example.ui.MainViewModel
 import com.example.ui.components.BottomNavBar
 import com.example.ui.screens.DashboardScreen
@@ -45,10 +47,12 @@ import com.google.android.gms.common.api.Scope
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
     private val authorizationClient by lazy { Identity.getAuthorizationClient(this) }
+    private var lastObservedBillsResumeRefreshElapsedRealtimeMs = 0L
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -77,7 +81,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The authenticated startup effect below performs the initial authoritative refresh.
+        // Seed the resume clock so the first onResume does not immediately duplicate that work.
+        lastObservedBillsResumeRefreshElapsedRealtimeMs = SystemClock.elapsedRealtime()
         configureFirebaseAndAppCheck()
+        // Create the private financial channel before any background FCM notification can target
+        // it. This prevents Android from falling back to a generic channel on a fresh install.
+        FinancialNotificationChannels.ensureCreated(this)
         requestNotificationPermissionIfNeeded()
         enableEdgeToEdge()
 
@@ -102,13 +112,46 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        applyPushDestination(intent)
         maybeTriggerDebugTestPush(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (FirebaseAuth.getInstance().currentUser == null) return
+
+        val now = SystemClock.elapsedRealtime()
+        if (!shouldRefreshObservedBillsOnResume(
+                lastRefreshElapsedRealtimeMs = lastObservedBillsResumeRefreshElapsedRealtimeMs,
+                nowElapsedRealtimeMs = now
+            )
+        ) {
+            return
+        }
+
+        lastObservedBillsResumeRefreshElapsedRealtimeMs = now
+        lifecycleScope.launch {
+            // Resume uses only the bounded backend-authoritative snapshot. It never launches
+            // the six-month Gmail backfill/scan path.
+            viewModel.gmailRepository.refreshObservedBillsSnapshotIfConnected()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        applyPushDestination(intent)
         maybeTriggerDebugTestPush(intent)
+    }
+
+    private fun applyPushDestination(intent: Intent?) {
+        if (FirebaseAuth.getInstance().currentUser == null) return
+        val pushType = intent?.getStringExtra(PUSH_TYPE_EXTRA) ?: return
+        val destinationTab = destinationTabForPushType(pushType) ?: return
+        viewModel.setTab(destinationTab)
+        // Consume only a known allowlisted navigation instruction so configuration changes or
+        // repeated delivery cannot unexpectedly re-route a user later.
+        intent.removeExtra(PUSH_TYPE_EXTRA)
     }
 
     private fun maybeTriggerDebugTestPush(intent: Intent?) {

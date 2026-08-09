@@ -72,6 +72,9 @@ interface InvoiceDao {
     @Query("SELECT * FROM invoice_items WHERE sourceMessageId = :sourceMessageId LIMIT 1")
     suspend fun findBySourceMessageId(sourceMessageId: String): InvoiceItem?
 
+    @Query("SELECT sourceMessageId FROM invoice_items WHERE sourceType = 'GMAIL_READONLY' AND sourceMessageId IS NOT NULL")
+    suspend fun getObservedGmailSourceIds(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertInvoice(invoice: InvoiceItem): Long
 

@@ -19,7 +19,8 @@ sealed class GmailSyncState {
 
 class GmailRepository(
     private val shoppingRepository: ShoppingRepository,
-    private val backendRepository: BackendRepository = BackendRepository()
+    private val backendRepository: BackendRepository = BackendRepository(),
+    private val observedBillsRepository: ObservedBillsRepository = ObservedBillsRepository(shoppingRepository)
 ) {
     private val _syncState = MutableStateFlow<GmailSyncState>(GmailSyncState.Idle)
     val syncState: StateFlow<GmailSyncState> = _syncState.asStateFlow()
@@ -54,6 +55,20 @@ class GmailRepository(
         }
     }
 
+    suspend fun refreshObservedBillsSnapshotIfConnected(): Result<ObservedBillsRefreshResult?> {
+        if (!_isConnected.value) return Result.success(null)
+        return runCatching { observedBillsRepository.refreshObservedBills() }
+            .onSuccess { refresh ->
+                if (refresh.refreshedBills > 0 || refresh.removedStaleSources > 0) {
+                    _lastScanTime.value = "עודכן עכשיו"
+                }
+            }
+            .onFailure { error ->
+                // Snapshot refresh failures do not alter the authenticated Gmail connection state.
+                Log.w("GmailRepository", "Authoritative observed bills refresh unavailable", error)
+            }
+    }
+
     suspend fun refreshConnectionStatusAndUpgradeIfNeeded(): Result<GmailConnectionResult> {
         val connectionResult = refreshConnectionStatus()
         val connection = connectionResult.getOrNull() ?: return connectionResult
@@ -72,6 +87,11 @@ class GmailRepository(
                 "Running one-time Gmail parser upgrade ${syncStatus.storedParserVersion} -> ${syncStatus.activeParserVersion}"
             )
             scanInvoices()
+        } else {
+            // Normal app startup uses the backend-normalized Firestore snapshot, not another
+            // six-month Gmail scan. A transient refresh failure must not turn a valid Gmail
+            // connection into a disconnected/error state.
+            refreshObservedBillsSnapshotIfConnected()
         }
         return connectionResult
     }
