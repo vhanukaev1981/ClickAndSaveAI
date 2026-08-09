@@ -88,6 +88,7 @@ class CustomerUiSourceGuardTest {
         listOf(
             "dashboard_savings_hero",
             "dashboard_connect_account",
+            "dashboard_retry_financial_home",
             "dashboard_manage_bills",
             "dashboard_manage_savings",
             "dashboard_manage_profile"
@@ -139,6 +140,16 @@ class CustomerUiSourceGuardTest {
             "discard_preferences_changes",
             "keep_editing_preferences"
         ).forEach { tag -> assertTrue("Settings lost E2E hook $tag", settings.contains(tag)) }
+    }
+
+    @Test
+    fun dashboardErrorStateKeepsExplicitRetryPath() {
+        val dashboard = File(screenPaths[0]).readText()
+        assertTrue(dashboard.contains("financialHomeRefreshKey"))
+        assertTrue(dashboard.contains("dashboard_error_state"))
+        assertTrue(dashboard.contains("dashboard_retry_financial_home"))
+        assertTrue(dashboard.contains("financialHomeTemporarilyUnavailable = false"))
+        assertTrue(dashboard.contains("financialHomeRefreshKey += 1"))
     }
 
     @Test
