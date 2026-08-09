@@ -93,14 +93,33 @@ fun DashboardScreen(
         (it.potentialMonthlySaving ?: 0.0) > 0.0 && it.matchedOffer != null
     }
     val verifiedMonthlySavings = verifiedOpportunities.sumOf { it.potentialMonthlySaving ?: 0.0 }
-    val verifiedAnnualSavings = verifiedOpportunities.sumOf {
-        it.potentialAnnualSaving?.takeIf { annual -> annual > 0.0 }
-            ?: ((it.potentialMonthlySaving ?: 0.0) * 12.0)
+    val verifiedAnnualValues = verifiedOpportunities.mapNotNull {
+        it.potentialAnnualSaving?.takeIf { annual -> annual.isFinite() && annual > 0.0 }
     }
-    val observedMonthlySpend = financialHome?.context?.observedRecurringMonthlySpend
-        ?.takeIf { it > 0.0 }
-        ?: localTotalMonthlyCost
-    val recurringServiceCount = financialHome?.context?.recurringServiceCount ?: invoices.size
+    val verifiedAnnualSavings = if (
+        verifiedOpportunities.isNotEmpty() && verifiedAnnualValues.size == verifiedOpportunities.size
+    ) {
+        verifiedAnnualValues.sum()
+    } else {
+        null
+    }
+
+    val authoritativeRecurringSpend = financialHome?.context?.observedRecurringMonthlySpend
+        ?.takeIf { it.isFinite() && it > 0.0 }
+    val localObservedSpend = localTotalMonthlyCost.takeIf { it.isFinite() && it > 0.0 }
+    val displayedMonthlySpend = authoritativeRecurringSpend ?: localObservedSpend
+    val recurringServiceCount = financialHome?.context?.recurringServiceCount
+    val spendTitle = if (authoritativeRecurringSpend != null) {
+        "הוצאה חודשית חוזרת"
+    } else {
+        "חיובים חודשיים שנצפו"
+    }
+    val spendSupporting = when {
+        authoritativeRecurringSpend != null -> "שירותים חוזרים שאומתו"
+        localObservedSpend != null -> "מהחשבונות שנקלטו; לא בהכרח חיוב חוזר"
+        else -> "ממתינים לנתונים"
+    }
+
     val categoryTotals = invoices
         .groupBy { it.category.ifBlank { "אחר" } }
         .mapValues { (_, items) -> items.sumOf { it.monthlyCost } }
@@ -169,15 +188,15 @@ fun DashboardScreen(
             ) {
                 MetricCard(
                     modifier = Modifier.weight(1f),
-                    title = "הוצאה חודשית",
-                    value = money(observedMonthlySpend),
-                    supporting = "חיובים חוזרים שזוהו"
+                    title = spendTitle,
+                    value = displayedMonthlySpend?.let(::money) ?: "—",
+                    supporting = spendSupporting
                 )
                 MetricCard(
                     modifier = Modifier.weight(1f),
-                    title = "שירותים במעקב",
-                    value = recurringServiceCount.toString(),
-                    supporting = "נבדקים אוטומטית"
+                    title = "שירותים חוזרים",
+                    value = recurringServiceCount?.toString() ?: "—",
+                    supporting = if (recurringServiceCount == null) "ממתינים לניתוח" else "שאומתו כחוזרים"
                 )
             }
         }
@@ -366,11 +385,7 @@ fun DashboardScreen(
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold
-    )
+    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 }
 
 @Composable
@@ -382,11 +397,7 @@ private fun CategorySnapshotCard(category: String, amount: Double) {
         ) {
             Text(category, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             Text(money(amount), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                "לחודש",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text("לחודש", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -403,18 +414,13 @@ private fun ProactiveOpportunityCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.Top
         ) {
             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = TechBluePrimary)
             Spacer(modifier = Modifier.size(10.dp))
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    "${opportunity.providerName} • ${opportunity.category}",
-                    fontWeight = FontWeight.Bold
-                )
+                Text("${opportunity.providerName} • ${opportunity.category}", fontWeight = FontWeight.Bold)
                 val matchedOffer = opportunity.matchedOffer
                 val verifiedLabel = if (matchedOffer != null) {
                     CustomerPresentationPolicy.verifiedSavingsLabel(
@@ -466,10 +472,7 @@ private fun InitialGmailOnboardingCard(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
     ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Email, contentDescription = null, tint = TechBluePrimary)
                 Spacer(modifier = Modifier.size(9.dp))
@@ -482,14 +485,9 @@ private fun InitialGmailOnboardingCard(
             Button(
                 onClick = if (authenticated) onConnectGmail else onGoogleSignIn,
                 enabled = !syncing,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("dashboard_connect_account")
+                modifier = Modifier.fillMaxWidth().testTag("dashboard_connect_account")
             ) {
-                Icon(
-                    if (authenticated) Icons.Default.Security else Icons.Default.Login,
-                    contentDescription = null
-                )
+                Icon(if (authenticated) Icons.Default.Security else Icons.Default.Login, contentDescription = null)
                 Spacer(modifier = Modifier.size(7.dp))
                 Text(if (authenticated) "חבר את החשבון" else "התחבר כדי להתחיל")
             }
@@ -499,43 +497,40 @@ private fun InitialGmailOnboardingCard(
 
 @Composable
 private fun SavingsHeroCard(
-    annualSavings: Double,
+    annualSavings: Double?,
     monthlySavings: Double,
     opportunities: Int,
     onOpenSavings: () -> Unit
 ) {
     val verified = opportunities > 0 && monthlySavings > 0.0
-    val displayAnnual = annualSavings.takeIf { it > 0.0 } ?: (monthlySavings * 12.0)
+    val verifiedAnnual = annualSavings?.takeIf { it.isFinite() && it > 0.0 }
     Card(
         onClick = onOpenSavings,
         modifier = Modifier.testTag("dashboard_savings_hero"),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = TechBluePrimary)
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp)
-        ) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Savings, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
                 Spacer(modifier = Modifier.size(8.dp))
-                Text(
-                    "החיסכון שמצאנו עבורך",
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("החיסכון שמצאנו עבורך", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
             }
             Text(
-                if (verified) money(displayAnnual) else "עדיין בבדיקה",
+                when {
+                    !verified -> "עדיין בבדיקה"
+                    verifiedAnnual != null -> money(verifiedAnnual)
+                    else -> money(monthlySavings)
+                },
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimary
             )
             Text(
-                if (verified) {
-                    "בשנה • ${money(monthlySavings)} בחודש"
-                } else {
-                    "נציג כאן סכום רק אחרי שנמצא ונאמת חיסכון אמיתי"
+                when {
+                    !verified -> "נציג כאן סכום רק אחרי שנמצא ונאמת חיסכון אמיתי"
+                    verifiedAnnual != null -> "בשנה • ${money(monthlySavings)} בחודש"
+                    else -> "בחודש • חיסכון שנתי יוצג רק לאחר אימות"
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimary
@@ -598,11 +593,7 @@ private fun MetricCard(
         Column(modifier = Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-            Text(
-                supporting,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text(supporting, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -617,34 +608,17 @@ private fun DashboardActionButton(
 ) {
     Card(
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(testTag),
+        modifier = Modifier.fillMaxWidth().testTag(testTag),
         shape = RoundedCornerShape(18.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(15.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = RoundedCornerShape(13.dp)
-            ) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    modifier = Modifier.padding(9.dp),
-                    tint = TechBluePrimary
-                )
+        Row(modifier = Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(13.dp)) {
+                Icon(icon, contentDescription = null, modifier = Modifier.padding(9.dp), tint = TechBluePrimary)
             }
             Spacer(modifier = Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(text, fontWeight = FontWeight.Bold)
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
