@@ -7,10 +7,17 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 - Initial source connection appears only when the account/source is not connected (`dashboard_initial_connection`).
 - After connection, the permanent technical connection card is absent.
 - `dashboard_savings_hero` never shows `₪0` as verified savings.
-- A positive verified monthly saving has a positive annual display.
+- A positive verified monthly saving has a positive annual display only when that annual value is returned/verified by the backend; Android never multiplies monthly savings by 12.
 - Loading, error and under-review states are mutually clear and customer-facing.
 - If `dashboard_error_state` appears, `dashboard_retry_financial_home` is visible and tapping it clears the stale error, shows the loading transition and retries the existing financial-home request.
 - `dashboard_manage_bills`, `dashboard_manage_savings`, `dashboard_manage_profile`, recent bills and opportunity cards navigate to the intended destination.
+
+## Initial connection / authorization errors
+- Initial sign-in / source authorization remains a customer flow, not a developer/configuration screen.
+- If sign-in or document-source authorization fails, the visible message is plain Hebrew product language.
+- No visible authorization failure exposes `google_web_client_id`, Firebase/OAuth implementation terminology, `gmail.readonly`, OAuth scopes, server-auth codes, exception class names, tokens or raw Google/API error text.
+- Debug/configuration detail may exist in logs only; it is not shown in the product UI.
+- Cancelling authorization does not imply that any data was saved or that the source is connected.
 
 ## Bills
 - `invoices_screen` is a spend/bills surface, not a provider/commercial-internals surface.
@@ -29,6 +36,7 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 - `providers_screen` presents opportunities in customer financial language.
 - Under-review opportunities show no fabricated saving amount.
 - Verified opportunities show the exact verified monthly/annual saving returned for the verified offer.
+- Verified savings values/icons use the dedicated savings-success semantic green; brand/action controls remain on the blue brand palette.
 - Offers without a supported in-app action remain visible without implying that a direct provider action is available.
 - In-app action appears only where the backend provides the supported action mode.
 - `accept_savings_*` first enters `savings_action_starting` while the displayed offer is revalidated.
@@ -74,6 +82,6 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 - Destructive actions remain confirmable/cancellable and expose stable E2E hooks.
 
 ## Acceptance rule
-A Stream B build is accepted only if the app feels like one coherent financial product: spend is shown as spend, verified savings as verified savings, under-review states do not invent money, every visible CTA works, retry paths recover from temporary UI errors, destructive account/privacy/bill actions require confirmation, in-flight savings actions cannot be double-submitted, unsaved edits are protected, accessibility contracts remain intact, and implementation/commercial terminology remains behind the scenes.
+A Stream B build is accepted only if the app feels like one coherent financial product: spend is shown as spend, verified savings as verified savings, under-review states do not invent money, every visible CTA works, retry paths recover from temporary UI errors, destructive account/privacy/bill actions require confirmation, in-flight savings actions cannot be double-submitted, unsaved edits are protected, accessibility contracts remain intact, authorization failures remain customer-safe, and implementation/commercial terminology remains behind the scenes.
 
-See `docs/STREAM_B_ACCEPTANCE_MATRIX.md` for the requirement → hook → automated-guard mapping and `docs/STREAM_B_INTEGRATION_PLAN.md` for rebase/integration rules.
+See `docs/STREAM_B_ACCEPTANCE_MATRIX.md` for the requirement → hook → automated-guard mapping, `docs/STREAM_B_INTEGRATION_PLAN.md` for rebase/integration rules, and `docs/STREAM_B_RELEASE_GATE.md` for same-SHA CI/APK/device acceptance.
