@@ -32,7 +32,12 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 
 ## Profile / privacy / preferences
 - `profile_screen` contains account, savings goals/preferences and privacy — no permanent technical Gmail card.
-- `open_savings_preferences` opens the preferences screen and saving is functional.
+- `open_savings_preferences` opens the preferences screen.
+- `settings_back` returns to Profile.
+- `monthly_savings_goal` and `minimum_savings_threshold` accept only bounded numeric input.
+- `preference_electricity`, `preference_cellular`, `preference_internet`, `preference_insurance` and `preference_streaming` each open and select a value.
+- `save_savings_preferences` persists the current choices without authorizing any provider switch.
+- `preferences_saved_confirmation` appears after save and disappears logically once the edited values no longer match the saved snapshot.
 - `open_privacy_connections` is the only normal customer route to connection revocation.
 - `disconnect_document_source` appears only when a source is connected.
 - Tapping `disconnect_document_source` does not disconnect immediately; it opens a clear confirmation dialog.
