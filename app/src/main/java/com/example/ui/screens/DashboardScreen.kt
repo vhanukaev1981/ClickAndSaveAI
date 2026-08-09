@@ -47,6 +47,9 @@ import androidx.compose.ui.unit.dp
 import com.example.data.repository.BackendRepository
 import com.example.data.repository.FinancialHomeResult
 import com.example.data.repository.FinancialOpportunity
+import com.example.ui.CustomerPresentationPolicy
+import com.example.ui.FinancialUiState
+import com.example.ui.FinancialUiStatePolicy
 import com.example.ui.MainViewModel
 import com.example.ui.theme.TechBluePrimary
 
@@ -89,7 +92,10 @@ fun DashboardScreen(
         (it.potentialMonthlySaving ?: 0.0) > 0.0 && it.matchedOffer != null
     }
     val verifiedMonthlySavings = verifiedOpportunities.sumOf { it.potentialMonthlySaving ?: 0.0 }
-    val verifiedAnnualSavings = verifiedOpportunities.sumOf { it.potentialAnnualSaving ?: 0.0 }
+    val verifiedAnnualSavings = verifiedOpportunities.sumOf {
+        it.potentialAnnualSaving?.takeIf { annual -> annual > 0.0 }
+            ?: ((it.potentialMonthlySaving ?: 0.0) * 12.0)
+    }
     val observedMonthlySpend = financialHome?.context?.observedRecurringMonthlySpend
         ?.takeIf { it > 0.0 }
         ?: localTotalMonthlyCost
@@ -99,6 +105,7 @@ fun DashboardScreen(
         .mapValues { (_, items) -> items.sumOf { it.monthlyCost } }
         .toList()
         .sortedByDescending { it.second }
+    val financialHomeLoading = session.isAuthenticated && isConnected && financialHome == null && !financialHomeTemporarilyUnavailable
 
     if (showGmailConsent) {
         GmailConsentDialog(
@@ -154,7 +161,9 @@ fun DashboardScreen(
 
         item {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("dashboard_secondary_metrics"),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 MetricCard(
@@ -172,10 +181,35 @@ fun DashboardScreen(
             }
         }
 
+        if (financialHomeLoading) {
+            item {
+                val message = FinancialUiStatePolicy.message(FinancialUiState.LOADING)
+                EmptyStateCard(
+                    title = message.title,
+                    body = message.body,
+                    testTag = "dashboard_loading_state"
+                )
+            }
+        }
+
+        if (financialHomeTemporarilyUnavailable && isConnected) {
+            item {
+                val message = FinancialUiStatePolicy.message(FinancialUiState.ERROR)
+                EmptyStateCard(
+                    title = message.title,
+                    body = message.body,
+                    testTag = "dashboard_error_state"
+                )
+            }
+        }
+
         if (categoryTotals.isNotEmpty()) {
             item { SectionTitle("לאן הכסף הולך") }
             item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(
+                    modifier = Modifier.testTag("dashboard_category_snapshot"),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     items(categoryTotals.take(6), key = { it.first }) { (category, amount) ->
                         CategorySnapshotCard(category = category, amount = amount)
                     }
@@ -195,26 +229,21 @@ fun DashboardScreen(
                 item {
                     TextButton(
                         onClick = { onNavigateToTab(2) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("dashboard_all_savings")
                     ) {
                         Text("לכל הזדמנויות החיסכון")
                     }
                 }
             }
-        } else if (isConnected) {
+        } else if (isConnected && !financialHomeLoading && !financialHomeTemporarilyUnavailable) {
             item {
+                val message = FinancialUiStatePolicy.message(FinancialUiState.UNDER_REVIEW)
                 EmptyStateCard(
-                    title = "הבדיקה ממשיכה ברקע",
-                    body = "כרגע אין הזדמנות חיסכון מאומתת. אם תופיע חלופה טובה ומתאימה יותר, נציג אותה כאן אוטומטית."
-                )
-            }
-        }
-
-        if (financialHomeTemporarilyUnavailable && isConnected) {
-            item {
-                EmptyStateCard(
-                    title = "המידע מתעדכן",
-                    body = "חלק מהנתונים עדיין מסתנכרנים. אין צורך לבצע פעולה — התמונה תתעדכן אוטומטית."
+                    title = message.title,
+                    body = message.body,
+                    testTag = "dashboard_savings_under_review"
                 )
             }
         }
@@ -229,13 +258,15 @@ fun DashboardScreen(
                         "כשנזהה חשבון חדש הוא יופיע כאן וייבדק אוטומטית להזדמנויות חיסכון."
                     } else {
                         "בחיבור הראשון נבדוק עד 6 חודשים אחורה. לאחר מכן מסמכים חדשים נקלטים אוטומטית."
-                    }
+                    },
+                    testTag = "dashboard_recent_bills_empty"
                 )
             }
         } else {
             items(invoices.take(4), key = { it.id }) { invoice ->
                 Card(
                     onClick = { onNavigateToTab(1) },
+                    modifier = Modifier.testTag("dashboard_bill_${invoice.id}"),
                     shape = RoundedCornerShape(18.dp)
                 ) {
                     Row(
@@ -278,7 +309,9 @@ fun DashboardScreen(
             item {
                 TextButton(
                     onClick = { onNavigateToTab(1) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("dashboard_all_bills")
                 ) {
                     Text("לכל החשבונות")
                 }
@@ -292,18 +325,21 @@ fun DashboardScreen(
                     text = "החשבונות שלי",
                     subtitle = "ההוצאות והחיובים שזוהו",
                     icon = Icons.Default.ReceiptLong,
+                    testTag = "dashboard_manage_bills",
                     onClick = { onNavigateToTab(1) }
                 )
                 DashboardActionButton(
                     text = "החיסכון שלי",
                     subtitle = "הצעות שנבדקו מול השירותים שלך",
                     icon = Icons.Default.Storefront,
+                    testTag = "dashboard_manage_savings",
                     onClick = { onNavigateToTab(2) }
                 )
                 DashboardActionButton(
                     text = "אני והעדפות",
                     subtitle = "יעדים, העדפות, פרטיות וחיבורים",
                     icon = Icons.Default.Tune,
+                    testTag = "dashboard_manage_profile",
                     onClick = { onNavigateToTab(3) }
                 )
             }
@@ -348,6 +384,7 @@ private fun ProactiveOpportunityCard(
 ) {
     Card(
         onClick = onClick,
+        modifier = Modifier.testTag("dashboard_opportunity_${opportunity.id}"),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
     ) {
@@ -365,15 +402,23 @@ private fun ProactiveOpportunityCard(
                     fontWeight = FontWeight.Bold
                 )
                 val matchedOffer = opportunity.matchedOffer
-                if (matchedOffer != null && (opportunity.potentialMonthlySaving ?: 0.0) > 0.0) {
+                val verifiedLabel = if (matchedOffer != null) {
+                    CustomerPresentationPolicy.verifiedSavingsLabel(
+                        opportunity.potentialMonthlySaving,
+                        opportunity.potentialAnnualSaving
+                    )
+                } else {
+                    null
+                }
+                if (verifiedLabel != null) {
                     Text(
-                        "אפשר לחסוך ${money(opportunity.potentialMonthlySaving ?: 0.0)} בחודש",
+                        verifiedLabel,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = TechBluePrimary
                     )
                     Text(
-                        "${money(opportunity.potentialAnnualSaving ?: 0.0)} בשנה • הצעה שנבדקה והותאמה לשירות שלך",
+                        "הצעה שנבדקה והותאמה לשירות שלך",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -385,7 +430,7 @@ private fun ProactiveOpportunityCard(
                     }
                     Text(detectionText, style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        "סכום חיסכון יוצג רק לאחר אימות.",
+                        CustomerPresentationPolicy.underReviewLabel(),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -403,6 +448,7 @@ private fun InitialGmailOnboardingCard(
     onConnectGmail: () -> Unit
 ) {
     Card(
+        modifier = Modifier.testTag("dashboard_initial_connection"),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
     ) {
@@ -422,7 +468,9 @@ private fun InitialGmailOnboardingCard(
             Button(
                 onClick = if (authenticated) onConnectGmail else onGoogleSignIn,
                 enabled = !syncing,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("dashboard_connect_account")
             ) {
                 Icon(
                     if (authenticated) Icons.Default.Security else Icons.Default.Login,
@@ -442,8 +490,11 @@ private fun SavingsHeroCard(
     opportunities: Int,
     onOpenSavings: () -> Unit
 ) {
+    val verified = opportunities > 0 && monthlySavings > 0.0
+    val displayAnnual = annualSavings.takeIf { it > 0.0 } ?: (monthlySavings * 12.0)
     Card(
         onClick = onOpenSavings,
+        modifier = Modifier.testTag("dashboard_savings_hero"),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = TechBluePrimary)
     ) {
@@ -461,13 +512,13 @@ private fun SavingsHeroCard(
                 )
             }
             Text(
-                if (opportunities > 0) money(annualSavings) else "עדיין בבדיקה",
+                if (verified) money(displayAnnual) else "עדיין בבדיקה",
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimary
             )
             Text(
-                if (opportunities > 0) {
+                if (verified) {
                     "בשנה • ${money(monthlySavings)} בחודש"
                 } else {
                     "נציג כאן סכום רק אחרי שנמצא ונאמת חיסכון אמיתי"
@@ -475,7 +526,7 @@ private fun SavingsHeroCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimary
             )
-            if (opportunities > 0) {
+            if (verified) {
                 Text(
                     "$opportunities הזדמנויות מאומתות • לחץ לפרטים",
                     style = MaterialTheme.typography.bodySmall,
@@ -497,16 +548,27 @@ private fun GmailConsentDialog(onDismiss: () -> Unit, onApprove: () -> Unit) {
                 Text("הגישה משמשת לאיתור חשבוניות וקבלות ולחילוץ פרטי החיוב הדרושים לצורך בדיקת חיסכון.")
                 Text("אין אפשרות לשלוח, למחוק או לערוך הודעות. אפשר לבטל את החיבור בכל עת דרך פרטיות וחיבורים בפרופיל.")
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = accepted, onCheckedChange = { accepted = it })
+                    Checkbox(
+                        checked = accepted,
+                        onCheckedChange = { accepted = it },
+                        modifier = Modifier.testTag("gmail_consent_checkbox")
+                    )
                     Text("קראתי ואני מאשר/ת גישה זו במפורש.")
                 }
             }
         },
         confirmButton = {
-            Button(onClick = onApprove, enabled = accepted) { Text("המשך ל-Google") }
+            Button(
+                onClick = onApprove,
+                enabled = accepted,
+                modifier = Modifier.testTag("gmail_consent_continue")
+            ) { Text("המשך ל-Google") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("ביטול") }
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("gmail_consent_cancel")
+            ) { Text("ביטול") }
         }
     )
 }
@@ -536,11 +598,14 @@ private fun DashboardActionButton(
     text: String,
     subtitle: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    testTag: String,
     onClick: () -> Unit
 ) {
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(testTag),
         shape = RoundedCornerShape(18.dp)
     ) {
         Row(
@@ -572,8 +637,9 @@ private fun DashboardActionButton(
 }
 
 @Composable
-private fun EmptyStateCard(title: String, body: String) {
+private fun EmptyStateCard(title: String, body: String, testTag: String = "dashboard_state_card") {
     Card(
+        modifier = Modifier.testTag(testTag),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         shape = RoundedCornerShape(18.dp)
     ) {
