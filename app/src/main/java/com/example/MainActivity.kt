@@ -85,6 +85,9 @@ class MainActivity : ComponentActivity() {
         // Seed the resume clock so the first onResume does not immediately duplicate that work.
         lastObservedBillsResumeRefreshElapsedRealtimeMs = SystemClock.elapsedRealtime()
         configureFirebaseAndAppCheck()
+        // Create the private financial channel before any background FCM notification can target
+        // it. This prevents Android from falling back to a generic channel on a fresh install.
+        FinancialNotificationChannels.ensureCreated(this)
         requestNotificationPermissionIfNeeded()
         enableEdgeToEdge()
 
