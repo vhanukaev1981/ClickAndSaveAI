@@ -35,6 +35,10 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 - `open_savings_preferences` opens the preferences screen and saving is functional.
 - `open_privacy_connections` is the only normal customer route to connection revocation.
 - `disconnect_document_source` appears only when a source is connected.
+- Tapping `disconnect_document_source` does not disconnect immediately; it opens a clear confirmation dialog.
+- `cancel_disconnect_document_source` leaves the source connected and closes the dialog.
+- `confirm_disconnect_document_source` starts the existing disconnect action and the UI returns to a non-connected state when it completes.
+- The disconnect dialog clearly explains that new documents stop syncing until reconnection while already identified bills remain available.
 - Preferences do not imply an automatic provider switch.
 
 ## Navigation / accessibility
@@ -42,6 +46,7 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 - Home/Bills/Savings/Profile are all visible and clickable.
 - Selected state matches the active destination.
 - Accessibility descriptions exist for every bottom navigation destination.
+- Every bottom navigation destination keeps at least the shared 48dp minimum touch target.
 
 ## Acceptance rule
-A Stream B build is accepted only if the app feels like one coherent financial product: spend is shown as spend, verified savings as verified savings, under-review states do not invent money, every visible CTA works, and implementation/business terminology remains behind the scenes.
+A Stream B build is accepted only if the app feels like one coherent financial product: spend is shown as spend, verified savings as verified savings, under-review states do not invent money, every visible CTA works, destructive privacy actions require confirmation, and implementation/business terminology remains behind the scenes.
