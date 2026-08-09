@@ -55,6 +55,7 @@ object PushTokenLifecycle {
             Log.w(TAG, "Local FCM token deletion failed during sign-out", error)
         }
 
-        return firstFailure?.let(Result.Companion::failure) ?: Result.success(Unit)
+        val failure = firstFailure
+        return if (failure != null) Result.failure(failure) else Result.success(Unit)
     }
 }
