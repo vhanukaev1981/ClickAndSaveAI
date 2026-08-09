@@ -45,7 +45,12 @@ class CustomerPresentationPolicyTest {
             "lead_status=NEW",
             "dispatch_id=123",
             "commission=45",
-            "attribution_id=xyz"
+            "attribution_id=xyz",
+            "firestore permission denied",
+            "webhook signature invalid",
+            "credential expired",
+            "pubsub delivery failed",
+            "cloud_run unavailable"
         )
         samples.forEach {
             assertEquals("המידע מתעדכן", CustomerPresentationPolicy.safeStatus(it))
@@ -86,12 +91,15 @@ class CustomerPresentationPolicyTest {
     }
 
     @Test
-    fun urlsPackageNamesAndPayloadsAreNeverPassedThroughAsCustomerErrors() {
+    fun urlsPackageNamesPayloadsAndEnglishInfrastructureErrorsAreNeverPassedThrough() {
         val samples = listOf(
             "https://internal.example/error/42",
             "com.google.firebase.functions.FirebaseFunctionsException",
             "java.lang.IllegalStateException",
-            "{\"code\":\"permission_denied\"}"
+            "{\"code\":\"permission_denied\"}",
+            "provider webhook timed out",
+            "credential expired",
+            "socket timeout while calling partner"
         )
         samples.forEach {
             assertEquals(
@@ -102,7 +110,7 @@ class CustomerPresentationPolicyTest {
     }
 
     @Test
-    fun customerSafeErrorsCanRemainSpecificButBounded() {
+    fun customerSafeHebrewErrorsCanRemainSpecificButBounded() {
         val safe = CustomerPresentationPolicy.safeError("ההצעה כבר אינה זמינה")
         assertEquals("ההצעה כבר אינה זמינה", safe)
     }
