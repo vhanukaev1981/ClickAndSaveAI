@@ -15,7 +15,12 @@ class CustomerVisibleCopyGuardTest {
 
     private val forbiddenVisibleTerms = listOf(
         "lead",
+        "ליד",
+        "לידים",
         "crm",
+        "רובוט",
+        "robot",
+        "mascot",
         "firebase auth",
         "app check",
         "secret manager",
@@ -32,7 +37,7 @@ class CustomerVisibleCopyGuardTest {
     )
 
     @Test
-    fun customerFacingStringLiteralsContainNoInternalProductTerminology() {
+    fun customerFacingStringLiteralsContainNoInternalProductTerminologyOrAiTheatre() {
         customerScreens.forEach { path ->
             val source = File(path).readText()
             val literals = quotedStringLiterals(source)
@@ -41,7 +46,7 @@ class CustomerVisibleCopyGuardTest {
 
             forbiddenVisibleTerms.forEach { forbidden ->
                 assertFalse(
-                    "$path exposes internal customer-visible term: $forbidden",
+                    "$path exposes forbidden customer-visible term: $forbidden",
                     literals.contains(forbidden)
                 )
             }
