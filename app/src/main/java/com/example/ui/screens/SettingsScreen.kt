@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.ui.MainViewModel
+import com.example.ui.theme.FinancialDesignTokens
 import com.example.ui.theme.TechBluePrimary
 
 @Composable
@@ -130,8 +131,8 @@ fun SettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .testTag("settings_screen"),
-        contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 100.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = financialSettingsPadding(),
+        verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.sectionSpacing)
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -148,7 +149,7 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "חזרה")
                     }
-                    Spacer(modifier = Modifier.size(6.dp))
+                    Spacer(modifier = Modifier.size(FinancialDesignTokens.compactSpacing))
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(
@@ -168,14 +169,14 @@ fun SettingsScreen(
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                shape = RoundedCornerShape(20.dp)
+                shape = RoundedCornerShape(FinancialDesignTokens.cardRadius)
             ) {
                 Row(
-                    modifier = Modifier.padding(18.dp),
+                    modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Default.Savings, contentDescription = null, tint = TechBluePrimary)
-                    Spacer(modifier = Modifier.size(10.dp))
+                    Spacer(modifier = Modifier.size(FinancialDesignTokens.cardSpacing))
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text("החיסכון שלך קודם", fontWeight = FontWeight.Bold)
                         Text(
@@ -189,8 +190,11 @@ fun SettingsScreen(
         }
 
         item {
-            Card(shape = RoundedCornerShape(20.dp)) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Card(shape = RoundedCornerShape(FinancialDesignTokens.cardRadius)) {
+                Column(
+                    modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
+                    verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.sectionSpacing)
+                ) {
                     Text("יעדי חיסכון", fontWeight = FontWeight.Bold)
                     Text(
                         "היעדים עוזרים למקד את התמונה הפיננסית שלך — הם לא מבטיחים תוצאה ולא משנים את כללי האימות.",
@@ -226,8 +230,11 @@ fun SettingsScreen(
         }
 
         item {
-            Card(shape = RoundedCornerShape(20.dp)) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Card(shape = RoundedCornerShape(FinancialDesignTokens.cardRadius)) {
+                Column(
+                    modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
+                    verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.sectionSpacing)
+                ) {
                     Text("העדפות שירות", fontWeight = FontWeight.Bold)
                     Text(
                         "אם יש ספק שאתה מעדיף, אפשר לציין אותו. ההמלצה עדיין תתבסס על התאמה, מחיר ותנאים שניתן לאמת.",
@@ -246,11 +253,14 @@ fun SettingsScreen(
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                shape = RoundedCornerShape(18.dp)
+                shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius)
             ) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+                Row(
+                    modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
+                    verticalAlignment = Alignment.Top
+                ) {
                     Icon(Icons.Default.Info, contentDescription = null)
-                    Spacer(modifier = Modifier.size(10.dp))
+                    Spacer(modifier = Modifier.size(FinancialDesignTokens.cardSpacing))
                     Text(
                         "שמירת העדפות אינה מאשרת מעבר ספק או פעולה כספית. כל פעולה מול נותן שירות דורשת אישור מפורש שלך להצעה המדויקת.",
                         style = MaterialTheme.typography.bodySmall
@@ -292,11 +302,11 @@ fun SettingsScreen(
                         .fillMaxWidth()
                         .testTag("preferences_saved_confirmation"),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                    shape = RoundedCornerShape(18.dp)
+                    shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius)
                 ) {
                     Text(
                         "ההעדפות נשמרו. נשתמש בהן כדי למקד את ההזדמנויות שיוצגו לך.",
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium
                     )
@@ -339,3 +349,10 @@ private fun PreferencePicker(
         }
     }
 }
+
+private fun financialSettingsPadding() = PaddingValues(
+    start = FinancialDesignTokens.screenHorizontalPadding,
+    top = FinancialDesignTokens.screenTopPadding,
+    end = FinancialDesignTokens.screenHorizontalPadding,
+    bottom = FinancialDesignTokens.screenBottomNavigationClearance
+)
