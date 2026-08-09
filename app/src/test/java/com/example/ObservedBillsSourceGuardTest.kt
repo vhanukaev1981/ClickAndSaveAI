@@ -38,7 +38,8 @@ class ObservedBillsSourceGuardTest {
 
     @Test
     fun lightweightSnapshotDoesNotExposeRawGmailContentFields() {
-        val backend = File("../../functions/src/observedBillsFunctions.js").readText()
+        // Android unit tests execute from the app module directory.
+        val backend = File("../functions/src/observedBillsFunctions.js").readText()
         val normalizedReturn = backend.substringAfter("return {\n    sourceMessageId")
             .substringBefore("  };\n}")
 
