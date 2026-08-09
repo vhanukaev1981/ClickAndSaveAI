@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Person
@@ -24,6 +25,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.example.ui.theme.FinancialDesignTokens
 
 @Composable
 fun BottomNavBar(
@@ -34,7 +36,7 @@ fun BottomNavBar(
         NavigationBar(
             modifier = Modifier.testTag("bottom_nav_bar"),
             containerColor = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
+            tonalElevation = 0.dp
         ) {
             FinancialNavItem(
                 selected = selectedTab == 0,
@@ -96,6 +98,7 @@ private fun FinancialNavItem(
         alwaysShowLabel = true,
         colors = navColors(),
         modifier = Modifier
+            .heightIn(min = FinancialDesignTokens.minimumTouchTarget)
             .testTag(testTag)
             .semantics { this.contentDescription = contentDescription }
     )
