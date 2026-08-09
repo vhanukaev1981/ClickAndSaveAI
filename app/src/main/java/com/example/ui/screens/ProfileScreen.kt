@@ -87,7 +87,10 @@ fun ProfileScreen(
         }
 
         item {
-            Card(shape = RoundedCornerShape(20.dp)) {
+            Card(
+                modifier = Modifier.testTag("profile_account_card"),
+                shape = RoundedCornerShape(20.dp)
+            ) {
                 Column(
                     modifier = Modifier.padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -111,7 +114,9 @@ fun ProfileScreen(
                         )
                         OutlinedButton(
                             onClick = viewModel::signOut,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("profile_sign_out")
                         ) {
                             Icon(Icons.Default.Logout, contentDescription = null)
                             Spacer(modifier = Modifier.size(6.dp))
@@ -122,7 +127,12 @@ fun ProfileScreen(
                             "התחבר כדי לשמור את התמונה הפיננסית וההעדפות שלך.",
                             style = MaterialTheme.typography.bodyMedium
                         )
-                        Button(onClick = onGoogleSignIn, modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = onGoogleSignIn,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("profile_sign_in")
+                        ) {
                             Icon(Icons.Default.Login, contentDescription = null)
                             Spacer(modifier = Modifier.size(6.dp))
                             Text("התחבר")
@@ -134,6 +144,7 @@ fun ProfileScreen(
 
         item {
             Card(
+                modifier = Modifier.testTag("profile_savings_preferences_card"),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
             ) {
@@ -157,7 +168,9 @@ fun ProfileScreen(
                     )
                     Button(
                         onClick = { showSettings = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("open_savings_preferences")
                     ) {
                         Icon(Icons.Default.Settings, contentDescription = null)
                         Spacer(modifier = Modifier.size(6.dp))
@@ -168,7 +181,10 @@ fun ProfileScreen(
         }
 
         item {
-            Card(shape = RoundedCornerShape(20.dp)) {
+            Card(
+                modifier = Modifier.testTag("profile_privacy_card"),
+                shape = RoundedCornerShape(20.dp)
+            ) {
                 Column(
                     modifier = Modifier.padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -184,7 +200,9 @@ fun ProfileScreen(
                     )
                     OutlinedButton(
                         onClick = { showPrivacy = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("open_privacy_connections")
                     ) {
                         Icon(Icons.Default.Link, contentDescription = null)
                         Spacer(modifier = Modifier.size(6.dp))
@@ -218,7 +236,10 @@ private fun PrivacyConnectionsScreen(
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBackClick) {
+                IconButton(
+                    onClick = onBackClick,
+                    modifier = Modifier.testTag("privacy_back")
+                ) {
                     Icon(Icons.Default.ArrowBack, contentDescription = "חזרה")
                 }
                 Spacer(modifier = Modifier.size(6.dp))
@@ -238,7 +259,10 @@ private fun PrivacyConnectionsScreen(
         }
 
         item {
-            Card(shape = RoundedCornerShape(20.dp)) {
+            Card(
+                modifier = Modifier.testTag("privacy_document_source_card"),
+                shape = RoundedCornerShape(20.dp)
+            ) {
                 Column(
                     modifier = Modifier.padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -266,7 +290,9 @@ private fun PrivacyConnectionsScreen(
                         OutlinedButton(
                             onClick = viewModel::disconnectGmail,
                             enabled = !isSyncing,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("disconnect_document_source")
                         ) {
                             Text(if (isSyncing) "מנתק…" else "בטל את החיבור")
                         }
@@ -277,6 +303,7 @@ private fun PrivacyConnectionsScreen(
 
         item {
             Card(
+                modifier = Modifier.testTag("privacy_control_explainer"),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
             ) {
