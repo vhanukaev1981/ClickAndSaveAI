@@ -45,6 +45,12 @@ const INSURANCE_PROVIDERS = new Set([
   "weSure",
 ]);
 
+const GENERIC_PROVIDER_LABELS = [
+  /^(?:unknown|unknown provider|provider|service provider|billing provider|vendor|merchant|company)$/i,
+  /^(?:insurance|insurance company|insurance provider|insurer)$/i,
+  /^(?:ספק|ספק לא מזוהה|ספק שזוהה מהודעת gmail|ספק שירות|חברה|בית עסק|חברת ביטוח)$/i,
+];
+
 function firstHeader(headers, name) {
   if (!Array.isArray(headers)) return "";
   return headers.find((header) =>
@@ -190,12 +196,27 @@ function matchStrongProvider(text) {
   return providers.find(([, pattern]) => pattern.test(text))?.[0] || null;
 }
 
+function knownProviderFromText(text, includeGenericPartner = true) {
+  const normalized = String(text || "").trim();
+  if (!normalized) return null;
+  return matchProvider(normalized, includeGenericPartner) || matchStrongProvider(normalized);
+}
+
+function strongHeaderProvider(from, subject) {
+  return knownProviderFromText(`${from} ${subject}`, true);
+}
+
+function isGenericProviderLabel(value) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return true;
+  return GENERIC_PROVIDER_LABELS.some((pattern) => pattern.test(normalized));
+}
+
 function identifyProvider(from, subject, searchableText) {
   // Sender/subject are strong brand signals. Insurance brands are intentionally matched only
   // here so a brand word in arbitrary receipt body text cannot turn an unrelated receipt into
   // an insurance invoice.
-  const strongText = `${from} ${subject}`.toLowerCase();
-  const strongMatch = matchProvider(strongText, true) || matchStrongProvider(strongText);
+  const strongMatch = strongHeaderProvider(from, subject);
   if (strongMatch) return strongMatch;
 
   const bodyText = String(searchableText || "").toLowerCase();
@@ -228,9 +249,27 @@ function normalizePdfInvoiceCandidate(candidate, message, sourceDocumentId = "")
   const from = firstHeader(headers, "From");
   const headerDate = firstHeader(headers, "Date");
   const providerText = String(candidate.providerName || "").trim().slice(0, 160);
-  const detectedProvider = identifyProvider(from, subject, providerText);
-  const providerName = providerText ||
-    (detectedProvider !== "ספק שזוהה מהודעת Gmail" ? detectedProvider : "ספק לא מזוהה");
+  const headerProvider = strongHeaderProvider(from, subject);
+  const pdfKnownProvider = knownProviderFromText(providerText, true);
+
+  let providerName;
+  if (headerProvider && (
+    isGenericProviderLabel(providerText) ||
+    pdfKnownProvider === headerProvider
+  )) {
+    // Strong sender/subject evidence wins over an empty/generic PDF label and also
+    // canonicalizes a PDF spelling variant of the same provider.
+    providerName = headerProvider;
+  } else if (pdfKnownProvider) {
+    // A different explicit known provider in the document may be legitimate (for
+    // example a forwarded invoice), so preserve the document evidence canonically.
+    providerName = pdfKnownProvider;
+  } else if (providerText && !isGenericProviderLabel(providerText)) {
+    providerName = providerText;
+  } else {
+    providerName = headerProvider || "ספק לא מזוהה";
+  }
+
   const category = normalizeDocumentCategory(candidate.category) ||
     fallbackCategoryForProvider(providerName) ||
     "אחר";
