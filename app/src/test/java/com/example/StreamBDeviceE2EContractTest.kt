@@ -13,9 +13,13 @@ class StreamBDeviceE2EContractTest {
         val checklist = File(checklistPath).readText()
 
         listOf(
+            "## First-run onboarding / trust",
             "## Home",
+            "## Truthful progress / motion",
             "## Bills",
+            "## Bills / provider payment handoff",
             "## Savings",
+            "## Provider handoff",
             "## Profile / privacy / preferences",
             "## Navigation / accessibility",
             "## Acceptance rule"
@@ -57,6 +61,36 @@ class StreamBDeviceE2EContractTest {
     }
 
     @Test
+    fun deviceChecklistNeverFakesProgressOrProviderOutcome() {
+        val checklist = File(checklistPath).readText()
+
+        listOf(
+            "No visible progress percentage is fabricated by Android",
+            "No timer advances a scan/analyze/verify stage",
+            "Blue → Verified Green transition happens only after verified evidence exists",
+            "does not claim activation, conversion or sale",
+            "Do not add a fifth Activity tab until meaningful Core activity states/data exist"
+        ).forEach { rule ->
+            assertTrue("Device E2E lost truthful progress/outcome rule: $rule", checklist.contains(rule))
+        }
+    }
+
+    @Test
+    fun deviceChecklistKeepsVerifiedExternalPaymentBoundary() {
+        val checklist = File(checklistPath).readText()
+
+        listOf(
+            "payment-handoff candidate verified against trusted provider configuration",
+            "Click&SaveAI does not receive/store card details and does not process the payment",
+            "never guesses a payment URL",
+            "Opening the provider payment page does not mark the bill paid",
+            "reliable downstream evidence exists"
+        ).forEach { rule ->
+            assertTrue("Device E2E lost payment handoff rule: $rule", checklist.contains(rule))
+        }
+    }
+
+    @Test
     fun deviceChecklistCoversRecoveryConfirmationAndAccessibility() {
         val checklist = File(checklistPath).readText()
 
@@ -77,7 +111,7 @@ class StreamBDeviceE2EContractTest {
     fun checklistDoesNotAuthorizeAutomaticSwitching() {
         val checklist = File(checklistPath).readText()
 
-        assertTrue(checklist.contains("does not imply an automatic provider switch"))
+        assertTrue(checklist.contains("Preferences do not imply an automatic provider switch"))
         assertFalse(checklist.contains("automatic provider switch is allowed"))
     }
 }
