@@ -7,11 +7,13 @@ on:
     paths:
       - scripts/bootstrap-staging-wif.sh
       - scripts/verify-staging-wif.sh
+      - scripts/configure-github-staging-vars.sh
       - .github/workflows/ops-wif-ci.yml
   pull_request:
     paths:
       - scripts/bootstrap-staging-wif.sh
       - scripts/verify-staging-wif.sh
+      - scripts/configure-github-staging-vars.sh
       - .github/workflows/ops-wif-ci.yml
 
 permissions:
@@ -25,7 +27,11 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Validate Bash syntax
-        run: bash -n scripts/bootstrap-staging-wif.sh scripts/verify-staging-wif.sh
+        run: |
+          bash -n \
+            scripts/bootstrap-staging-wif.sh \
+            scripts/verify-staging-wif.sh \
+            scripts/configure-github-staging-vars.sh
 
       - name: Enforce keyless and scoped trust guardrails
         shell: bash
@@ -38,7 +44,8 @@ jobs:
           grep -Fq "assertion.repository_owner_id=='\${GITHUB_REPOSITORY_OWNER_ID}'" scripts/bootstrap-staging-wif.sh
           grep -Fq "assertion.environment=='\${GITHUB_ENVIRONMENT}'" scripts/bootstrap-staging-wif.sh
 
-          if grep -Eq 'service-accounts keys (create|upload)|iam service-accounts keys create' scripts/bootstrap-staging-wif.sh; then
+          if grep -Eq 'service-accounts keys (create|upload)|iam service-accounts keys create' \
+            scripts/bootstrap-staging-wif.sh scripts/verify-staging-wif.sh scripts/configure-github-staging-vars.sh; then
             echo 'Service-account key creation is forbidden for this bootstrap.' >&2
             exit 1
           fi
