@@ -21,6 +21,11 @@ function bill(index, overrides = {}) {
   };
 }
 
+test("observed bills callable shares Android backend region and public export", () => {
+  assert.equal(observedBills._REGION, "europe-west1");
+  assert.equal(entry.getObservedBills, observedBills.getObservedBills);
+});
+
 test("observed bills snapshot exposes normalized minimum fields only", () => {
   const payload = observedBills._buildObservedBillsPayload([bill(1)], new Date("2026-08-09T07:00:00.000Z"));
 
@@ -38,7 +43,6 @@ test("observed bills snapshot exposes normalized minimum fields only", () => {
   assert.equal(payload.bills[0].subject, undefined);
   assert.equal(payload.bills[0].accountNumber, undefined);
   assert.equal(payload.generatedAt, "2026-08-09T07:00:00.000Z");
-  assert.equal(entry.getObservedBills, observedBills.getObservedBills);
 });
 
 test("invalid observed bills are dropped instead of fabricated", () => {
