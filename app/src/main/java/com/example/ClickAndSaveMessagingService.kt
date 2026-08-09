@@ -23,7 +23,6 @@ import kotlinx.coroutines.launch
 
 private const val PUSH_CHANNEL_ID = "savings_opportunities"
 private const val PUSH_CHANNEL_NAME = "הזדמנויות חיסכון"
-private const val PUSH_TYPE_NEW_INVOICE = "NEW_INVOICE"
 
 object PushRegistration {
     fun registerCurrentToken() {
@@ -48,7 +47,7 @@ object PushRegistration {
 
 class ClickAndSaveMessagingService : FirebaseMessagingService() {
     // This is an acceleration path only. Android may reclaim the process after an FCM
-    // callback; authoritative reconciliation is guaranteed again on authenticated startup.
+    // callback; authoritative reconciliation is guaranteed again on authenticated startup/resume.
     private val refreshScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onNewToken(token: String) {
@@ -58,17 +57,18 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
-        if (message.data["type"] == PUSH_TYPE_NEW_INVOICE) {
+        val pushType = message.data[PUSH_TYPE_EXTRA]
+        if (pushType == PUSH_TYPE_NEW_INVOICE) {
             refreshObservedBillsFromBackend()
         }
 
         val title = message.notification?.title
             ?: message.data["title"]
-            ?: "מצאנו הזדמנות לחיסכון"
+            ?: "מצאנו עדכון חדש"
         val body = message.notification?.body
             ?: message.data["body"]
-            ?: "פתח את ClickAndSaveAI כדי לראות כמה אפשר לחסוך."
-        showNotification(title, body)
+            ?: "פתח את ClickAndSaveAI כדי לראות את העדכון."
+        showNotification(title, body, pushType)
     }
 
     private fun refreshObservedBillsFromBackend() {
@@ -79,13 +79,13 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
             runCatching { observedBillsRepository.refreshObservedBills() }
                 .onFailure { error ->
                     // The push notification remains useful even when this best-effort local
-                    // reconciliation is unavailable. Authenticated app startup retries it.
+                    // reconciliation is unavailable. Authenticated app startup/resume retries it.
                     Log.w("ObservedBillsRefresh", "NEW_INVOICE snapshot refresh failed", error)
                 }
         }
     }
 
-    private fun showNotification(title: String, body: String) {
+    private fun showNotification(title: String, body: String, pushType: String?) {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             notificationManager.createNotificationChannel(
@@ -99,13 +99,22 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
             )
         }
 
+        val destinationTab = destinationTabForPushType(pushType)
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra("openSavingsOpportunity", true)
+            if (destinationTab != null && pushType != null) {
+                putExtra(PUSH_TYPE_EXTRA, pushType)
+            }
+        }
+        val pendingIntentRequestCode = when (destinationTab) {
+            1 -> 101
+            2 -> 102
+            0 -> 100
+            else -> 199
         }
         val pendingIntent = PendingIntent.getActivity(
             this,
-            0,
+            pendingIntentRequestCode,
             openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
