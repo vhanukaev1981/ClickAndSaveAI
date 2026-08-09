@@ -9,6 +9,7 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 - `dashboard_savings_hero` never shows `₪0` as verified savings.
 - A positive verified monthly saving has a positive annual display.
 - Loading, error and under-review states are mutually clear and customer-facing.
+- If `dashboard_error_state` appears, `dashboard_retry_financial_home` is visible and tapping it clears the stale error, shows the loading transition and retries the existing financial-home request.
 - `dashboard_manage_bills`, `dashboard_manage_savings`, `dashboard_manage_profile`, recent bills and opportunity cards navigate to the intended destination.
 
 ## Bills
@@ -65,4 +66,4 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 - Every bottom navigation destination keeps at least the shared 48dp minimum touch target.
 
 ## Acceptance rule
-A Stream B build is accepted only if the app feels like one coherent financial product: spend is shown as spend, verified savings as verified savings, under-review states do not invent money, every visible CTA works, destructive account/privacy actions require confirmation, in-flight actions cannot be double-submitted, unsaved edits are protected, and implementation/business terminology remains behind the scenes.
+A Stream B build is accepted only if the app feels like one coherent financial product: spend is shown as spend, verified savings as verified savings, under-review states do not invent money, every visible CTA works, retry paths recover from temporary UI errors, destructive account/privacy actions require confirmation, in-flight actions cannot be double-submitted, unsaved edits are protected, and implementation/business terminology remains behind the scenes.
