@@ -109,3 +109,7 @@ The bootstrap currently grants the deploy service account:
 It grants `roles/iam.serviceAccountUser` only on the function runtime and Cloud Build service accounts, rather than at project scope.
 
 If a future authenticated deployment reports a specific additional missing permission, add the narrow role required by that resource. Do not solve a missing permission by granting `Owner` or `Editor`.
+
+## Queued immediately after E2E #2
+
+The next Stream A item is the authoritative realtime Bills/Room synchronization design documented in `docs/POST_E2E_REALTIME_BILLS_SYNC.md`. It must not move the locked E2E baseline before device validation.
