@@ -108,6 +108,7 @@ class CustomerUiSourceGuardTest {
             "savings_under_review_state",
             "savings_error_state",
             "savings_retry_refresh",
+            "savings_action_starting",
             "savings_action_submitting",
             "accept_savings_",
             "savings_contact_consent",
@@ -154,6 +155,26 @@ class CustomerUiSourceGuardTest {
     }
 
     @Test
+    fun dashboardDoesNotInferRecurringContextOrAnnualSavings() {
+        val dashboard = File(screenPaths[0]).readText()
+        assertFalse(
+            "Invoice count is not an authoritative recurring-service count",
+            dashboard.contains("recurringServiceCount ?: invoices.size")
+        )
+        assertFalse(
+            "Dashboard must not synthesize annual savings from monthly savings",
+            dashboard.contains("potentialMonthlySaving ?: 0.0) * 12.0")
+        )
+        assertFalse(
+            "Savings hero must not synthesize annual savings",
+            dashboard.contains("monthlySavings * 12.0")
+        )
+        assertTrue(dashboard.contains("localObservedSpend"))
+        assertTrue(dashboard.contains("לא בהכרח חיוב חוזר"))
+        assertTrue(dashboard.contains("recurringServiceCount?.toString() ?: \"—\""))
+    }
+
+    @Test
     fun savingsErrorStateKeepsExplicitRetryPath() {
         val savings = File(screenPaths[2]).readText()
         assertTrue(savings.contains("savings_error_state"))
@@ -193,13 +214,27 @@ class CustomerUiSourceGuardTest {
     }
 
     @Test
-    fun savingsSubmissionExposesProgressAndBlocksDuplicateActions() {
+    fun savingsSubmissionPreservesIntentProgressAndBlocksDuplicateActions() {
         val savings = File(screenPaths[2]).readText()
+        assertTrue(savings.contains("actionIntentStarting"))
         assertTrue(savings.contains("actionSubmitting"))
+        assertTrue(savings.contains("savings_action_starting"))
         assertTrue(savings.contains("savings_action_submitting"))
-        assertTrue(savings.contains("actionEnabled = !actionSubmitting"))
+        assertTrue(savings.contains("actionEnabled = !actionIntentStarting && !actionSubmitting"))
         assertTrue(savings.contains("enabled = actionEnabled"))
         assertTrue(savings.contains("if (actionSubmitting) return@SavingsActionDialog"))
+        assertTrue(
+            "Savings action must record ACTION_STARTED before opening explicit provider consent",
+            savings.contains("recordSavingsActionStarted(")
+        )
+        assertFalse(
+            "Savings success UI must use backend annual economics, not monthly x 12",
+            savings.contains("result.potentialMonthlySaving * 12.0")
+        )
+        assertTrue(
+            "Savings success UI must preserve backend-returned annual savings",
+            savings.contains("result.potentialAnnualSaving")
+        )
     }
 
     @Test
