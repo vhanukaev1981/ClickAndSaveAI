@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -38,7 +37,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -51,7 +49,6 @@ fun SettingsScreen(
     viewModel: MainViewModel,
     onBackClick: (() -> Unit)? = null
 ) {
-    val context = LocalContext.current
     val currentGoal by viewModel.monthlySavingsGoal.collectAsState()
     val currentElectricity by viewModel.preferredElectricityProvider.collectAsState()
     val currentCellular by viewModel.preferredCellularProvider.collectAsState()
@@ -67,6 +64,7 @@ fun SettingsScreen(
     var internet by remember(currentInternet) { mutableStateOf(currentInternet) }
     var insurance by remember(currentInsurance) { mutableStateOf(currentInsurance) }
     var streaming by remember(currentStreaming) { mutableStateOf(currentStreaming) }
+    var savedSignature by remember { mutableStateOf<String?>(null) }
 
     val electricityOptions = listOf("לא נבחר", "חברת החשמל", "אלקטרה פאוור", "סלקום אנרגיה", "פזגז חשמל")
     val cellularOptions = listOf("לא נבחר", "019 מובייל", "Wecom", "פלאפון", "סלקום", "פרטנר", "גולן טלקום")
@@ -77,6 +75,16 @@ fun SettingsScreen(
     val goalValue = goalInput.toDoubleOrNull() ?: 0.0
     val thresholdValue = thresholdInput.toDoubleOrNull() ?: 0.0
     val canSave = goalValue >= 0.0 && thresholdValue >= 0.0
+    val currentSignature = listOf(
+        goalInput,
+        thresholdInput,
+        electricity,
+        cellular,
+        internet,
+        insurance,
+        streaming
+    ).joinToString("|")
+    val showSavedConfirmation = savedSignature != null && savedSignature == currentSignature
 
     LazyColumn(
         modifier = Modifier
@@ -215,7 +223,7 @@ fun SettingsScreen(
                         autoSwitch = false,
                         minThreshold = thresholdValue
                     )
-                    Toast.makeText(context, "ההעדפות נשמרו", Toast.LENGTH_SHORT).show()
+                    savedSignature = currentSignature
                 },
                 enabled = canSave,
                 modifier = Modifier
@@ -225,6 +233,25 @@ fun SettingsScreen(
                 Icon(Icons.Default.Save, contentDescription = null)
                 Spacer(modifier = Modifier.size(8.dp))
                 Text("שמור העדפות")
+            }
+        }
+
+        if (showSavedConfirmation) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("preferences_saved_confirmation"),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Text(
+                        "ההעדפות נשמרו. נשתמש בהן כדי למקד את ההזדמנויות שיוצגו לך.",
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }
