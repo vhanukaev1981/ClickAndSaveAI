@@ -43,11 +43,13 @@ class StreamBDeviceE2EContractTest {
     }
 
     @Test
-    fun deviceChecklistPreservesTruthfulnessAndExactOfferFlow() {
+    fun deviceChecklistPreservesTruthfulnessExactOfferAndSavingsSemantics() {
         val checklist = File(checklistPath).readText()
 
         assertTrue(checklist.contains("never shows `₪0` as verified savings"))
         assertTrue(checklist.contains("exact verified monthly/annual saving"))
+        assertTrue(checklist.contains("dedicated savings-success semantic green"))
+        assertTrue(checklist.contains("brand/action controls remain on the blue brand palette"))
         assertTrue(checklist.contains("bound to the displayed offer"))
         assertTrue(checklist.contains("savings_action_starting"))
         assertTrue(checklist.contains("savings_action_submitting"))
