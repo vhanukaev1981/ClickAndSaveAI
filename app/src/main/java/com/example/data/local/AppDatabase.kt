@@ -84,6 +84,9 @@ interface InvoiceDao {
     @Query("DELETE FROM invoice_items WHERE id = :id")
     suspend fun deleteInvoice(id: Long)
 
+    @Query("DELETE FROM invoice_items WHERE sourceType = 'GMAIL_READONLY' AND sourceMessageId IN (:sourceMessageIds)")
+    suspend fun deleteObservedGmailInvoicesBySourceIds(sourceMessageIds: List<String>)
+
     @Query("DELETE FROM invoice_items")
     suspend fun deleteAllInvoices()
 
