@@ -121,6 +121,14 @@ class CustomerUiSourceGuardTest {
         ).forEach { tag -> assertTrue("Profile lost E2E hook $tag", profile.contains(tag)) }
 
         listOf(
+            "settings_back",
+            "monthly_savings_goal",
+            "minimum_savings_threshold",
+            "preference_electricity",
+            "preference_cellular",
+            "preference_internet",
+            "preference_insurance",
+            "preference_streaming",
             "save_savings_preferences",
             "preferences_saved_confirmation"
         ).forEach { tag -> assertTrue("Settings lost E2E hook $tag", settings.contains(tag)) }
