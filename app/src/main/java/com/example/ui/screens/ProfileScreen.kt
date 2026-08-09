@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.ui.MainViewModel
+import com.example.ui.theme.FinancialDesignTokens
 import com.example.ui.theme.TechBluePrimary
 
 @Composable
@@ -102,8 +103,8 @@ fun ProfileScreen(
         modifier = Modifier
             .fillMaxSize()
             .testTag("profile_screen"),
-        contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 100.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = financialScreenPadding(),
+        verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.sectionSpacing)
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -123,11 +124,11 @@ fun ProfileScreen(
         item {
             Card(
                 modifier = Modifier.testTag("profile_account_card"),
-                shape = RoundedCornerShape(20.dp)
+                shape = RoundedCornerShape(FinancialDesignTokens.cardRadius)
             ) {
                 Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
+                    verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.AccountCircle, contentDescription = null, tint = TechBluePrimary)
@@ -153,7 +154,7 @@ fun ProfileScreen(
                                 .testTag("profile_sign_out")
                         ) {
                             Icon(Icons.Default.Logout, contentDescription = null)
-                            Spacer(modifier = Modifier.size(6.dp))
+                            Spacer(modifier = Modifier.size(FinancialDesignTokens.compactSpacing))
                             Text("התנתק")
                         }
                     } else {
@@ -168,7 +169,7 @@ fun ProfileScreen(
                                 .testTag("profile_sign_in")
                         ) {
                             Icon(Icons.Default.Login, contentDescription = null)
-                            Spacer(modifier = Modifier.size(6.dp))
+                            Spacer(modifier = Modifier.size(FinancialDesignTokens.compactSpacing))
                             Text("התחבר")
                         }
                     }
@@ -179,12 +180,12 @@ fun ProfileScreen(
         item {
             Card(
                 modifier = Modifier.testTag("profile_savings_preferences_card"),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(FinancialDesignTokens.cardRadius),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
             ) {
                 Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
+                    verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Savings, contentDescription = null, tint = TechBluePrimary)
@@ -207,7 +208,7 @@ fun ProfileScreen(
                             .testTag("open_savings_preferences")
                     ) {
                         Icon(Icons.Default.Settings, contentDescription = null)
-                        Spacer(modifier = Modifier.size(6.dp))
+                        Spacer(modifier = Modifier.size(FinancialDesignTokens.compactSpacing))
                         Text("ערוך העדפות")
                     }
                 }
@@ -217,10 +218,10 @@ fun ProfileScreen(
         item {
             Card(
                 modifier = Modifier.testTag("profile_privacy_card"),
-                shape = RoundedCornerShape(20.dp)
+                shape = RoundedCornerShape(FinancialDesignTokens.cardRadius)
             ) {
                 Column(
-                    modifier = Modifier.padding(18.dp),
+                    modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -239,7 +240,7 @@ fun ProfileScreen(
                             .testTag("open_privacy_connections")
                     ) {
                         Icon(Icons.Default.Link, contentDescription = null)
-                        Spacer(modifier = Modifier.size(6.dp))
+                        Spacer(modifier = Modifier.size(FinancialDesignTokens.compactSpacing))
                         Text("ניהול פרטיות וחיבורים")
                     }
                 }
@@ -297,8 +298,8 @@ private fun PrivacyConnectionsScreen(
         modifier = Modifier
             .fillMaxSize()
             .testTag("privacy_connections_screen"),
-        contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 100.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = financialScreenPadding(),
+        verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.sectionSpacing)
     ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -308,7 +309,7 @@ private fun PrivacyConnectionsScreen(
                 ) {
                     Icon(Icons.Default.ArrowBack, contentDescription = "חזרה")
                 }
-                Spacer(modifier = Modifier.size(6.dp))
+                Spacer(modifier = Modifier.size(FinancialDesignTokens.compactSpacing))
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(
                         "פרטיות וחיבורים",
@@ -327,10 +328,10 @@ private fun PrivacyConnectionsScreen(
         item {
             Card(
                 modifier = Modifier.testTag("privacy_document_source_card"),
-                shape = RoundedCornerShape(20.dp)
+                shape = RoundedCornerShape(FinancialDesignTokens.cardRadius)
             ) {
                 Column(
-                    modifier = Modifier.padding(18.dp),
+                    modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -370,12 +371,12 @@ private fun PrivacyConnectionsScreen(
         item {
             Card(
                 modifier = Modifier.testTag("privacy_control_explainer"),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(FinancialDesignTokens.cardRadius),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
             ) {
                 Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
+                    verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)
                 ) {
                     Text("השליטה נשארת אצלך", fontWeight = FontWeight.Bold)
                     Text(
@@ -387,3 +388,10 @@ private fun PrivacyConnectionsScreen(
         }
     }
 }
+
+private fun financialScreenPadding() = PaddingValues(
+    start = FinancialDesignTokens.screenHorizontalPadding,
+    top = FinancialDesignTokens.screenTopPadding,
+    end = FinancialDesignTokens.screenHorizontalPadding,
+    bottom = FinancialDesignTokens.screenBottomNavigationClearance
+)
