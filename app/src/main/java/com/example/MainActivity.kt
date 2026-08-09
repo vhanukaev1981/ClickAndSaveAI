@@ -109,6 +109,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        applyPushDestination(intent)
         maybeTriggerDebugTestPush(intent)
     }
 
@@ -136,7 +137,17 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        applyPushDestination(intent)
         maybeTriggerDebugTestPush(intent)
+    }
+
+    private fun applyPushDestination(intent: Intent?) {
+        val pushType = intent?.getStringExtra(PUSH_TYPE_EXTRA) ?: return
+        val destinationTab = destinationTabForPushType(pushType) ?: return
+        viewModel.setTab(destinationTab)
+        // Consume only a known allowlisted navigation instruction so configuration changes or
+        // repeated delivery cannot unexpectedly re-route a user later.
+        intent.removeExtra(PUSH_TYPE_EXTRA)
     }
 
     private fun maybeTriggerDebugTestPush(intent: Intent?) {
