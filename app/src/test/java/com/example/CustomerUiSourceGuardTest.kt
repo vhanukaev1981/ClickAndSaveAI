@@ -120,7 +120,10 @@ class CustomerUiSourceGuardTest {
             "cancel_disconnect_document_source"
         ).forEach { tag -> assertTrue("Profile lost E2E hook $tag", profile.contains(tag)) }
 
-        assertTrue("Settings lost save hook", settings.contains("save_savings_preferences"))
+        listOf(
+            "save_savings_preferences",
+            "preferences_saved_confirmation"
+        ).forEach { tag -> assertTrue("Settings lost E2E hook $tag", settings.contains(tag)) }
     }
 
     @Test
@@ -133,6 +136,14 @@ class CustomerUiSourceGuardTest {
             "Disconnect CTA must not call the repository action directly",
             profile.contains("onClick = viewModel::disconnectGmail")
         )
+    }
+
+    @Test
+    fun preferenceSaveKeepsVisibleInAppFeedback() {
+        val settings = File(screenPaths[4]).readText()
+        assertTrue(settings.contains("savedSignature"))
+        assertTrue(settings.contains("preferences_saved_confirmation"))
+        assertFalse("Settings must not rely on system Toast feedback", settings.contains("Toast.makeText"))
     }
 
     @Test
