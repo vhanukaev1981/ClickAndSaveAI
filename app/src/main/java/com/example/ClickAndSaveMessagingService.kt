@@ -1,5 +1,6 @@
 package com.example
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -95,6 +96,7 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
                     NotificationManager.IMPORTANCE_DEFAULT
                 ).apply {
                     description = "התראות על חשבוניות והזדמנויות חיסכון חדשות"
+                    lockscreenVisibility = Notification.VISIBILITY_PRIVATE
                 }
             )
         }
@@ -124,6 +126,7 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
