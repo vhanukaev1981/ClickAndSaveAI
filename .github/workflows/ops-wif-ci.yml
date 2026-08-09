@@ -1,0 +1,44 @@
+name: Validate Staging WIF Bootstrap
+
+on:
+  push:
+    branches:
+      - ops/bootstrap-staging-wif
+    paths:
+      - scripts/bootstrap-staging-wif.sh
+      - scripts/verify-staging-wif.sh
+      - .github/workflows/ops-wif-ci.yml
+  pull_request:
+    paths:
+      - scripts/bootstrap-staging-wif.sh
+      - scripts/verify-staging-wif.sh
+      - .github/workflows/ops-wif-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate Bash syntax
+        run: bash -n scripts/bootstrap-staging-wif.sh scripts/verify-staging-wif.sh
+
+      - name: Enforce keyless and scoped trust guardrails
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'GITHUB_REPOSITORY_ID="${GITHUB_REPOSITORY_ID:-1314210715}"' scripts/bootstrap-staging-wif.sh
+          grep -Fq 'GITHUB_REPOSITORY_OWNER_ID="${GITHUB_REPOSITORY_OWNER_ID:-64756523}"' scripts/bootstrap-staging-wif.sh
+          grep -Fq 'GITHUB_ENVIRONMENT="${GITHUB_ENVIRONMENT:-staging}"' scripts/bootstrap-staging-wif.sh
+          grep -Fq "assertion.repository_id=='\${GITHUB_REPOSITORY_ID}'" scripts/bootstrap-staging-wif.sh
+          grep -Fq "assertion.repository_owner_id=='\${GITHUB_REPOSITORY_OWNER_ID}'" scripts/bootstrap-staging-wif.sh
+          grep -Fq "assertion.environment=='\${GITHUB_ENVIRONMENT}'" scripts/bootstrap-staging-wif.sh
+
+          if grep -Eq 'service-accounts keys (create|upload)|iam service-accounts keys create' scripts/bootstrap-staging-wif.sh; then
+            echo 'Service-account key creation is forbidden for this bootstrap.' >&2
+            exit 1
+          fi
