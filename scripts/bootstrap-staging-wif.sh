@@ -14,6 +14,8 @@ DEPLOY_SA_ID="${DEPLOY_SA_ID:-clickandsaveai-github-deployer}"
 GITHUB_REPOSITORY_ID="${GITHUB_REPOSITORY_ID:-1314210715}"
 GITHUB_REPOSITORY_OWNER_ID="${GITHUB_REPOSITORY_OWNER_ID:-64756523}"
 GITHUB_ENVIRONMENT="${GITHUB_ENVIRONMENT:-staging}"
+GITHUB_REF="${GITHUB_REF:-refs/heads/main}"
+GITHUB_JOB_WORKFLOW_REF="${GITHUB_JOB_WORKFLOW_REF:-vhanukaev1981/ClickAndSaveAI/.github/workflows/deploy-staging.yml@refs/heads/main}"
 GITHUB_OIDC_ISSUER="https://token.actions.githubusercontent.com"
 
 log() {
@@ -66,9 +68,9 @@ if ! gcloud iam workload-identity-pools describe "$POOL_ID" \
 fi
 
 ATTRIBUTE_MAPPING="google.subject=assertion.sub,attribute.repository_id=assertion.repository_id,attribute.repository_owner_id=assertion.repository_owner_id,attribute.environment=assertion.environment"
-ATTRIBUTE_CONDITION="assertion.repository_id=='${GITHUB_REPOSITORY_ID}' && assertion.repository_owner_id=='${GITHUB_REPOSITORY_OWNER_ID}' && assertion.environment=='${GITHUB_ENVIRONMENT}'"
+ATTRIBUTE_CONDITION="assertion.repository_id=='${GITHUB_REPOSITORY_ID}' && assertion.repository_owner_id=='${GITHUB_REPOSITORY_OWNER_ID}' && assertion.environment=='${GITHUB_ENVIRONMENT}' && assertion.ref=='${GITHUB_REF}' && assertion.job_workflow_ref=='${GITHUB_JOB_WORKFLOW_REF}'"
 
-log "Ensuring OIDC provider exists and converges to the locked repository/environment policy"
+log "Ensuring OIDC provider exists and converges to the locked repository/workflow/environment policy"
 if gcloud iam workload-identity-pools providers describe "$PROVIDER_ID" \
   --project="$PROJECT_ID" \
   --location="global" \
@@ -90,7 +92,7 @@ else
     --attribute-mapping="$ATTRIBUTE_MAPPING" \
     --attribute-condition="$ATTRIBUTE_CONDITION" \
     --display-name="Click&SaveAI GitHub" \
-    --description="Trust only the immutable Click&SaveAI repo/owner IDs in the staging GitHub environment"
+    --description="Trust only Click&SaveAI main deploy-staging workflow in the staging environment"
 fi
 
 WIF_MEMBER="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/attribute.repository_id/${GITHUB_REPOSITORY_ID}"
@@ -168,6 +170,8 @@ Security boundary applied at the Google provider:
   repository_id       = ${GITHUB_REPOSITORY_ID}
   repository_owner_id = ${GITHUB_REPOSITORY_OWNER_ID}
   environment         = ${GITHUB_ENVIRONMENT}
+  ref                 = ${GITHUB_REF}
+  job_workflow_ref    = ${GITHUB_JOB_WORKFLOW_REF}
 
 No service-account key was created.
 EOF
