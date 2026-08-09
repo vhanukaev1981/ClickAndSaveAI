@@ -52,6 +52,7 @@ fun ProfileScreen(
 ) {
     var showSettings by remember { mutableStateOf(false) }
     var showPrivacy by remember { mutableStateOf(false) }
+    var showSignOutConfirmation by remember { mutableStateOf(false) }
 
     if (showSettings) {
         SettingsScreen(viewModel = viewModel, onBackClick = { showSettings = false })
@@ -65,6 +66,37 @@ fun ProfileScreen(
     val session by viewModel.userSession.collectAsState()
     val monthlyGoal by viewModel.monthlySavingsGoal.collectAsState()
     val minSavingsThreshold by viewModel.minSavingsThreshold.collectAsState()
+
+    if (showSignOutConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showSignOutConfirmation = false },
+            title = { Text("להתנתק מהחשבון?") },
+            text = {
+                Text(
+                    "תצא מהחשבון במכשיר הזה. כדי לחזור לתמונה הפיננסית ולהעדפות שלך יהיה צורך להתחבר שוב."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showSignOutConfirmation = false
+                        viewModel.signOut()
+                    },
+                    modifier = Modifier.testTag("confirm_profile_sign_out")
+                ) {
+                    Text("התנתק")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showSignOutConfirmation = false },
+                    modifier = Modifier.testTag("cancel_profile_sign_out")
+                ) {
+                    Text("הישאר מחובר")
+                }
+            }
+        )
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -115,7 +147,7 @@ fun ProfileScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         OutlinedButton(
-                            onClick = viewModel::signOut,
+                            onClick = { showSignOutConfirmation = true },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("profile_sign_out")
