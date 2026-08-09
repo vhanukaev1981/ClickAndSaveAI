@@ -21,8 +21,12 @@ object CustomerPresentationPolicy {
 
     fun verifiedSavingsLabel(monthlySaving: Double?, annualSaving: Double?): String? {
         val monthly = monthlySaving?.takeIf { it.isFinite() && it > 0.0 } ?: return null
-        val annual = annualSaving?.takeIf { it.isFinite() && it > 0.0 } ?: (monthly * 12.0)
-        return "אפשר לחסוך ${money(monthly)} בחודש • ${money(annual)} בשנה"
+        val annual = annualSaving?.takeIf { it.isFinite() && it > 0.0 }
+        return if (annual != null) {
+            "אפשר לחסוך ${money(monthly)} בחודש • ${money(annual)} בשנה"
+        } else {
+            "אפשר לחסוך ${money(monthly)} בחודש"
+        }
     }
 
     fun safeStatus(rawStatus: String?): String {
