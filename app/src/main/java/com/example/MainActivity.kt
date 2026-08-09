@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -31,6 +32,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
 import com.example.ui.MainViewModel
 import com.example.ui.components.BottomNavBar
 import com.example.ui.screens.DashboardScreen
@@ -45,10 +47,12 @@ import com.google.android.gms.common.api.Scope
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
     private val authorizationClient by lazy { Identity.getAuthorizationClient(this) }
+    private var lastObservedBillsResumeRefreshElapsedRealtimeMs = 0L
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -77,6 +81,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The authenticated startup effect below performs the initial authoritative refresh.
+        // Seed the resume clock so the first onResume does not immediately duplicate that work.
+        lastObservedBillsResumeRefreshElapsedRealtimeMs = SystemClock.elapsedRealtime()
         configureFirebaseAndAppCheck()
         requestNotificationPermissionIfNeeded()
         enableEdgeToEdge()
@@ -103,6 +110,27 @@ class MainActivity : ComponentActivity() {
         }
 
         maybeTriggerDebugTestPush(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (FirebaseAuth.getInstance().currentUser == null) return
+
+        val now = SystemClock.elapsedRealtime()
+        if (!shouldRefreshObservedBillsOnResume(
+                lastRefreshElapsedRealtimeMs = lastObservedBillsResumeRefreshElapsedRealtimeMs,
+                nowElapsedRealtimeMs = now
+            )
+        ) {
+            return
+        }
+
+        lastObservedBillsResumeRefreshElapsedRealtimeMs = now
+        lifecycleScope.launch {
+            // Resume uses only the bounded backend-authoritative snapshot. It never launches
+            // the six-month Gmail backfill/scan path.
+            viewModel.gmailRepository.refreshObservedBillsSnapshotIfConnected()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
