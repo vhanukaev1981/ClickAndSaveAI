@@ -121,6 +121,11 @@ class GmailRepository(
         _syncState.value = GmailSyncState.Syncing("סורק בשרת חשבוניות וחיובים רלוונטיים...", 45)
         return runCatching {
             val result = backendRepository.scanGmailInvoices()
+
+            // The backend audit is authoritative. Remove parser-obsolete source rows first so
+            // a body->PDF migration cannot temporarily appear as two separate household bills.
+            shoppingRepository.deleteObservedGmailInvoicesBySourceIds(result.removedSourceMessageIds)
+
             result.invoices.forEach { invoice ->
                 shoppingRepository.upsertObservedGmailInvoice(
                     InvoiceItem(
@@ -141,13 +146,16 @@ class GmailRepository(
                 )
             }
             _lastScanTime.value = "עכשיו"
+            val removedCount = result.removedSourceMessageIds.size
             val recoveredCount = (result.invoices.size - result.importedCount).coerceAtLeast(0)
             _syncState.value = GmailSyncState.Success(
                 invoicesFound = result.invoices.size,
                 totalSavingsPotential = 0.0,
                 message = when {
+                    removedCount > 0 ->
+                        "הסריקה עודכנה: הוחלפו $removedCount רשומות ישנות בנתונים מדויקים יותר ללא כפילות."
                     result.importedCount > 0 && recoveredCount > 0 ->
-                        "יובאו ${result.importedCount} חשבוניות חדשות ושוחזרו $recoveredCount רשומות קיימות. כולן ממתינות לאימות."
+                        "יובאו ${result.importedCount} חשבוניות חדשות ועודכנו $recoveredCount רשומות קיימות. כולן ממתינות לאימות."
                     result.importedCount > 0 ->
                         "יובאו ${result.importedCount} חשבוניות חדשות ללא המלצת חיסכון עד לאימות."
                     recoveredCount > 0 ->
