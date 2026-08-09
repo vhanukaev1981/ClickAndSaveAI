@@ -3,6 +3,7 @@ package com.example
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import com.example.ui.components.BottomNavBar
@@ -30,6 +31,20 @@ class BottomNavBarTest {
         composeTestRule.onNodeWithTag("nav_invoices").assertIsDisplayed()
         composeTestRule.onNodeWithTag("nav_savings").assertIsDisplayed().assertIsSelected()
         composeTestRule.onNodeWithTag("nav_profile").assertIsDisplayed()
+    }
+
+    @Test
+    fun exposesCustomerFacingAccessibilityDescriptions() {
+        composeTestRule.setContent {
+            MyApplicationTheme {
+                BottomNavBar(selectedTab = 0, onTabSelected = {})
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("המצב הפיננסי").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("חשבונות וחיובים").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("הזדמנויות חיסכון").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("פרופיל והגדרות").assertIsDisplayed()
     }
 
     @Test
