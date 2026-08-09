@@ -1,0 +1,64 @@
+name: Validate Local Locked Staging Deploy
+
+on:
+  push:
+    branches:
+      - ops/local-locked-staging-deploy
+    paths:
+      - scripts/deploy-locked-staging.ps1
+      - .github/workflows/ops-local-deploy-ci.yml
+  pull_request:
+    paths:
+      - scripts/deploy-locked-staging.ps1
+      - .github/workflows/ops-local-deploy-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Parse PowerShell script
+        shell: pwsh
+        run: |
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path scripts/deploy-locked-staging.ps1),
+            [ref]$null,
+            [ref]$errors
+          )
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+      - name: Enforce immutable staging guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCRIPT=scripts/deploy-locked-staging.ps1
+          grep -Fq 'ac2105098d698df06159f929f41595f91505c855' "$SCRIPT"
+          grep -Fq '$ProjectId = "clickandsaveai-staging"' "$SCRIPT"
+          grep -Fq '$ExpectedStreamBranch = "origin/agent/ai-native-financial-core"' "$SCRIPT"
+          grep -Fq 'git merge-base --is-ancestor' "$SCRIPT"
+          grep -Fq 'git worktree add --detach' "$SCRIPT"
+          grep -Fq 'firebase.cmd' "$SCRIPT"
+          grep -Fq -- '--only "firestore:rules,firestore:indexes,functions"' "$SCRIPT"
+          grep -Fq -- '--non-interactive' "$SCRIPT"
+
+          if grep -Eq 'git[[:space:]]+(switch|checkout)[[:space:]]' "$SCRIPT"; then
+            echo 'Local staging deploy must not mutate the current checkout.' >&2
+            exit 1
+          fi
+          if grep -Fq 'firebase.ps1' "$SCRIPT"; then
+            echo 'PowerShell execution-policy-sensitive firebase.ps1 is forbidden.' >&2
+            exit 1
+          fi
+          if grep -Fq '?.' "$SCRIPT" || grep -Fq '??' "$SCRIPT"; then
+            echo 'Keep the helper compatible with Windows PowerShell 5.1 syntax.' >&2
+            exit 1
+          fi
