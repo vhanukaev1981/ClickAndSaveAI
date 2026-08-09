@@ -17,12 +17,13 @@ class PushNavigationSourceGuardTest {
     }
 
     @Test
-    fun activityConsumesOnlyAllowlistedPushType() {
+    fun activityConsumesOnlyAllowlistedPushTypeForAuthenticatedUser() {
         val activity = File("src/main/java/com/example/MainActivity.kt").readText()
         val handler = activity
             .substringAfter("private fun applyPushDestination(intent: Intent?)")
             .substringBefore("private fun maybeTriggerDebugTestPush")
 
+        assertTrue(handler.contains("FirebaseAuth.getInstance().currentUser == null"))
         assertTrue(handler.contains("getStringExtra(PUSH_TYPE_EXTRA)"))
         assertTrue(handler.contains("destinationTabForPushType(pushType) ?: return"))
         assertTrue(handler.contains("viewModel.setTab(destinationTab)"))
