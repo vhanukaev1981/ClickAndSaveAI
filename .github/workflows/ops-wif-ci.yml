@@ -8,12 +8,14 @@ on:
       - scripts/bootstrap-staging-wif.sh
       - scripts/verify-staging-wif.sh
       - scripts/configure-github-staging-vars.sh
+      - .github/workflows/deploy-staging.yml
       - .github/workflows/ops-wif-ci.yml
   pull_request:
     paths:
       - scripts/bootstrap-staging-wif.sh
       - scripts/verify-staging-wif.sh
       - scripts/configure-github-staging-vars.sh
+      - .github/workflows/deploy-staging.yml
       - .github/workflows/ops-wif-ci.yml
 
 permissions:
@@ -51,5 +53,25 @@ jobs:
           if grep -Eq 'service-accounts keys (create|upload)|iam service-accounts keys create' \
             scripts/bootstrap-staging-wif.sh scripts/verify-staging-wif.sh scripts/configure-github-staging-vars.sh; then
             echo 'Service-account key creation is forbidden for this bootstrap.' >&2
+            exit 1
+          fi
+
+      - name: Enforce immutable staging deployment source
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow='.github/workflows/deploy-staging.yml'
+
+          grep -Fq 'source_sha:' "$workflow"
+          grep -Fq 'ref: ${{ inputs.source_sha }}' "$workflow"
+          grep -Fq 'ACTUAL_SHA="$(git rev-parse HEAD)"' "$workflow"
+          grep -Fq 'if [[ "$ACTUAL_SHA" != "$SOURCE_SHA" ]]' "$workflow"
+          grep -Fq 'git merge-base --is-ancestor "$SOURCE_SHA" origin/agent/ai-native-financial-core' "$workflow"
+          grep -Fq -- '--project clickandsaveai-staging' "$workflow"
+          grep -Fq 'environment: staging' "$workflow"
+          grep -Fq 'id-token: write' "$workflow"
+
+          if grep -Fq 'default: agent/ai-native-financial-core' "$workflow"; then
+            echo 'Mutable branch deployment input is forbidden; deploy an exact commit SHA.' >&2
             exit 1
           fi
