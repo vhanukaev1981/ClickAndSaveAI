@@ -2,6 +2,17 @@
 
 Run this checklist only after Stream A promotes a validated staging baseline and Stream B is rebased/integrated onto it.
 
+## First-run onboarding / trust
+- The first-run journey explains the savings promise before asking for sensitive access.
+- Privacy/read-only purpose is explained before Gmail authorization.
+- No robot/mascot or AI-theatre screen is used as a substitute for financial value.
+- Cancelling or failing Google/Gmail authorization does not visually advance onboarding.
+- A live first scan is shown only when Core exposes real scan/import/analyze/compare/verify state; no percentage/countdown/timer simulates progress.
+- If Core exposes a progress stage, customer copy uses only truthful state language such as `זיהינו`, `בדקנו`, `אימתנו`, `אנחנו עדיין בודקים` for the corresponding evidence state.
+- If first-scan work is not complete, the user can land on a useful dashboard with truthful under-review/still-checking language rather than a fake blocking progress screen.
+- First result reveal shows services/bills/spend only where evidence supports them.
+- Verified saving is revealed only when verified; absence of verified saving is not presented as `₪0` failure.
+
 ## Home
 - `dashboard_screen` renders without technical/backend wording.
 - Initial source connection appears only when the account/source is not connected (`dashboard_initial_connection`).
@@ -11,6 +22,16 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 - Loading, error and under-review states are mutually clear and customer-facing.
 - If `dashboard_error_state` appears, `dashboard_retry_financial_home` is visible and tapping it clears the stale error, shows the loading transition and retries the existing financial-home request.
 - `dashboard_manage_bills`, `dashboard_manage_savings`, `dashboard_manage_profile`, recent bills and opportunity cards navigate to the intended destination.
+
+## Truthful progress / motion
+- No visible progress percentage is fabricated by Android.
+- No timer advances a scan/analyze/verify stage before Core state advances.
+- Click Blue motion/pulse appears only while a real active stage is reported.
+- Blue → Verified Green transition happens only after verified evidence exists.
+- A money/success reveal never animates a fabricated zero or inferred amount.
+- Reduced-motion mode preserves the same readable state information without relying on animation.
+- A spinner-only waiting state is not used when a meaningful real state label is available.
+- Provider/open-page motion never implies activation/conversion/payment completion by itself.
 
 ## Initial connection / authorization errors
 - Initial sign-in / source authorization remains a customer flow, not a developer/configuration screen.
@@ -31,6 +52,17 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 - Confirming delete removes the bill from the visible list and `bills_action_feedback` confirms removal.
 - Cancelling delete leaves the bill unchanged.
 - Category filters remain usable in RTL.
+- Due date/payment-status/history/line-item fields are shown only when Core supplies reliable metadata; absence is not converted into certainty.
+
+## Bills / provider payment handoff
+- A payment CTA is absent unless Core supplies a payment-handoff candidate verified against trusted provider configuration.
+- When eligible, the CTA clearly says payment continues at the provider (for example `שלם באתר הספק` / `המשך לתשלום אצל הספק`).
+- The screen clearly states that Click&SaveAI does not receive/store card details and does not process the payment.
+- The destination is HTTPS and corresponds to the Core-verified official provider URL/domain.
+- The app never guesses a payment URL from provider name, email body or search results.
+- Opening the provider payment page does not mark the bill paid.
+- Payment/completion status changes only when reliable downstream evidence exists.
+- If no trusted payment destination exists, no official-payment CTA is fabricated; bill/detail/original-document utility remains available where safe.
 
 ## Savings
 - `providers_screen` presents opportunities in customer financial language.
@@ -48,6 +80,16 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 - Repeated taps cannot create a second in-flight submission from the same UI state.
 - Success shows `savings_action_success`.
 - Failure shows customer-safe `savings_error_state` without raw backend text; `savings_retry_refresh` returns the screen to a loading/retry path.
+
+## Provider handoff
+- Before handoff, the screen shows the exact provider/offer being acted on and the verified savings/economics returned by Core.
+- `ACTION_STARTED` remains before consent; explicit consent remains before final provider request/revalidation.
+- The customer can see which contact details will be shared.
+- Copy explains that mailbox content and the full internal spending picture are not shared with the provider.
+- Copy uses customer intent/value language such as `אני רוצה לחסוך`, `המשך לספק` or equivalent — never internal CRM/lead terminology.
+- Viewing/expressing interest does not imply that Click&SaveAI performed a switch, cancellation, contract or payment.
+- If only an external provider destination/open event is known after return, UI says only what can be proven; it does not claim activation, conversion or sale.
+- Provider handoff motion occurs only after explicit customer intent/consent and is never the only status signal.
 
 ## Profile / privacy / preferences
 - `profile_screen` contains account, savings goals/preferences and privacy — no permanent technical source-connection card.
@@ -80,8 +122,9 @@ Run this checklist only after Stream A promotes a validated staging baseline and
 - Every bottom navigation destination keeps at least the shared 48dp minimum touch target.
 - Bottom navigation items retain tab semantics and selected-state semantics.
 - Destructive actions remain confirmable/cancellable and expose stable E2E hooks.
+- Do not add a fifth Activity tab until meaningful Core activity states/data exist and the navigation change is coordinated.
 
 ## Acceptance rule
-A Stream B build is accepted only if the app feels like one coherent financial product: spend is shown as spend, verified savings as verified savings, under-review states do not invent money, every visible CTA works, retry paths recover from temporary UI errors, destructive account/privacy/bill actions require confirmation, in-flight savings actions cannot be double-submitted, unsaved edits are protected, accessibility contracts remain intact, authorization failures remain customer-safe, and implementation/commercial terminology remains behind the scenes.
+A Stream B build is accepted only if the app feels like one coherent trust-first financial product: spend is shown as spend, verified savings as verified savings, under-review states do not invent money, progress/motion reflects only real Core state, every visible CTA works, retry paths recover from temporary UI errors, destructive account/privacy/bill actions require confirmation, in-flight savings actions cannot be double-submitted, unsaved edits are protected, provider/payment handoffs state their boundaries clearly, accessibility contracts remain intact, authorization failures remain customer-safe, and implementation/commercial terminology remains behind the scenes.
 
-See `docs/STREAM_B_ACCEPTANCE_MATRIX.md` for the requirement → hook → automated-guard mapping, `docs/STREAM_B_INTEGRATION_PLAN.md` for rebase/integration rules, and `docs/STREAM_B_RELEASE_GATE.md` for same-SHA CI/APK/device acceptance.
+See `docs/STREAM_B_ACCEPTANCE_MATRIX.md` for the requirement → hook → automated-guard mapping, `docs/STREAM_B_INTEGRATION_PLAN.md` for rebase/integration rules, `docs/STREAM_B_RELEASE_GATE.md` for same-SHA CI/APK/device acceptance, and the P0 onboarding/handoff/payment contracts for issue #29 boundaries.
