@@ -59,6 +59,19 @@ class CustomerPresentationPolicyTest {
     }
 
     @Test
+    fun unknownHumanReadableBackendStatusIsNotPassedThrough() {
+        assertEquals("המידע מתעדכן", CustomerPresentationPolicy.safeStatus("provider review queued"))
+        assertEquals("המידע מתעדכן", CustomerPresentationPolicy.safeStatus("new partner state"))
+    }
+
+    @Test
+    fun knownVerifiedStatesUseExplicitCustomerLanguage() {
+        assertEquals("המידע אומת", CustomerPresentationPolicy.safeStatus("VERIFIED"))
+        assertEquals("המידע אומת", CustomerPresentationPolicy.safeStatus("VALIDATED"))
+        assertEquals("המידע אומת", CustomerPresentationPolicy.safeStatus("READY"))
+    }
+
+    @Test
     fun pendingAndProcessingStatesUsePlainCustomerLanguage() {
         assertEquals("נמצא בבדיקה", CustomerPresentationPolicy.safeStatus("PENDING_VERIFICATION"))
         assertEquals("נמצא בבדיקה", CustomerPresentationPolicy.safeStatus("PROCESSING"))
