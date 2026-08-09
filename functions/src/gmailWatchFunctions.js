@@ -13,6 +13,12 @@ const {
   parseGmailMessage,
 } = require("./gmailParser");
 const { decryptToken } = require("./tokenCrypto");
+const { REALTIME_MODE } = require("./agentTriggerPolicy");
+const { ACTIVE_GMAIL_PARSER_VERSION } = require("./gmailParserVersion");
+const {
+  gmailInvoiceDocumentId,
+  staleInvoiceSourceIds,
+} = require("./gmailInvoiceSources");
 const { _sendPushToUser: sendPushToUser } = require("./pushFunctions");
 
 const db = getFirestore();
@@ -24,7 +30,7 @@ const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const GMAIL_PUBSUB_TOPIC = "gmail-notifications";
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
-const GMAIL_PARSER_VERSION = 5;
+const GMAIL_PARSER_VERSION = ACTIVE_GMAIL_PARSER_VERSION;
 
 function requireAuth(request) {
   const uid = request.auth?.uid;
@@ -161,6 +167,31 @@ function storedInvoices(data) {
   return raw.map(normalizeStoredInvoice).filter(Boolean);
 }
 
+async function persistInvoiceDocuments(uid, invoices) {
+  await Promise.all(invoices.map((invoice) => {
+    const safeId = gmailInvoiceDocumentId(invoice.sourceMessageId);
+    return db.collection("users").doc(uid).collection("gmailInvoices").doc(safeId).set({
+      ...invoice,
+      serviceType: invoice.serviceType || FieldValue.delete(),
+      verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
+      sourceType: "GMAIL_READONLY",
+      updatedAt: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }));
+}
+
+async function deleteInvoiceDocuments(uid, sourceMessageIds) {
+  const ids = [...new Set((Array.isArray(sourceMessageIds) ? sourceMessageIds : [])
+    .map((value) => String(value || "").trim())
+    .filter(Boolean))];
+  if (ids.length === 0) return;
+  await Promise.all(ids.map((sourceMessageId) => {
+    const safeId = gmailInvoiceDocumentId(sourceMessageId);
+    return db.collection("users").doc(uid).collection("gmailInvoices").doc(safeId).delete();
+  }));
+}
+
 async function listHistoryMessageIds(accessToken, startHistoryId) {
   const ids = new Set();
   let pageToken = "";
@@ -192,14 +223,16 @@ async function processMessage(uid, accessToken, messageId) {
   const existing = await auditRef.get();
   const existingData = existing.data() || {};
   if (Number(existingData.parserVersion || 0) >= GMAIL_PARSER_VERSION && existingData.pdfAnalysisComplete === true) {
-    return { invoices: storedInvoices(existingData), importedCount: 0 };
+    const existingInvoices = storedInvoices(existingData);
+    await persistInvoiceDocuments(uid, existingInvoices);
+    return { invoices: existingInvoices, importedCount: 0, removedSourceMessageIds: [] };
   }
 
   const response = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=full`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
-  if (!response.ok) return { invoices: [], importedCount: 0 };
+  if (!response.ok) return { invoices: [], importedCount: 0, removedSourceMessageIds: [] };
   const message = await response.json();
   const bodyInvoice = parseGmailMessage(message);
   const pdfAttachments = collectPdfAttachments(message.payload);
@@ -234,11 +267,13 @@ async function processMessage(uid, accessToken, messageId) {
 
   const parsedInvoices = pdfInvoices.length > 0 ? pdfInvoices : (bodyInvoice ? [bodyInvoice] : []);
   let importedCount = 0;
+  let removedSourceMessageIds = [];
   await db.runTransaction(async (transaction) => {
     const current = await transaction.get(auditRef);
     const currentInvoices = storedInvoices(current.data() || {});
     const existingIds = new Set(currentInvoices.map((invoice) => invoice.sourceMessageId));
     importedCount = parsedInvoices.filter((invoice) => !existingIds.has(invoice.sourceMessageId)).length;
+    removedSourceMessageIds = staleInvoiceSourceIds(currentInvoices, parsedInvoices);
     transaction.set(auditRef, {
       sourceMessageId: messageId,
       invoices: parsedInvoices,
@@ -246,23 +281,21 @@ async function processMessage(uid, accessToken, messageId) {
       parserVersion: GMAIL_PARSER_VERSION,
       pdfAttachmentCount: pdfAttachments.length,
       pdfAnalysisComplete: allPdfsAnalyzed,
+      agentTriggerMode: REALTIME_MODE,
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
   });
 
-  await Promise.all(parsedInvoices.map((invoice) => {
-    const safeId = crypto.createHash("sha256").update(invoice.sourceMessageId).digest("hex");
-    return db.collection("users").doc(uid).collection("gmailInvoices").doc(safeId).set({
-      ...invoice,
-      serviceType: invoice.serviceType || FieldValue.delete(),
-      verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
-      sourceType: "GMAIL_READONLY",
-      updatedAt: FieldValue.serverTimestamp(),
-      createdAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-  }));
+  await Promise.all([
+    persistInvoiceDocuments(uid, parsedInvoices),
+    deleteInvoiceDocuments(uid, removedSourceMessageIds),
+  ]);
 
-  return { invoices: parsedInvoices.map(normalizeStoredInvoice).filter(Boolean), importedCount };
+  return {
+    invoices: parsedInvoices.map(normalizeStoredInvoice).filter(Boolean),
+    importedCount,
+    removedSourceMessageIds,
+  };
 }
 
 async function processMailboxNotification(connectionDoc, notificationHistoryId) {
@@ -285,10 +318,14 @@ async function processMailboxNotification(connectionDoc, notificationHistoryId) 
   }
 
   const newInvoices = [];
+  const removedSourceMessageIds = new Set();
   let importedCount = 0;
   for (const messageId of history.messageIds) {
     const result = await processMessage(uid, accessToken, messageId);
     importedCount += result.importedCount;
+    for (const sourceMessageId of result.removedSourceMessageIds || []) {
+      removedSourceMessageIds.add(sourceMessageId);
+    }
     if (result.importedCount > 0) newInvoices.push(...result.invoices);
   }
 
@@ -297,6 +334,7 @@ async function processMailboxNotification(connectionDoc, notificationHistoryId) 
     pendingHistoryId: FieldValue.delete(),
     lastIncrementalScanAt: FieldValue.serverTimestamp(),
     historyRecoveryRequired: false,
+    parserVersion: GMAIL_PARSER_VERSION,
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
@@ -314,8 +352,10 @@ async function processMailboxNotification(connectionDoc, notificationHistoryId) 
 
   logger.info("Incremental Gmail processing completed", {
     uid,
+    parserVersion: GMAIL_PARSER_VERSION,
     messageCount: history.messageIds.length,
     importedCount,
+    removedSourceCount: removedSourceMessageIds.size,
   });
 }
 
