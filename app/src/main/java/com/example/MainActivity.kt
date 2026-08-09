@@ -145,6 +145,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun applyPushDestination(intent: Intent?) {
+        if (FirebaseAuth.getInstance().currentUser == null) return
         val pushType = intent?.getStringExtra(PUSH_TYPE_EXTRA) ?: return
         val destinationTab = destinationTabForPushType(pushType) ?: return
         viewModel.setTab(destinationTab)
