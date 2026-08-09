@@ -40,9 +40,13 @@ jobs:
           grep -Fq 'GITHUB_REPOSITORY_ID="${GITHUB_REPOSITORY_ID:-1314210715}"' scripts/bootstrap-staging-wif.sh
           grep -Fq 'GITHUB_REPOSITORY_OWNER_ID="${GITHUB_REPOSITORY_OWNER_ID:-64756523}"' scripts/bootstrap-staging-wif.sh
           grep -Fq 'GITHUB_ENVIRONMENT="${GITHUB_ENVIRONMENT:-staging}"' scripts/bootstrap-staging-wif.sh
+          grep -Fq 'GITHUB_REF="${GITHUB_REF:-refs/heads/main}"' scripts/bootstrap-staging-wif.sh
+          grep -Fq 'GITHUB_JOB_WORKFLOW_REF="${GITHUB_JOB_WORKFLOW_REF:-vhanukaev1981/ClickAndSaveAI/.github/workflows/deploy-staging.yml@refs/heads/main}"' scripts/bootstrap-staging-wif.sh
           grep -Fq "assertion.repository_id=='\${GITHUB_REPOSITORY_ID}'" scripts/bootstrap-staging-wif.sh
           grep -Fq "assertion.repository_owner_id=='\${GITHUB_REPOSITORY_OWNER_ID}'" scripts/bootstrap-staging-wif.sh
           grep -Fq "assertion.environment=='\${GITHUB_ENVIRONMENT}'" scripts/bootstrap-staging-wif.sh
+          grep -Fq "assertion.ref=='\${GITHUB_REF}'" scripts/bootstrap-staging-wif.sh
+          grep -Fq "assertion.job_workflow_ref=='\${GITHUB_JOB_WORKFLOW_REF}'" scripts/bootstrap-staging-wif.sh
 
           if grep -Eq 'service-accounts keys (create|upload)|iam service-accounts keys create' \
             scripts/bootstrap-staging-wif.sh scripts/verify-staging-wif.sh scripts/configure-github-staging-vars.sh; then
