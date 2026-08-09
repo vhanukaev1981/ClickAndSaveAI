@@ -69,9 +69,10 @@ fun DashboardScreen(
     var showGmailConsent by remember { mutableStateOf(false) }
     var financialHome by remember { mutableStateOf<FinancialHomeResult?>(null) }
     var financialHomeTemporarilyUnavailable by remember { mutableStateOf(false) }
+    var financialHomeRefreshKey by remember { mutableStateOf(0) }
     val backendRepository = remember { BackendRepository() }
 
-    LaunchedEffect(session.isAuthenticated, isConnected, invoices.size) {
+    LaunchedEffect(session.isAuthenticated, isConnected, invoices.size, financialHomeRefreshKey) {
         if (session.isAuthenticated && isConnected) {
             runCatching { backendRepository.getFinancialHome() }
                 .onSuccess {
@@ -195,11 +196,24 @@ fun DashboardScreen(
         if (financialHomeTemporarilyUnavailable && isConnected) {
             item {
                 val message = FinancialUiStatePolicy.message(FinancialUiState.ERROR)
-                EmptyStateCard(
-                    title = message.title,
-                    body = message.body,
-                    testTag = "dashboard_error_state"
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    EmptyStateCard(
+                        title = message.title,
+                        body = message.body,
+                        testTag = "dashboard_error_state"
+                    )
+                    TextButton(
+                        onClick = {
+                            financialHomeTemporarilyUnavailable = false
+                            financialHomeRefreshKey += 1
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("dashboard_retry_financial_home")
+                    ) {
+                        Text("נסה שוב")
+                    }
+                }
             }
         }
 
