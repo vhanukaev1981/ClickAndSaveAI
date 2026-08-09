@@ -8,6 +8,7 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
 import androidx.credentials.exceptions.GetCredentialException
+import com.example.PushTokenLifecycle
 import com.example.data.local.AppDatabase
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -137,6 +138,12 @@ class AuthRepository(private val applicationContext: Context) {
     }
 
     suspend fun signOut() {
+        // Revoke this device while Firebase Auth is still valid. A transient revocation failure
+        // must never trap the user in a signed-in session; PushTokenLifecycle also attempts to
+        // delete the local FCM token so a later login receives a fresh registration.
+        PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut()
+            .onFailure { Log.w("AuthRepository", "Push revocation incomplete during sign-out", it) }
+
         runCatching { getFirebaseAuthSafe()?.signOut() }
             .onFailure { Log.e("AuthRepository", "Sign-out failed", it) }
 
