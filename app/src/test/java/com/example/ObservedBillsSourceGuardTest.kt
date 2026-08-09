@@ -37,6 +37,17 @@ class ObservedBillsSourceGuardTest {
     }
 
     @Test
+    fun newInvoicePushUsesOnlyLightweightObservedBillsRefresh() {
+        val service = File("src/main/java/com/example/ClickAndSaveMessagingService.kt").readText()
+        assertTrue(service.contains("PUSH_TYPE_NEW_INVOICE = \"NEW_INVOICE\""))
+        assertTrue(service.contains("message.data[\"type\"] == PUSH_TYPE_NEW_INVOICE"))
+        assertTrue(service.contains("observedBillsRepository.refreshObservedBills()"))
+        assertTrue(service.contains("Authenticated app startup retries it"))
+        assertFalse("FCM must never trigger the six-month Gmail scan", service.contains("scanInvoices()"))
+        assertFalse("FCM refresh failure must not disconnect Gmail", service.contains("_isConnected.value = false"))
+    }
+
+    @Test
     fun lightweightSnapshotDoesNotExposeRawGmailContentFields() {
         // Android unit tests execute from the app module directory.
         val backend = File("../functions/src/observedBillsFunctions.js").readText()
