@@ -135,6 +135,40 @@ class CustomerUiSourceGuardTest {
     }
 
     @Test
+    fun dashboardDoesNotInferRecurringContextFromLocalInvoiceRows() {
+        val dashboard = File(screenPaths[0]).readText()
+        assertFalse(
+            "Invoice count is not an authoritative recurring-service count",
+            dashboard.contains("recurringServiceCount ?: invoices.size")
+        )
+        assertFalse(
+            "Dashboard must not synthesize annual savings from monthly savings",
+            dashboard.contains("potentialMonthlySaving ?: 0.0) * 12.0")
+        )
+        assertFalse(
+            "Savings hero must not synthesize annual savings",
+            dashboard.contains("monthlySavings * 12.0")
+        )
+    }
+
+    @Test
+    fun savingsActionPreservesIntentBeforeConsentAndServerAnnualEconomics() {
+        val savings = File(screenPaths[2]).readText()
+        assertTrue(
+            "Savings action must record ACTION_STARTED before opening the provider consent flow",
+            savings.contains("recordSavingsActionStarted(")
+        )
+        assertFalse(
+            "Savings success UI must use backend annual economics, not monthly x 12",
+            savings.contains("result.potentialMonthlySaving * 12.0")
+        )
+        assertTrue(
+            "Savings success UI must preserve backend-returned annual savings",
+            savings.contains("result.potentialAnnualSaving")
+        )
+    }
+
+    @Test
     fun documentSourceDisconnectRemainsExplicitlyConfirmed() {
         val profile = File(screenPaths[3]).readText()
         assertTrue(profile.contains("showDisconnectConfirmation"))
