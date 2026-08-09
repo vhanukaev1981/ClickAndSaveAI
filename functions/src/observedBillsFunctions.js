@@ -4,6 +4,7 @@ const { getFirestore } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 
 const db = getFirestore();
+const REGION = "europe-west1";
 const MAX_BILLS = 100;
 const MAX_AUTHORITATIVE_SOURCE_IDS = 500;
 
@@ -56,7 +57,7 @@ function buildObservedBillsPayload(documents, now = new Date()) {
 }
 
 exports.getObservedBills = onCall(
-  { enforceAppCheck: true },
+  { enforceAppCheck: true, region: REGION },
   async (request) => {
     const uid = requireAuth(request);
     const snapshot = await db
@@ -72,5 +73,6 @@ exports.getObservedBills = onCall(
 
 exports._normalizeObservedBill = normalizeObservedBill;
 exports._buildObservedBillsPayload = buildObservedBillsPayload;
+exports._REGION = REGION;
 exports._MAX_BILLS = MAX_BILLS;
 exports._MAX_AUTHORITATIVE_SOURCE_IDS = MAX_AUTHORITATIVE_SOURCE_IDS;
