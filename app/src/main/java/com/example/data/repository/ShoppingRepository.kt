@@ -68,6 +68,9 @@ class ShoppingRepository(private val db: AppDatabase) {
         }
     }
 
+    suspend fun getObservedGmailSourceIds(): List<String> =
+        normalizeRemovedGmailSourceIds(db.invoiceDao().getObservedGmailSourceIds())
+
     suspend fun deleteObservedGmailInvoicesBySourceIds(sourceMessageIds: List<String>) {
         val normalized = normalizeRemovedGmailSourceIds(sourceMessageIds)
         if (normalized.isEmpty()) return
