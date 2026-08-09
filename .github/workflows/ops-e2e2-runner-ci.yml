@@ -1,0 +1,65 @@
+name: Validate Locked E2E2 Runner
+
+on:
+  push:
+    branches:
+      - ops/locked-e2e2-runner
+    paths:
+      - scripts/run-locked-e2e2.ps1
+      - .github/workflows/ops-e2e2-runner-ci.yml
+  pull_request:
+    paths:
+      - scripts/run-locked-e2e2.ps1
+      - .github/workflows/ops-e2e2-runner-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Parse PowerShell script
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path scripts/run-locked-e2e2.ps1),
+            [ref]$tokens,
+            [ref]$errors
+          )
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+      - name: Enforce locked sequence and staging guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCRIPT=scripts/run-locked-e2e2.ps1
+          grep -Fq 'ac2105098d698df06159f929f41595f91505c855' "$SCRIPT"
+          grep -Fq '[ValidateSet("clickandsaveai-staging")]' "$SCRIPT"
+          grep -Fq 'deploy-locked-staging.ps1' "$SCRIPT"
+          grep -Fq 'staging-device-preflight.ps1' "$SCRIPT"
+          grep -Fq 'Device installation was not attempted' "$SCRIPT"
+          DEPLOY_LINE=$(grep -n 'DeployScript -SourceSha' "$SCRIPT" | head -n1 | cut -d: -f1)
+          DEVICE_LINE=$(grep -n 'DevicePreflightScript -ApkPath' "$SCRIPT" | head -n1 | cut -d: -f1)
+          test "$DEPLOY_LINE" -lt "$DEVICE_LINE"
+
+          if grep -Fq 'uninstall' "$SCRIPT"; then
+            echo 'Locked E2E runner must never uninstall the app.' >&2
+            exit 1
+          fi
+          if grep -Fq 'firebase deploy' "$SCRIPT"; then
+            echo 'Wrapper must delegate deployment to the audited locked deploy helper.' >&2
+            exit 1
+          fi
+          if grep -Fq '?.' "$SCRIPT" || grep -Fq '??' "$SCRIPT"; then
+            echo 'Keep the helper compatible with Windows PowerShell 5.1 syntax.' >&2
+            exit 1
+          fi
