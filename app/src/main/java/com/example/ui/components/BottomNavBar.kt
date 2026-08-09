@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dashboard
@@ -79,7 +80,7 @@ fun BottomNavBar(
 }
 
 @Composable
-private fun FinancialNavItem(
+private fun RowScope.FinancialNavItem(
     selected: Boolean,
     onClick: () -> Unit,
     selectedIcon: @Composable () -> Unit,
