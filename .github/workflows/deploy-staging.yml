@@ -1,17 +1,9 @@
-name: Deploy Firebase Staging
+name: Deploy Firebase Staging Locked ac210509
 
 on:
-  workflow_dispatch:
-    inputs:
-      ref:
-        description: Git ref to deploy after CI is green
-        required: true
-        default: agent/ai-native-financial-core
-        type: string
-      confirm_project:
-        description: Type clickandsaveai-staging to confirm the deployment target
-        required: true
-        type: string
+  push:
+    branches:
+      - deploy/staging-ac210509
 
 permissions:
   contents: read
@@ -21,20 +13,18 @@ concurrency:
   group: deploy-clickandsaveai-staging
   cancel-in-progress: false
 
+env:
+  LOCKED_DEPLOY_REF: ac2105098d698df06159f929f41595f91505c855
+  FIREBASE_STAGING_PROJECT: clickandsaveai-staging
+
 jobs:
   deploy:
-    if: ${{ inputs.confirm_project == 'clickandsaveai-staging' }}
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 30
 
     steps:
-      - name: Check out requested ref
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.ref }}
-
-      - name: Verify staging deployment configuration
+      - name: Verify GitHub WIF configuration exists
         env:
           WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
@@ -42,7 +32,22 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "$WIF_PROVIDER" || -z "$DEPLOY_SERVICE_ACCOUNT" ]]; then
-            echo 'The staging environment must define GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_DEPLOY_SERVICE_ACCOUNT.' >&2
+            echo 'Missing GCP_WORKLOAD_IDENTITY_PROVIDER or GCP_DEPLOY_SERVICE_ACCOUNT in GitHub variables.' >&2
+            exit 1
+          fi
+
+      - name: Check out locked Stream A ref
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.LOCKED_DEPLOY_REF }}
+
+      - name: Verify immutable deployment source and staging target
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_REF="$(git rev-parse HEAD)"
+          if [[ "$ACTUAL_REF" != "$LOCKED_DEPLOY_REF" ]]; then
+            echo "Expected locked ref $LOCKED_DEPLOY_REF but checked out $ACTUAL_REF" >&2
             exit 1
           fi
           node <<'NODE'
@@ -56,14 +61,6 @@ jobs:
             throw new Error('firebase.json does not define both Functions and Firestore deployment targets');
           }
           NODE
-
-      - id: auth
-        name: Authenticate to Google Cloud with GitHub OIDC
-        uses: google-github-actions/auth@v3
-        with:
-          create_credentials_file: 'true'
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v6
@@ -79,14 +76,22 @@ jobs:
         working-directory: functions
         run: npm test
 
+      - id: auth
+        name: Authenticate to Google Cloud with GitHub OIDC
+        uses: google-github-actions/auth@v3
+        with:
+          create_credentials_file: 'true'
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
       - name: Install pinned Firebase CLI
         run: npm install --global firebase-tools@15.1.0
 
-      - name: Deploy functions and Firestore to staging
+      - name: Deploy locked functions and Firestore to staging
         shell: bash
         run: |
           set -euo pipefail
           firebase deploy \
-            --project clickandsaveai-staging \
+            --project "$FIREBASE_STAGING_PROJECT" \
             --only firestore:rules,firestore:indexes,functions \
             --non-interactive
