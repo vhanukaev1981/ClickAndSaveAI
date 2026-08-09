@@ -53,6 +53,12 @@ class CustomerPresentationPolicyTest {
     }
 
     @Test
+    fun genericInternalStatusCodesAreSanitizedEvenWhenUnknown() {
+        assertEquals("המידע מתעדכן", CustomerPresentationPolicy.safeStatus("PROVIDER_CALLBACK_TIMEOUT"))
+        assertEquals("המידע מתעדכן", CustomerPresentationPolicy.safeStatus("OFFER_MATCH_V17_REJECTED"))
+    }
+
+    @Test
     fun pendingAndProcessingStatesUsePlainCustomerLanguage() {
         assertEquals("נמצא בבדיקה", CustomerPresentationPolicy.safeStatus("PENDING_VERIFICATION"))
         assertEquals("נמצא בבדיקה", CustomerPresentationPolicy.safeStatus("PROCESSING"))
@@ -64,6 +70,22 @@ class CustomerPresentationPolicyTest {
         assertEquals("לא הצלחנו לעדכן כרגע. ננסה שוב אוטומטית.", safe)
         assertFalse(safe.uppercase().contains("FIREBASE"))
         assertFalse(safe.uppercase().contains("TOKEN"))
+    }
+
+    @Test
+    fun urlsPackageNamesAndPayloadsAreNeverPassedThroughAsCustomerErrors() {
+        val samples = listOf(
+            "https://internal.example/error/42",
+            "com.google.firebase.functions.FirebaseFunctionsException",
+            "java.lang.IllegalStateException",
+            "{\"code\":\"permission_denied\"}"
+        )
+        samples.forEach {
+            assertEquals(
+                "לא הצלחנו לעדכן כרגע. ננסה שוב אוטומטית.",
+                CustomerPresentationPolicy.safeError(it)
+            )
+        }
     }
 
     @Test
