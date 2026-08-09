@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,6 +29,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -226,6 +228,38 @@ private fun PrivacyConnectionsScreen(
     val connectedEmail by viewModel.connectedEmail.collectAsState()
     val isSyncing by viewModel.isSyncingGmail.collectAsState()
     val session by viewModel.userSession.collectAsState()
+    var showDisconnectConfirmation by remember { mutableStateOf(false) }
+
+    if (showDisconnectConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDisconnectConfirmation = false },
+            title = { Text("לבטל את החיבור?") },
+            text = {
+                Text(
+                    "המערכת תפסיק לקלוט מסמכים חדשים ממקור זה עד לחיבור מחדש. החשבונות שכבר זוהו יישארו בתמונה הפיננסית שלך."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDisconnectConfirmation = false
+                        viewModel.disconnectGmail()
+                    },
+                    modifier = Modifier.testTag("confirm_disconnect_document_source")
+                ) {
+                    Text("בטל חיבור")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDisconnectConfirmation = false },
+                    modifier = Modifier.testTag("cancel_disconnect_document_source")
+                ) {
+                    Text("השאר מחובר")
+                }
+            }
+        )
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -288,7 +322,7 @@ private fun PrivacyConnectionsScreen(
                     )
                     if (isGmailConnected) {
                         OutlinedButton(
-                            onClick = viewModel::disconnectGmail,
+                            onClick = { showDisconnectConfirmation = true },
                             enabled = !isSyncing,
                             modifier = Modifier
                                 .fillMaxWidth()
