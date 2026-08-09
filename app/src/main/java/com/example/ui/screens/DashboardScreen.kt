@@ -43,7 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.example.data.repository.BackendRepository
 import com.example.data.repository.FinancialHomeResult
 import com.example.data.repository.FinancialOpportunity
@@ -51,6 +50,7 @@ import com.example.ui.CustomerPresentationPolicy
 import com.example.ui.FinancialUiState
 import com.example.ui.FinancialUiStatePolicy
 import com.example.ui.MainViewModel
+import com.example.ui.theme.FinancialDesignTokens
 import com.example.ui.theme.TechBluePrimary
 
 @Composable
@@ -141,11 +141,11 @@ fun DashboardScreen(
         modifier = Modifier
             .fillMaxSize()
             .testTag("dashboard_screen"),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = dashboardScreenPadding(),
+        verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.sectionSpacing)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)) {
                 Text(
                     text = "המצב הפיננסי שלך",
                     style = MaterialTheme.typography.headlineSmall,
@@ -184,7 +184,7 @@ fun DashboardScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("dashboard_secondary_metrics"),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)
             ) {
                 MetricCard(
                     modifier = Modifier.weight(1f),
@@ -215,7 +215,7 @@ fun DashboardScreen(
         if (financialHomeTemporarilyUnavailable && isConnected) {
             item {
                 val message = FinancialUiStatePolicy.message(FinancialUiState.ERROR)
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)) {
                     EmptyStateCard(
                         title = message.title,
                         body = message.body,
@@ -241,7 +241,7 @@ fun DashboardScreen(
             item {
                 LazyRow(
                     modifier = Modifier.testTag("dashboard_category_snapshot"),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)
                 ) {
                     items(categoryTotals.take(6), key = { it.first }) { (category, amount) ->
                         CategorySnapshotCard(category = category, amount = amount)
@@ -300,26 +300,26 @@ fun DashboardScreen(
                 Card(
                     onClick = { onNavigateToTab(1) },
                     modifier = Modifier.testTag("dashboard_bill_${invoice.id}"),
-                    shape = RoundedCornerShape(18.dp)
+                    shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(15.dp),
+                            .padding(FinancialDesignTokens.compactCardPadding),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
                             color = MaterialTheme.colorScheme.secondaryContainer,
-                            shape = RoundedCornerShape(14.dp)
+                            shape = RoundedCornerShape(FinancialDesignTokens.iconSurfaceRadius)
                         ) {
                             Icon(
                                 Icons.Default.ReceiptLong,
                                 contentDescription = null,
-                                modifier = Modifier.padding(10.dp),
+                                modifier = Modifier.padding(FinancialDesignTokens.cardSpacing),
                                 tint = TechBluePrimary
                             )
                         }
-                        Spacer(modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.size(FinancialDesignTokens.cardSpacing))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(invoice.providerName, fontWeight = FontWeight.Bold)
                             Text(
@@ -353,7 +353,7 @@ fun DashboardScreen(
 
         item { SectionTitle("ניהול") }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)) {
                 DashboardActionButton(
                     text = "החשבונות שלי",
                     subtitle = "ההוצאות והחיובים שזוהו",
@@ -390,10 +390,10 @@ private fun SectionTitle(text: String) {
 
 @Composable
 private fun CategorySnapshotCard(category: String, amount: Double) {
-    Card(shape = RoundedCornerShape(18.dp)) {
+    Card(shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius)) {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
+            modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
+            verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)
         ) {
             Text(category, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             Text(money(amount), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -410,16 +410,19 @@ private fun ProactiveOpportunityCard(
     Card(
         onClick = onClick,
         modifier = Modifier.testTag("dashboard_opportunity_${opportunity.id}"),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(FinancialDesignTokens.cardRadius),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(FinancialDesignTokens.cardPadding),
             verticalAlignment = Alignment.Top
         ) {
             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = TechBluePrimary)
-            Spacer(modifier = Modifier.size(10.dp))
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Spacer(modifier = Modifier.size(FinancialDesignTokens.cardSpacing))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)
+            ) {
                 Text("${opportunity.providerName} • ${opportunity.category}", fontWeight = FontWeight.Bold)
                 val matchedOffer = opportunity.matchedOffer
                 val verifiedLabel = if (matchedOffer != null) {
@@ -469,13 +472,16 @@ private fun InitialGmailOnboardingCard(
 ) {
     Card(
         modifier = Modifier.testTag("dashboard_initial_connection"),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(FinancialDesignTokens.cardRadius),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
     ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(
+            modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Email, contentDescription = null, tint = TechBluePrimary)
-                Spacer(modifier = Modifier.size(9.dp))
+                Spacer(modifier = Modifier.size(FinancialDesignTokens.compactSpacing))
                 Text("חיבור אחד כדי להתחיל", fontWeight = FontWeight.Bold)
             }
             Text(
@@ -488,7 +494,7 @@ private fun InitialGmailOnboardingCard(
                 modifier = Modifier.fillMaxWidth().testTag("dashboard_connect_account")
             ) {
                 Icon(if (authenticated) Icons.Default.Security else Icons.Default.Login, contentDescription = null)
-                Spacer(modifier = Modifier.size(7.dp))
+                Spacer(modifier = Modifier.size(FinancialDesignTokens.compactSpacing))
                 Text(if (authenticated) "חבר את החשבון" else "התחבר כדי להתחיל")
             }
         }
@@ -507,13 +513,16 @@ private fun SavingsHeroCard(
     Card(
         onClick = onOpenSavings,
         modifier = Modifier.testTag("dashboard_savings_hero"),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(FinancialDesignTokens.heroRadius),
         colors = CardDefaults.cardColors(containerColor = TechBluePrimary)
     ) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Column(
+            modifier = Modifier.padding(FinancialDesignTokens.heroPadding),
+            verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Savings, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
-                Spacer(modifier = Modifier.size(8.dp))
+                Spacer(modifier = Modifier.size(FinancialDesignTokens.compactSpacing))
                 Text("החיסכון שמצאנו עבורך", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold)
             }
             Text(
@@ -553,7 +562,7 @@ private fun GmailConsentDialog(onDismiss: () -> Unit, onApprove: () -> Unit) {
         onDismissRequest = onDismiss,
         title = { Text("אישור גישה לקריאה בלבד") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)) {
                 Text("הגישה משמשת לאיתור חשבוניות וקבלות ולחילוץ פרטי החיוב הדרושים לצורך בדיקת חיסכון.")
                 Text("אין אפשרות לשלוח, למחוק או לערוך הודעות. אפשר לבטל את החיבור בכל עת דרך פרטיות וחיבורים בפרופיל.")
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -589,8 +598,11 @@ private fun MetricCard(
     value: String,
     supporting: String
 ) {
-    Card(modifier = modifier, shape = RoundedCornerShape(18.dp)) {
-        Column(modifier = Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+    Card(modifier = modifier, shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius)) {
+        Column(
+            modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
+            verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)
+        ) {
             Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             Text(supporting, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -609,13 +621,24 @@ private fun DashboardActionButton(
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().testTag(testTag),
-        shape = RoundedCornerShape(18.dp)
+        shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius)
     ) {
-        Row(modifier = Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(13.dp)) {
-                Icon(icon, contentDescription = null, modifier = Modifier.padding(9.dp), tint = TechBluePrimary)
+        Row(
+            modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(FinancialDesignTokens.iconSurfaceRadius)
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    modifier = Modifier.padding(FinancialDesignTokens.compactSpacing),
+                    tint = TechBluePrimary
+                )
             }
-            Spacer(modifier = Modifier.size(12.dp))
+            Spacer(modifier = Modifier.size(FinancialDesignTokens.cardSpacing))
             Column(modifier = Modifier.weight(1f)) {
                 Text(text, fontWeight = FontWeight.Bold)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -629,13 +652,23 @@ private fun EmptyStateCard(title: String, body: String, testTag: String = "dashb
     Card(
         modifier = Modifier.testTag(testTag),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(18.dp)
+        shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Column(
+            modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
+            verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)
+        ) {
             Text(title, fontWeight = FontWeight.Bold)
             Text(body, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
+
+private fun dashboardScreenPadding() = PaddingValues(
+    start = FinancialDesignTokens.screenHorizontalPadding,
+    top = FinancialDesignTokens.screenTopPadding,
+    end = FinancialDesignTokens.screenHorizontalPadding,
+    bottom = FinancialDesignTokens.screenBottomNavigationClearance
+)
 
 private fun money(value: Double): String = "₪${String.format("%.2f", value)}"
