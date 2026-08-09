@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.ui.MainViewModel
+import com.example.ui.theme.TechBluePrimary
 
 @Composable
 fun SettingsScreen(
@@ -58,8 +60,8 @@ fun SettingsScreen(
     val currentStreaming by viewModel.preferredStreamingProvider.collectAsState()
     val currentThreshold by viewModel.minSavingsThreshold.collectAsState()
 
-    var goalInput by remember(currentGoal) { mutableStateOf(currentGoal.toInt().toString()) }
-    var thresholdInput by remember(currentThreshold) { mutableStateOf(currentThreshold.toInt().toString()) }
+    var goalInput by remember(currentGoal) { mutableStateOf(currentGoal.toInt().takeIf { it > 0 }?.toString().orEmpty()) }
+    var thresholdInput by remember(currentThreshold) { mutableStateOf(currentThreshold.toInt().takeIf { it > 0 }?.toString().orEmpty()) }
     var electricity by remember(currentElectricity) { mutableStateOf(currentElectricity) }
     var cellular by remember(currentCellular) { mutableStateOf(currentCellular) }
     var internet by remember(currentInternet) { mutableStateOf(currentInternet) }
@@ -71,6 +73,10 @@ fun SettingsScreen(
     val internetOptions = listOf("לא נבחר", "בזק", "סלקום", "פרטנר", "HOT", "אנלימיטד")
     val insuranceOptions = listOf("לא נבחר", "הראל", "הפניקס", "מגדל", "כלל", "ביטוח ישיר", "AIG")
     val streamingOptions = listOf("לא נבחר", "FreeTV", "סלקום TV", "פרטנר TV", "yes / STING", "HOT / NEXT")
+
+    val goalValue = goalInput.toDoubleOrNull() ?: 0.0
+    val thresholdValue = thresholdInput.toDoubleOrNull() ?: 0.0
+    val canSave = goalValue >= 0.0 && thresholdValue >= 0.0
 
     LazyColumn(
         modifier = Modifier
@@ -94,7 +100,7 @@ fun SettingsScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "עזור למערכת להבין מה חשוב לך יותר.",
+                        "מגדירים מה חשוב לך — המערכת ממשיכה לבדוק ולסנן הזדמנויות ברקע.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -105,49 +111,69 @@ fun SettingsScreen(
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                shape = RoundedCornerShape(18.dp)
+                shape = RoundedCornerShape(20.dp)
             ) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Default.Info, contentDescription = null)
+                Row(
+                    modifier = Modifier.padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Savings, contentDescription = null, tint = TechBluePrimary)
                     Spacer(modifier = Modifier.size(10.dp))
-                    Text(
-                        "העדפות אלו עוזרות להתאים את החוויה והיעדים שלך. הן אינן מאשרות מעבר ספק או פעולה כספית — כל פעולה כזו דורשת אישור מפורש שלך.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("החיסכון שלך קודם", fontWeight = FontWeight.Bold)
+                        Text(
+                            "העדפות משפרות התאמה בלבד. סכום חיסכון מוצג רק אחרי אימות של הצעה ותנאים.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
 
         item {
-            Card(shape = RoundedCornerShape(18.dp)) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Card(shape = RoundedCornerShape(20.dp)) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("יעדי חיסכון", fontWeight = FontWeight.Bold)
+                    Text(
+                        "היעדים עוזרים למקד את התמונה הפיננסית שלך — הם לא מבטיחים תוצאה ולא משנים את כללי האימות.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     OutlinedTextField(
                         value = goalInput,
-                        onValueChange = { goalInput = it.filter(Char::isDigit) },
-                        label = { Text("יעד חיסכון חודשי (₪)") },
-                        supportingText = { Text("יעד אישי שיעזור לך לעקוב אחרי ההתקדמות.") },
+                        onValueChange = { goalInput = it.filter(Char::isDigit).take(7) },
+                        label = { Text("יעד חיסכון חודשי") },
+                        prefix = { Text("₪") },
+                        supportingText = { Text("כמה היית רוצה לחסוך בכל חודש") },
+                        singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("monthly_savings_goal")
                     )
                     OutlinedTextField(
                         value = thresholdInput,
-                        onValueChange = { thresholdInput = it.filter(Char::isDigit) },
-                        label = { Text("סף חיסכון מועדף (₪ בחודש)") },
-                        supportingText = { Text("הסכום שממנו הזדמנות חיסכון הופכת למעניינת עבורך.") },
+                        onValueChange = { thresholdInput = it.filter(Char::isDigit).take(7) },
+                        label = { Text("חיסכון חודשי שמעניין אותי") },
+                        prefix = { Text("₪") },
+                        supportingText = { Text("עוזר למקד את ההצגה בהזדמנויות משמעותיות עבורך") },
+                        singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("minimum_savings_threshold")
                     )
                 }
             }
         }
 
         item {
-            Card(shape = RoundedCornerShape(18.dp)) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("ספקים מועדפים", fontWeight = FontWeight.Bold)
+            Card(shape = RoundedCornerShape(20.dp)) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("העדפות שירות", fontWeight = FontWeight.Bold)
                     Text(
-                        "אפשר לציין העדפות. ההמלצה הסופית מבוססת על התאמה לשירות שלך, מחיר ותנאים שניתן לאמת.",
+                        "אם יש ספק שאתה מעדיף, אפשר לציין אותו. ההמלצה עדיין תתבסס על התאמה, מחיר ותנאים שניתן לאמת.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -161,21 +187,40 @@ fun SettingsScreen(
         }
 
         item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+                    Icon(Icons.Default.Info, contentDescription = null)
+                    Spacer(modifier = Modifier.size(10.dp))
+                    Text(
+                        "שמירת העדפות אינה מאשרת מעבר ספק או פעולה כספית. כל פעולה מול נותן שירות דורשת אישור מפורש שלך להצעה המדויקת.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+
+        item {
             Button(
                 onClick = {
                     viewModel.updatePreferences(
-                        goal = goalInput.toDoubleOrNull() ?: 0.0,
+                        goal = goalValue,
                         electricity = electricity,
                         cellular = cellular,
                         internet = internet,
                         insurance = insurance,
                         streaming = streaming,
                         autoSwitch = false,
-                        minThreshold = thresholdInput.toDoubleOrNull() ?: 0.0
+                        minThreshold = thresholdValue
                     )
                     Toast.makeText(context, "ההעדפות נשמרו", Toast.LENGTH_SHORT).show()
                 },
-                modifier = Modifier.fillMaxWidth()
+                enabled = canSave,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("save_savings_preferences")
             ) {
                 Icon(Icons.Default.Save, contentDescription = null)
                 Spacer(modifier = Modifier.size(8.dp))
