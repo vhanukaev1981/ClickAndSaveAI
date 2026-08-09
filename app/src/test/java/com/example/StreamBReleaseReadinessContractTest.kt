@@ -13,7 +13,11 @@ class StreamBReleaseReadinessContractTest {
             "../docs/STREAM_B_INTEGRATION_PLAN.md",
             "../docs/STREAM_B_RELEASE_GATE.md",
             "../docs/STREAM_B_DEVICE_EVIDENCE_TEMPLATE.md",
-            "../docs/STREAM_B_MOTION_CONTRACT.md"
+            "../docs/STREAM_B_MOTION_CONTRACT.md",
+            "../docs/STREAM_B_P0_GAP_MAP.md",
+            "../docs/STREAM_B_ONBOARDING_CONTRACT.md",
+            "../docs/STREAM_B_PROVIDER_HANDOFF_CONTRACT.md",
+            "../docs/STREAM_B_BILLS_PAYMENT_HANDOFF_CONTRACT.md"
         ).forEach { path ->
             assertTrue("Missing Stream B readiness artifact: $path", File(path).isFile)
         }
@@ -24,8 +28,12 @@ class StreamBReleaseReadinessContractTest {
         val matrix = File("../docs/STREAM_B_ACCEPTANCE_MATRIX.md").readText()
         listOf(
             "Dashboard",
+            "Progress",
+            "Motion",
             "Bills",
+            "payment handoff",
             "Savings",
+            "Provider handoff",
             "Profile",
             "Privacy",
             "Preferences",
@@ -34,7 +42,8 @@ class StreamBReleaseReadinessContractTest {
             "Theme",
             "Typography",
             "Customer copy",
-            "Consent"
+            "Consent",
+            "Evidence"
         ).forEach { area ->
             assertTrue("Acceptance matrix is missing $area", matrix.contains(area))
         }
@@ -86,6 +95,9 @@ class StreamBReleaseReadinessContractTest {
             "StreamBDeviceE2EContractTest.kt",
             "StreamBDeviceEvidenceContractTest.kt",
             "StreamBMotionContractTest.kt",
+            "StreamBOnboardingContractTest.kt",
+            "StreamBProviderHandoffContractTest.kt",
+            "StreamBBillsPaymentHandoffContractTest.kt",
             "StreamBWorkstreamBoundaryContractTest.kt"
         ).forEach { fileName ->
             val file = File("src/test/java/com/example/$fileName")
