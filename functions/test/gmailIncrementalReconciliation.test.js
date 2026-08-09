@@ -17,6 +17,7 @@ test("four-hour Gmail reconciliation is exported without replacing the public Gm
   assert.equal(typeof entry.gmailIncrementalReconciliation, "function");
   assert.equal(typeof entry.onGmailConnectionCheckpointChanged, "function");
   assert.equal(typeof entry.gmailPushNotification, "function");
+  assert.equal(typeof entry.gmailPushNotification.run, "function");
   assert.match(source, /schedule:\s*"0 \*\/4 \* \* \*"/);
   assert.match(source, /timeZone:\s*"Asia\/Jerusalem"/);
 });
@@ -70,8 +71,7 @@ test("reconciliation preflights Gmail History and enters recovery without advanc
   assert.match(source, /historyRecoveryRequired:\s*true/);
   assert.match(source, /historyRecoveryReason:\s*"HISTORY_ID_EXPIRED"/);
 
-  const expiredBlock = source
-    .substringAfter?.("if (!readable) {") || source.split("if (!readable) {")[1]?.split("\n  }")[0] || "";
+  const expiredBlock = source.split("if (!readable) {")[1]?.split("\n  }")[0] || "";
   assert.doesNotMatch(expiredBlock, /watchHistoryId\s*:/);
 });
 
