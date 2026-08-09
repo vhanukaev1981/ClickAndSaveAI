@@ -55,6 +55,20 @@ class GmailRepository(
         }
     }
 
+    suspend fun refreshObservedBillsSnapshotIfConnected(): Result<ObservedBillsRefreshResult?> {
+        if (!_isConnected.value) return Result.success(null)
+        return runCatching { observedBillsRepository.refreshObservedBills() }
+            .onSuccess { refresh ->
+                if (refresh.refreshedBills > 0 || refresh.removedStaleSources > 0) {
+                    _lastScanTime.value = "עודכן עכשיו"
+                }
+            }
+            .onFailure { error ->
+                // Snapshot refresh failures do not alter the authenticated Gmail connection state.
+                Log.w("GmailRepository", "Authoritative observed bills refresh unavailable", error)
+            }
+    }
+
     suspend fun refreshConnectionStatusAndUpgradeIfNeeded(): Result<GmailConnectionResult> {
         val connectionResult = refreshConnectionStatus()
         val connection = connectionResult.getOrNull() ?: return connectionResult
@@ -77,15 +91,7 @@ class GmailRepository(
             // Normal app startup uses the backend-normalized Firestore snapshot, not another
             // six-month Gmail scan. A transient refresh failure must not turn a valid Gmail
             // connection into a disconnected/error state.
-            runCatching { observedBillsRepository.refreshObservedBills() }
-                .onSuccess { refresh ->
-                    if (refresh.refreshedBills > 0 || refresh.removedStaleSources > 0) {
-                        _lastScanTime.value = "עודכן עכשיו"
-                    }
-                }
-                .onFailure { error ->
-                    Log.w("GmailRepository", "Authoritative observed bills refresh unavailable", error)
-                }
+            refreshObservedBillsSnapshotIfConnected()
         }
         return connectionResult
     }
