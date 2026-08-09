@@ -2,39 +2,38 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Primary Tech Blue (#2563EB as per brand guide)
-val TechBluePrimary = Color(0xFF2563EB)
-val TechBlueLight = Color(0xFF3B82F6)
-val TechBlueDark = Color(0xFF1D4ED8)
-val AiVioletPrimary = TechBluePrimary // Alias for screen compatibility
+// Click&SaveAI keeps its own blue identity: premium financial, not a MyFinanda copy.
+val TechBluePrimary = Color(0xFF2457E6)
+val TechBlueLight = Color(0xFF4F7CF3)
+val TechBlueDark = Color(0xFF173AA8)
+val AiVioletPrimary = TechBluePrimary
 
-// Savings Primary Green (#00C896 as per brand guide)
-val EmeraldSavings = Color(0xFF00C896)
-val EmeraldSavingsLight = Color(0xFF34D399)
-val EmeraldSavingsDark = Color(0xFF059669)
+// Savings green is reserved for verified savings / successful financial outcomes.
+val EmeraldSavings = Color(0xFF079A72)
+val EmeraldSavingsLight = Color(0xFF32B68E)
+val EmeraldSavingsDark = Color(0xFF057457)
 
-// Brand Navy (#0F172A)
-val BrandNavy = Color(0xFF0F172A)
+// Deep navy anchors hero surfaces and high-value financial information.
+val BrandNavy = Color(0xFF101B3D)
+val BrandNavySoft = Color(0xFF172554)
 
-// Alert Red (#EF4444)
-val AlertRed = Color(0xFFEF4444)
+// Semantic alerts.
+val AlertRed = Color(0xFFDC3F4F)
+val AmberDeal = Color(0xFFC47A12)
+val AmberDealLight = Color(0xFFF2B84B)
 
-// Deal Alert Amber / Insights
-val AmberDeal = Color(0xFFD97706)
-val AmberDealLight = Color(0xFFFBBF24)
-
-// Neutral Backgrounds & Cards (Exact brand guide colors)
-val BackgroundDark = Color(0xFF0F172A)
-val SurfaceDark = Color(0xFF1E293B)
-val SurfaceVariantDark = Color(0xFF334155)
+// Premium neutral system: softer canvas, clean white cards, restrained dividers.
+val BackgroundDark = Color(0xFF0B1224)
+val SurfaceDark = Color(0xFF151F35)
+val SurfaceVariantDark = Color(0xFF26334D)
 val TextPrimaryDark = Color(0xFFF8FAFC)
-val TextSecondaryDark = Color(0xFF94A3B8)
+val TextSecondaryDark = Color(0xFFA9B4C7)
 
-val BackgroundLight = Color(0xFFF1F5F9) // #F1F5F9 אפור בהיר
+val BackgroundLight = Color(0xFFF6F8FC)
 val SurfaceLight = Color(0xFFFFFFFF)
-val SurfaceVariantLight = Color(0xFFF1F5F9)
-val TextPrimaryLight = Color(0xFF0F172A) // #0F172A כחול כהה
-val TextSecondaryLight = Color(0xFF64748B) // #64748B אפור טקסט
-
-
-
+val SurfaceVariantLight = Color(0xFFEEF2F8)
+val TextPrimaryLight = Color(0xFF101828)
+val TextSecondaryLight = Color(0xFF667085)
+val DividerLight = Color(0xFFE4E9F2)
+val HeroBlueSurface = Color(0xFFEAF0FF)
+val SavingsSurface = Color(0xFFEAF8F3)
