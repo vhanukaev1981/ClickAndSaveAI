@@ -205,6 +205,20 @@ class CustomerUiSourceGuardTest {
     }
 
     @Test
+    fun profileAndSettingsUseSharedFinancialDesignTokens() {
+        val profile = File(screenPaths[3]).readText()
+        val settings = File(screenPaths[4]).readText()
+        listOf(profile, settings).forEach { text ->
+            assertTrue(text.contains("FinancialDesignTokens.screenHorizontalPadding"))
+            assertTrue(text.contains("FinancialDesignTokens.screenTopPadding"))
+            assertTrue(text.contains("FinancialDesignTokens.screenBottomNavigationClearance"))
+            assertTrue(text.contains("FinancialDesignTokens.sectionSpacing"))
+            assertTrue(text.contains("FinancialDesignTokens.cardRadius"))
+            assertTrue(text.contains("FinancialDesignTokens.cardPadding"))
+        }
+    }
+
+    @Test
     fun bottomNavigationKeepsRtlAndAccessibleTouchTargetContract() {
         val nav = File("src/main/java/com/example/ui/components/BottomNavBar.kt").readText()
         assertTrue(nav.contains("LayoutDirection.Rtl"))
