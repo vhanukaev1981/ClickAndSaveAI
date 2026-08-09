@@ -2,7 +2,7 @@
 
 const { getFirestore } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
-const { GMAIL_PARSER_VERSION_ACTIVE } = require("./gmailScanV5Functions");
+const { ACTIVE_GMAIL_PARSER_VERSION } = require("./gmailParserVersion");
 
 const db = getFirestore();
 const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
@@ -23,8 +23,8 @@ function buildGmailSyncStatus(connection) {
   return {
     connected,
     storedParserVersion,
-    activeParserVersion: GMAIL_PARSER_VERSION_ACTIVE,
-    upgradeRequired: connected && storedParserVersion < GMAIL_PARSER_VERSION_ACTIVE,
+    activeParserVersion: ACTIVE_GMAIL_PARSER_VERSION,
+    upgradeRequired: connected && storedParserVersion < ACTIVE_GMAIL_PARSER_VERSION,
     lookback: INITIAL_GMAIL_LOOKBACK,
   };
 }
