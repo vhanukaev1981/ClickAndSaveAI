@@ -95,10 +95,24 @@ class CustomerUiSourceGuardTest {
             "open_savings_preferences",
             "open_privacy_connections",
             "privacy_connections_screen",
-            "disconnect_document_source"
+            "disconnect_document_source",
+            "confirm_disconnect_document_source",
+            "cancel_disconnect_document_source"
         ).forEach { tag -> assertTrue("Profile lost E2E hook $tag", profile.contains(tag)) }
 
         assertTrue("Settings lost save hook", settings.contains("save_savings_preferences"))
+    }
+
+    @Test
+    fun documentSourceDisconnectRemainsExplicitlyConfirmed() {
+        val profile = File(screenPaths[3]).readText()
+        assertTrue(profile.contains("showDisconnectConfirmation"))
+        assertTrue(profile.contains("confirm_disconnect_document_source"))
+        assertTrue(profile.contains("cancel_disconnect_document_source"))
+        assertFalse(
+            "Disconnect CTA must not call the repository action directly",
+            profile.contains("onClick = viewModel::disconnectGmail")
+        )
     }
 
     @Test
