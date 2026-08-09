@@ -68,6 +68,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
     val scope = rememberCoroutineScope()
     var financialHome by remember { mutableStateOf<FinancialHomeResult?>(null) }
     var loading by remember { mutableStateOf(false) }
+    var actionSubmitting by remember { mutableStateOf(false) }
     var hasError by remember { mutableStateOf(false) }
     var selectedOpportunity by remember { mutableStateOf<FinancialOpportunity?>(null) }
     var actionMessage by remember { mutableStateOf("") }
@@ -161,8 +162,9 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                     items(opportunities, key = { it.id }) { opportunity ->
                         OpportunityCard(
                             opportunity = opportunity,
+                            actionEnabled = !actionSubmitting,
                             onAccept = {
-                                if (opportunity.actionMode == IN_APP_PROVIDER_REQUEST) {
+                                if (!actionSubmitting && opportunity.actionMode == IN_APP_PROVIDER_REQUEST) {
                                     selectedOpportunity = opportunity
                                 }
                             }
@@ -171,6 +173,16 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                 }
             }
 
+            if (actionSubmitting) {
+                item {
+                    MessageCard(
+                        title = "שולחים את הבקשה",
+                        body = "אנחנו מאמתים שוב את ההצעה ושולחים רק את הפרטים שאישרת.",
+                        testTag = "savings_action_submitting",
+                        showProgress = true
+                    )
+                }
+            }
             if (actionMessage.isNotBlank()) {
                 item {
                     MessageCard(
@@ -201,9 +213,12 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                 defaultEmail = session.email,
                 onDismiss = { selectedOpportunity = null },
                 onSubmit = { name, phone, email ->
+                    if (actionSubmitting) return@SavingsActionDialog
                     val displayedOfferId = opportunity.matchedOffer?.offerId.orEmpty()
                     selectedOpportunity = null
-                    loading = true
+                    actionMessage = ""
+                    hasError = false
+                    actionSubmitting = true
                     scope.launch {
                         runCatching {
                             actionRepository.acceptSavingsOpportunity(
@@ -224,7 +239,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                         }.onFailure {
                             hasError = true
                         }
-                        loading = false
+                        actionSubmitting = false
                     }
                 }
             )
@@ -237,6 +252,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
 @Composable
 private fun OpportunityCard(
     opportunity: FinancialOpportunity,
+    actionEnabled: Boolean,
     onAccept: () -> Unit
 ) {
     val matched = opportunity.matchedOffer
@@ -326,11 +342,12 @@ private fun OpportunityCard(
                         }
                         Button(
                             onClick = onAccept,
+                            enabled = actionEnabled,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("accept_savings_${opportunity.id}")
                         ) {
-                            Text("אני רוצה לחסוך ${money(monthlySaving)} בחודש")
+                            Text(if (actionEnabled) "אני רוצה לחסוך ${money(monthlySaving)} בחודש" else "הבקשה נשלחת…")
                         }
                     }
                     else -> {
