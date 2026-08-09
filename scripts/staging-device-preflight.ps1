@@ -17,6 +17,39 @@ function Assert-LastExitCode([string]$Step) {
     }
 }
 
+function Redact-SensitiveLogLine([string]$Line) {
+    if (-not $Line) { return $Line }
+
+    $Redacted = $Line
+
+    # Firebase App Check debug builds can print a UUID-like debug secret. Never echo it from
+    # an evidence helper that may later be pasted into an issue or chat.
+    if ($Redacted -match '(?i)AppCheck|DebugAppCheckProvider') {
+        $Redacted = [regex]::Replace(
+            $Redacted,
+            '\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b',
+            '[REDACTED_APP_CHECK_SECRET]'
+        )
+    }
+
+    # Protect FCM/auth-like token values if a library or future diagnostic line starts printing
+    # them. Keep the field name for debugging while removing the credential value.
+    $Redacted = [regex]::Replace(
+        $Redacted,
+        '(?i)(\b(?:fcm[_ -]?token|registration[_ -]?token|auth[_ -]?token|access[_ -]?token|refresh[_ -]?token|debug[_ -]?token|token)\b\s*[:=]\s*)[^\s,;]+',
+        '$1[REDACTED_TOKEN]'
+    )
+
+    # JWT-shaped values are credentials even when a log line forgot to label them as a token.
+    $Redacted = [regex]::Replace(
+        $Redacted,
+        '\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b',
+        '[REDACTED_JWT]'
+    )
+
+    return $Redacted
+}
+
 $ResolvedApk = (Resolve-Path $ApkPath).Path
 if (-not (Test-Path $ResolvedApk)) {
     throw "APK not found: $ApkPath"
@@ -59,10 +92,10 @@ Assert-LastExitCode "adb force-stop"
 Assert-LastExitCode "adb start"
 Start-Sleep -Seconds 5
 
-Write-Host "[6/6] Capturing focused E2E startup logs..."
+Write-Host "[6/6] Capturing focused E2E startup logs (credentials redacted)..."
 $FocusedLogs = & $Adb logcat -d | Select-String "AppCheck|DebugAppCheckProvider|FirebaseAppCheck|MainActivity|PushRegistration|ObservedBills|GmailRepository|TestPush|ClickAndSave"
 Assert-LastExitCode "adb logcat -d"
-$FocusedLogs | ForEach-Object { $_.Line }
+$FocusedLogs | ForEach-Object { Redact-SensitiveLogLine $_.Line }
 
 Write-Host ""
 Write-Host "PASS: locked staging APK installed and started on the connected device." -ForegroundColor Green
