@@ -8,14 +8,23 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.example.data.local.AppDatabase
+import com.example.data.repository.ObservedBillsRepository
+import com.example.data.repository.ShoppingRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 private const val PUSH_CHANNEL_ID = "savings_opportunities"
 private const val PUSH_CHANNEL_NAME = "הזדמנויות חיסכון"
+private const val PUSH_TYPE_NEW_INVOICE = "NEW_INVOICE"
 
 object PushRegistration {
     fun registerCurrentToken() {
@@ -39,6 +48,8 @@ object PushRegistration {
 }
 
 class ClickAndSaveMessagingService : FirebaseMessagingService() {
+    private val refreshScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         PushRegistration.registerToken(token)
@@ -46,6 +57,10 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+        if (message.data["type"] == PUSH_TYPE_NEW_INVOICE) {
+            refreshObservedBillsFromBackend()
+        }
+
         val title = message.notification?.title
             ?: message.data["title"]
             ?: "מצאנו הזדמנות לחיסכון"
@@ -53,6 +68,25 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
             ?: message.data["body"]
             ?: "פתח את ClickAndSaveAI כדי לראות כמה אפשר לחסוך."
         showNotification(title, body)
+    }
+
+    override fun onDestroy() {
+        refreshScope.cancel()
+        super.onDestroy()
+    }
+
+    private fun refreshObservedBillsFromBackend() {
+        if (FirebaseAuth.getInstance().currentUser == null) return
+        val shoppingRepository = ShoppingRepository(AppDatabase.getDatabase(applicationContext))
+        val observedBillsRepository = ObservedBillsRepository(shoppingRepository)
+        refreshScope.launch {
+            runCatching { observedBillsRepository.refreshObservedBills() }
+                .onFailure { error ->
+                    // The push notification remains useful even when the lightweight local
+                    // reconciliation is temporarily unavailable. App startup will retry it.
+                    Log.w("ObservedBillsRefresh", "NEW_INVOICE snapshot refresh failed", error)
+                }
+        }
     }
 
     private fun showNotification(title: String, body: String) {
