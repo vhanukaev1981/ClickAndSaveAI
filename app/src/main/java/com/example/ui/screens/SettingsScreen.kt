@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -29,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -65,6 +67,7 @@ fun SettingsScreen(
     var insurance by remember(currentInsurance) { mutableStateOf(currentInsurance) }
     var streaming by remember(currentStreaming) { mutableStateOf(currentStreaming) }
     var savedSignature by remember { mutableStateOf<String?>(null) }
+    var showDiscardConfirmation by remember { mutableStateOf(false) }
 
     val electricityOptions = listOf("לא נבחר", "חברת החשמל", "אלקטרה פאוור", "סלקום אנרגיה", "פזגז חשמל")
     val cellularOptions = listOf("לא נבחר", "019 מובייל", "Wecom", "פלאפון", "סלקום", "פרטנר", "גולן טלקום")
@@ -84,7 +87,44 @@ fun SettingsScreen(
         insurance,
         streaming
     ).joinToString("|")
+    val persistedSignature = listOf(
+        currentGoal.toInt().takeIf { it > 0 }?.toString().orEmpty(),
+        currentThreshold.toInt().takeIf { it > 0 }?.toString().orEmpty(),
+        currentElectricity,
+        currentCellular,
+        currentInternet,
+        currentInsurance,
+        currentStreaming
+    ).joinToString("|")
     val showSavedConfirmation = savedSignature != null && savedSignature == currentSignature
+    val hasUnsavedChanges = currentSignature != persistedSignature && savedSignature != currentSignature
+
+    if (showDiscardConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirmation = false },
+            title = { Text("לצאת בלי לשמור?") },
+            text = { Text("יש שינויים בהעדפות שעדיין לא נשמרו. אם תצא עכשיו הם לא יישמרו.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDiscardConfirmation = false
+                        onBackClick?.invoke()
+                    },
+                    modifier = Modifier.testTag("discard_preferences_changes")
+                ) {
+                    Text("צא בלי לשמור")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDiscardConfirmation = false },
+                    modifier = Modifier.testTag("keep_editing_preferences")
+                ) {
+                    Text("המשך לערוך")
+                }
+            }
+        )
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -97,7 +137,13 @@ fun SettingsScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (onBackClick != null) {
                     IconButton(
-                        onClick = onBackClick,
+                        onClick = {
+                            if (hasUnsavedChanges) {
+                                showDiscardConfirmation = true
+                            } else {
+                                onBackClick()
+                            }
+                        },
                         modifier = Modifier.testTag("settings_back")
                     ) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "חזרה")
