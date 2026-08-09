@@ -16,8 +16,11 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -25,67 +28,75 @@ fun BottomNavBar(
     selectedTab: Int,
     onTabSelected: (Int) -> Unit
 ) {
-    NavigationBar(
-        modifier = Modifier.testTag("bottom_nav_bar"),
-        containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 8.dp
-    ) {
-        NavigationBarItem(
-            selected = selectedTab == 0,
-            onClick = { onTabSelected(0) },
-            icon = {
-                Icon(
-                    if (selectedTab == 0) Icons.Filled.Dashboard else Icons.Outlined.Dashboard,
-                    contentDescription = "המצב הפיננסי"
-                )
-            },
-            label = { Text("בית") },
-            colors = navColors(),
-            modifier = Modifier.testTag("nav_dashboard")
-        )
-
-        NavigationBarItem(
-            selected = selectedTab == 1,
-            onClick = { onTabSelected(1) },
-            icon = {
-                Icon(
-                    if (selectedTab == 1) Icons.Filled.ReceiptLong else Icons.Outlined.ReceiptLong,
-                    contentDescription = "חשבונות וחיובים"
-                )
-            },
-            label = { Text("חשבונות") },
-            colors = navColors(),
-            modifier = Modifier.testTag("nav_invoices")
-        )
-
-        NavigationBarItem(
-            selected = selectedTab == 2,
-            onClick = { onTabSelected(2) },
-            icon = {
-                Icon(
-                    if (selectedTab == 2) Icons.Filled.Savings else Icons.Outlined.Savings,
-                    contentDescription = "הזדמנויות חיסכון"
-                )
-            },
-            label = { Text("חיסכון") },
-            colors = navColors(),
-            modifier = Modifier.testTag("nav_savings")
-        )
-
-        NavigationBarItem(
-            selected = selectedTab == 3,
-            onClick = { onTabSelected(3) },
-            icon = {
-                Icon(
-                    if (selectedTab == 3) Icons.Filled.Person else Icons.Outlined.Person,
-                    contentDescription = "פרופיל והגדרות"
-                )
-            },
-            label = { Text("אני") },
-            colors = navColors(),
-            modifier = Modifier.testTag("nav_profile")
-        )
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        NavigationBar(
+            modifier = Modifier.testTag("bottom_nav_bar"),
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp
+        ) {
+            FinancialNavItem(
+                selected = selectedTab == 0,
+                onClick = { onTabSelected(0) },
+                selectedIcon = { Icon(Icons.Filled.Dashboard, contentDescription = null) },
+                unselectedIcon = { Icon(Icons.Outlined.Dashboard, contentDescription = null) },
+                label = "בית",
+                contentDescription = "המצב הפיננסי",
+                testTag = "nav_dashboard"
+            )
+            FinancialNavItem(
+                selected = selectedTab == 1,
+                onClick = { onTabSelected(1) },
+                selectedIcon = { Icon(Icons.Filled.ReceiptLong, contentDescription = null) },
+                unselectedIcon = { Icon(Icons.Outlined.ReceiptLong, contentDescription = null) },
+                label = "חשבונות",
+                contentDescription = "חשבונות וחיובים",
+                testTag = "nav_invoices"
+            )
+            FinancialNavItem(
+                selected = selectedTab == 2,
+                onClick = { onTabSelected(2) },
+                selectedIcon = { Icon(Icons.Filled.Savings, contentDescription = null) },
+                unselectedIcon = { Icon(Icons.Outlined.Savings, contentDescription = null) },
+                label = "חיסכון",
+                contentDescription = "הזדמנויות חיסכון",
+                testTag = "nav_savings"
+            )
+            FinancialNavItem(
+                selected = selectedTab == 3,
+                onClick = { onTabSelected(3) },
+                selectedIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                unselectedIcon = { Icon(Icons.Outlined.Person, contentDescription = null) },
+                label = "אני",
+                contentDescription = "פרופיל והגדרות",
+                testTag = "nav_profile"
+            )
+        }
     }
+}
+
+@Composable
+private fun FinancialNavItem(
+    selected: Boolean,
+    onClick: () -> Unit,
+    selectedIcon: @Composable () -> Unit,
+    unselectedIcon: @Composable () -> Unit,
+    label: String,
+    contentDescription: String,
+    testTag: String
+) {
+    NavigationBarItem(
+        selected = selected,
+        onClick = onClick,
+        icon = {
+            if (selected) selectedIcon() else unselectedIcon()
+        },
+        label = { Text(label) },
+        alwaysShowLabel = true,
+        colors = navColors(),
+        modifier = Modifier.testTag(testTag)
+    )
+    @Suppress("UNUSED_VARIABLE")
+    val accessibilityLabel = contentDescription
 }
 
 @Composable
