@@ -28,6 +28,9 @@ This matrix is the execution checklist for the MyFinanda-style customer UX works
 | Preferences | Unsaved changes cannot be lost silently | `settings_back`, `discard_preferences_changes`, `keep_editing_preferences` | `SettingsProductContractTest` |
 | Navigation | Home/Bills/Savings/Profile are RTL-aware and clickable | `nav_dashboard`, `nav_invoices`, `nav_savings`, `nav_profile` | `BottomNavBarTest`, `StreamBAccessibilityContractTest` |
 | Accessibility | Bottom nav retains semantic tabs, selected state and 48dp target | navigation hooks above | `BottomNavBarTest`, `FinancialDesignTokensTest`, `StreamBAccessibilityContractTest` |
+| Theme | Customer product defaults to stable light financial UI; OEM dynamic color does not alter financial meaning | `ClickAndSaveTheme` | `FinancialThemeContractTest` |
+| Theme | Verified savings/success retains a dedicated green semantic palette while blue remains the product/action identity | `EmeraldSavings`, `SavingsSurface` | `FinancialThemeContractTest` |
+| Typography | Money and primary decisions retain a stronger hierarchy than supporting text | shared `Typography` | `FinancialThemeContractTest` |
 | Customer copy | No Firebase/App Check/backend/CRM/lead/commission/attribution language | all customer screens | `CustomerVisibleCopyGuardTest`, `CustomerUiSourceGuardTest` |
 | Consent | App never claims an automatic provider switch | Savings/Profile/Settings copy | `StreamBConsentPrivacyContractTest` |
 
@@ -41,3 +44,4 @@ Stream B is integration-ready only after:
 4. A staging APK is built from that exact green HEAD.
 5. `docs/STREAM_B_DEVICE_E2E.md` passes on a real device.
 6. No customer-facing copy exposes implementation or commercial internals and no UI fabricates savings/economic data.
+7. The CI SHA, APK SHA/source commit and device-tested SHA are the same evidence chain defined in `docs/STREAM_B_RELEASE_GATE.md`.
