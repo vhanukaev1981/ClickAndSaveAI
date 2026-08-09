@@ -19,7 +19,8 @@ sealed class GmailSyncState {
 
 class GmailRepository(
     private val shoppingRepository: ShoppingRepository,
-    private val backendRepository: BackendRepository = BackendRepository()
+    private val backendRepository: BackendRepository = BackendRepository(),
+    private val observedBillsRepository: ObservedBillsRepository = ObservedBillsRepository(shoppingRepository)
 ) {
     private val _syncState = MutableStateFlow<GmailSyncState>(GmailSyncState.Idle)
     val syncState: StateFlow<GmailSyncState> = _syncState.asStateFlow()
@@ -72,6 +73,19 @@ class GmailRepository(
                 "Running one-time Gmail parser upgrade ${syncStatus.storedParserVersion} -> ${syncStatus.activeParserVersion}"
             )
             scanInvoices()
+        } else {
+            // Normal app startup uses the backend-normalized Firestore snapshot, not another
+            // six-month Gmail scan. A transient refresh failure must not turn a valid Gmail
+            // connection into a disconnected/error state.
+            runCatching { observedBillsRepository.refreshObservedBills() }
+                .onSuccess { refresh ->
+                    if (refresh.refreshedBills > 0 || refresh.removedStaleSources > 0) {
+                        _lastScanTime.value = "עודכן עכשיו"
+                    }
+                }
+                .onFailure { error ->
+                    Log.w("GmailRepository", "Authoritative observed bills refresh unavailable", error)
+                }
         }
         return connectionResult
     }
