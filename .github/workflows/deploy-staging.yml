@@ -3,10 +3,9 @@ name: Deploy Firebase Staging
 on:
   workflow_dispatch:
     inputs:
-      ref:
-        description: Git ref to deploy after CI is green
+      source_sha:
+        description: Exact 40-character Stream A commit SHA to deploy after CI is green
         required: true
-        default: agent/ai-native-financial-core
         type: string
       confirm_project:
         description: Type clickandsaveai-staging to confirm the deployment target
@@ -29,21 +28,39 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Guard deployment source
+      - name: Guard immutable deployment source
         shell: bash
         env:
-          DEPLOY_REF: ${{ inputs.ref }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
           set -euo pipefail
-          if [[ "$DEPLOY_REF" != "agent/ai-native-financial-core" ]]; then
-            echo "Only agent/ai-native-financial-core may be deployed by this staging workflow." >&2
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'source_sha must be an exact lowercase 40-character Git commit SHA.' >&2
             exit 1
           fi
 
-      - name: Check out requested ref
+      - name: Check out exact source SHA
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+
+      - name: Verify SHA and Stream A lineage
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if [[ "$ACTUAL_SHA" != "$SOURCE_SHA" ]]; then
+            echo "Expected $SOURCE_SHA but checked out $ACTUAL_SHA" >&2
+            exit 1
+          fi
+          git fetch --no-tags origin agent/ai-native-financial-core
+          if ! git merge-base --is-ancestor "$SOURCE_SHA" origin/agent/ai-native-financial-core; then
+            echo 'The requested SHA is not part of Stream A (agent/ai-native-financial-core).' >&2
+            exit 1
+          fi
 
       - name: Verify staging deployment configuration
         env:
@@ -68,14 +85,6 @@ jobs:
           }
           NODE
 
-      - id: auth
-        name: Authenticate to Google Cloud with GitHub OIDC
-        uses: google-github-actions/auth@v3
-        with:
-          create_credentials_file: 'true'
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-
       - name: Set up Node.js 22
         uses: actions/setup-node@v6
         with:
@@ -89,6 +98,14 @@ jobs:
       - name: Re-run backend tests before deployment
         working-directory: functions
         run: npm test
+
+      - id: auth
+        name: Authenticate to Google Cloud with GitHub OIDC
+        uses: google-github-actions/auth@v3
+        with:
+          create_credentials_file: 'true'
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Install pinned Firebase CLI
         run: npm install --global firebase-tools@15.1.0
