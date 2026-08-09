@@ -11,7 +11,8 @@ class StreamBReleaseReadinessContractTest {
             "../docs/STREAM_B_ACCEPTANCE_MATRIX.md",
             "../docs/STREAM_B_DEVICE_E2E.md",
             "../docs/STREAM_B_INTEGRATION_PLAN.md",
-            "../docs/STREAM_B_RELEASE_GATE.md"
+            "../docs/STREAM_B_RELEASE_GATE.md",
+            "../docs/STREAM_B_DEVICE_EVIDENCE_TEMPLATE.md"
         ).forEach { path ->
             assertTrue("Missing Stream B readiness artifact: $path", File(path).isFile)
         }
@@ -43,6 +44,7 @@ class StreamBReleaseReadinessContractTest {
         val e2e = File("../docs/STREAM_B_DEVICE_E2E.md").readText()
         val integration = File("../docs/STREAM_B_INTEGRATION_PLAN.md").readText()
         val releaseGate = File("../docs/STREAM_B_RELEASE_GATE.md").readText()
+        val evidence = File("../docs/STREAM_B_DEVICE_EVIDENCE_TEMPLATE.md").readText()
 
         assertTrue(e2e.contains("real-device E2E acceptance"))
         assertTrue(e2e.contains("Acceptance rule"))
@@ -55,12 +57,16 @@ class StreamBReleaseReadinessContractTest {
         assertTrue(releaseGate.contains("dedicated savings-success green semantic"))
         assertTrue(releaseGate.contains("Authorization failures must remain customer-safe"))
         assertTrue(releaseGate.contains("StreamBDeviceE2EContractTest"))
+        assertTrue(evidence.contains("CI green SHA"))
+        assertTrue(evidence.contains("APK source SHA"))
+        assertTrue(evidence.contains("Device-tested SHA"))
     }
 
     @Test
     fun automatedGuardSuiteRetainsCoreProductContracts() {
         listOf(
             "CustomerPresentationPolicyTest.kt",
+            "CustomerAuthCopySanitizationTest.kt",
             "CustomerVisibleCopyGuardTest.kt",
             "DashboardProductContractTest.kt",
             "FinancialThemeContractTest.kt",
@@ -73,6 +79,7 @@ class StreamBReleaseReadinessContractTest {
             "StreamBManagerBlockerContractTest.kt",
             "StreamBPostRebaseContractTest.kt",
             "StreamBDeviceE2EContractTest.kt",
+            "StreamBDeviceEvidenceContractTest.kt",
             "StreamBWorkstreamBoundaryContractTest.kt"
         ).forEach { fileName ->
             val file = File("src/test/java/com/example/$fileName")
