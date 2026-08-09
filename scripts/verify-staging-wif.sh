@@ -8,6 +8,8 @@ DEPLOY_SA_ID="${DEPLOY_SA_ID:-clickandsaveai-github-deployer}"
 GITHUB_REPOSITORY_ID="${GITHUB_REPOSITORY_ID:-1314210715}"
 GITHUB_REPOSITORY_OWNER_ID="${GITHUB_REPOSITORY_OWNER_ID:-64756523}"
 GITHUB_ENVIRONMENT="${GITHUB_ENVIRONMENT:-staging}"
+GITHUB_REF="${GITHUB_REF:-refs/heads/main}"
+GITHUB_JOB_WORKFLOW_REF="${GITHUB_JOB_WORKFLOW_REF:-vhanukaev1981/ClickAndSaveAI/.github/workflows/deploy-staging.yml@refs/heads/main}"
 
 pass() { printf 'PASS  %s\n' "$*"; }
 fail() { printf 'FAIL  %s\n' "$*" >&2; FAILED=1; }
@@ -27,7 +29,7 @@ DEPLOY_SA_EMAIL="${DEPLOY_SA_ID}@${PROJECT_ID}.iam.gserviceaccount.com"
 RUNTIME_SA_EMAIL="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 WIF_PROVIDER_RESOURCE="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/providers/${PROVIDER_ID}"
 WIF_MEMBER="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/attribute.repository_id/${GITHUB_REPOSITORY_ID}"
-EXPECTED_CONDITION="assertion.repository_id=='${GITHUB_REPOSITORY_ID}' && assertion.repository_owner_id=='${GITHUB_REPOSITORY_OWNER_ID}' && assertion.environment=='${GITHUB_ENVIRONMENT}'"
+EXPECTED_CONDITION="assertion.repository_id=='${GITHUB_REPOSITORY_ID}' && assertion.repository_owner_id=='${GITHUB_REPOSITORY_OWNER_ID}' && assertion.environment=='${GITHUB_ENVIRONMENT}' && assertion.ref=='${GITHUB_REF}' && assertion.job_workflow_ref=='${GITHUB_JOB_WORKFLOW_REF}'"
 
 if gcloud iam service-accounts describe "$DEPLOY_SA_EMAIL" --project="$PROJECT_ID" >/dev/null 2>&1; then
   pass "deploy service account exists"
@@ -49,7 +51,7 @@ if gcloud iam workload-identity-pools providers describe "$PROVIDER_ID" \
     --project="$PROJECT_ID" --location=global --workload-identity-pool="$POOL_ID" \
     --format='value(attributeCondition)')"
   if [[ "$ACTUAL_CONDITION" == "$EXPECTED_CONDITION" ]]; then
-    pass "provider condition locks repo ID, owner ID and staging environment"
+    pass "provider condition locks repo ID, owner ID, staging environment, main ref and deploy workflow"
   else
     fail "provider condition differs from expected secure condition"
     printf '      expected: %s\n      actual:   %s\n' "$EXPECTED_CONDITION" "$ACTUAL_CONDITION" >&2
