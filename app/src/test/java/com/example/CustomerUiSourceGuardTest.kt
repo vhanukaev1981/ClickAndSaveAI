@@ -107,6 +107,7 @@ class CustomerUiSourceGuardTest {
             "savings_loading_state",
             "savings_under_review_state",
             "savings_error_state",
+            "savings_retry_refresh",
             "savings_action_submitting",
             "accept_savings_",
             "savings_contact_consent",
@@ -150,6 +151,16 @@ class CustomerUiSourceGuardTest {
         assertTrue(dashboard.contains("dashboard_retry_financial_home"))
         assertTrue(dashboard.contains("financialHomeTemporarilyUnavailable = false"))
         assertTrue(dashboard.contains("financialHomeRefreshKey += 1"))
+    }
+
+    @Test
+    fun savingsErrorStateKeepsExplicitRetryPath() {
+        val savings = File(screenPaths[2]).readText()
+        assertTrue(savings.contains("savings_error_state"))
+        assertTrue(savings.contains("savings_retry_refresh"))
+        assertTrue(savings.contains("hasError = false"))
+        assertTrue(savings.contains("financialHome = null"))
+        assertTrue(savings.contains("refreshKey += 1"))
     }
 
     @Test
@@ -205,10 +216,11 @@ class CustomerUiSourceGuardTest {
     }
 
     @Test
-    fun profileAndSettingsUseSharedFinancialDesignTokens() {
+    fun financialSurfacesUseSharedFinancialDesignTokens() {
+        val savings = File(screenPaths[2]).readText()
         val profile = File(screenPaths[3]).readText()
         val settings = File(screenPaths[4]).readText()
-        listOf(profile, settings).forEach { text ->
+        listOf(savings, profile, settings).forEach { text ->
             assertTrue(text.contains("FinancialDesignTokens.screenHorizontalPadding"))
             assertTrue(text.contains("FinancialDesignTokens.screenTopPadding"))
             assertTrue(text.contains("FinancialDesignTokens.screenBottomNavigationClearance"))
