@@ -186,6 +186,54 @@ test("normalizes a verified PDF invoice candidate into the existing invoice shap
   });
 });
 
+test("strong insurance sender replaces a generic PDF provider label", () => {
+  const parsed = normalizePdfInvoiceCandidate({
+    isInvoice: true,
+    providerName: "Insurance Company",
+    category: "insurance",
+    monthlyCost: 312.4,
+    receivedDate: "2026-08-03",
+  }, message({
+    id: "harel-generic-pdf",
+    subject: "חשבונית ביטוח",
+    from: "Harel <billing@harel.example>",
+  }), "harel-generic-pdf:pdf:one");
+
+  assert.equal(parsed.providerName, "הראל");
+  assert.equal(parsed.category, "ביטוח");
+});
+
+test("PDF spelling variant of the same known provider is canonicalized from strong header evidence", () => {
+  const parsed = normalizePdfInvoiceCandidate({
+    isInvoice: true,
+    providerName: "Harel Insurance Ltd.",
+    category: "insurance",
+    monthlyCost: 280,
+  }, message({
+    id: "harel-variant-pdf",
+    subject: "Your policy bill",
+    from: "Harel <billing@harel.example>",
+  }), "harel-variant-pdf:pdf:one");
+
+  assert.equal(parsed.providerName, "הראל");
+});
+
+test("specific different PDF vendor is preserved instead of blindly trusting the email sender", () => {
+  const parsed = normalizePdfInvoiceCandidate({
+    isInvoice: true,
+    providerName: "Supabase Pte. Ltd.",
+    category: "software subscription",
+    monthlyCost: 25,
+  }, message({
+    id: "forwarded-vendor-pdf",
+    subject: "Harel documents",
+    from: "Harel <billing@harel.example>",
+  }), "forwarded-vendor-pdf:pdf:one");
+
+  assert.equal(parsed.providerName, "Supabase Pte. Ltd.");
+  assert.equal(parsed.category, "אחר");
+});
+
 test("accepts a real PDF invoice outside the predefined service categories", () => {
   const parsed = normalizePdfInvoiceCandidate({
     isInvoice: true,
