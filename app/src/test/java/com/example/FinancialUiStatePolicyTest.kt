@@ -10,8 +10,10 @@ class FinancialUiStatePolicyTest {
     @Test
     fun underReviewNeverPromisesUnverifiedSavings() {
         val message = FinancialUiStatePolicy.message(FinancialUiState.UNDER_REVIEW)
+        assertTrue(message.title.contains("עדיין בודקים"))
         assertTrue(message.body.contains("רק לאחר"))
         assertFalse(message.body.contains("₪0"))
+        assertFalse(message.title == "נבדק עבורך")
     }
 
     @Test
