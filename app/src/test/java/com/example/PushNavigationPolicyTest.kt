@@ -1,6 +1,7 @@
 package com.example
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -54,6 +55,19 @@ class PushNavigationPolicyTest {
                 null
             )
         )
+    }
+
+    @Test
+    fun exactSavingsPairsReceiveDifferentPendingIntentRequestCodes() {
+        val first = PushNavigationTarget(tab = 2, opportunityId = "opp-1", offerId = "offer-1")
+        val second = PushNavigationTarget(tab = 2, opportunityId = "opp-2", offerId = "offer-2")
+
+        assertNotEquals(
+            pendingIntentRequestCodeForPushTarget(first),
+            pendingIntentRequestCodeForPushTarget(second)
+        )
+        assertEquals(101, pendingIntentRequestCodeForPushTarget(PushNavigationTarget(tab = 1)))
+        assertEquals(100, pendingIntentRequestCodeForPushTarget(PushNavigationTarget(tab = 0)))
     }
 
     @Test
