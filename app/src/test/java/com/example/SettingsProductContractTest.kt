@@ -29,6 +29,8 @@ class SettingsProductContractTest {
         assertFalse(settings.contains("Toast.makeText"))
         assertTrue(settings.contains("הם לא מבטיחים תוצאה"))
         assertTrue(settings.contains("ההמלצה עדיין תתבסס על התאמה, מחיר ותנאים שניתן לאמת"))
+        assertTrue(settings.contains("שמירת העדפות אינה יוצרת פנייה לספק ואינה מבצעת מעבר, תשלום או ביטול שירות"))
+        assertTrue(settings.contains("לפני העברת פרטים לנותן שירות נבקש ממך אישור מפורש להצעה המדויקת"))
         assertTrue(settings.contains("autoSwitch = false"))
     }
 
