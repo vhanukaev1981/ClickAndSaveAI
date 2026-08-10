@@ -54,6 +54,15 @@ test("public incremental processing is serialized and finalizes checkpoints tran
   assert.match(reconciliationSource, /data\.historyRecoveryRequired === true/);
 });
 
+test("PubSub does not race the first or parser-upgrade backfill and recovery releases mailbox leases", () => {
+  assert.match(reconciliationSource, /mode === "INITIAL_BACKFILL" \|\| mode === "PARSER_UPGRADE_BACKFILL"/);
+  assert.match(reconciliationSource, /status:\s*"BACKFILL_PENDING"/);
+  const recoveryBranch = reconciliationSource
+    .split("if (!readable) {")[1]
+    ?.split("return { status: \"RECOVERY_REQUIRED\"")[0] || "";
+  assert.match(recoveryBranch, /releaseMailboxLease\(lease\.states, lease\.owner\)/);
+});
+
 test("public scan persists first-backfill completion and refuses normal six-month rescans", () => {
   assert.match(reliableScanSource, /initialBackfillCompleted/);
   assert.match(reliableScanSource, /initialBackfillCompletedAt/);
