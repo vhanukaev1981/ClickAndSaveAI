@@ -7,13 +7,21 @@ import org.junit.Test
 
 class PushNavigationSourceGuardTest {
     @Test
-    fun messagingServiceUsesTypedPushDestinationInsteadOfLegacyBoolean() {
+    fun messagingServicePreservesOnlyAllowlistedExactPushRoute() {
         val service = File("src/main/java/com/example/ClickAndSaveMessagingService.kt").readText()
 
         assertTrue(service.contains("message.data[PUSH_TYPE_EXTRA]"))
-        assertTrue(service.contains("destinationTabForPushType(pushType)"))
+        assertTrue(service.contains("message.data[PUSH_OPPORTUNITY_ID_EXTRA]"))
+        assertTrue(service.contains("message.data[PUSH_OFFER_ID_EXTRA]"))
+        assertTrue(service.contains("navigationTargetForPush(pushType, opportunityId, offerId)"))
         assertTrue(service.contains("putExtra(PUSH_TYPE_EXTRA, pushType)"))
+        assertTrue(service.contains("putExtra(PUSH_OPPORTUNITY_ID_EXTRA, navigationTarget.opportunityId)"))
+        assertTrue(service.contains("putExtra(PUSH_OFFER_ID_EXTRA, navigationTarget.offerId)"))
+        assertTrue(service.contains("pendingIntentRequestCodeForPushTarget(navigationTarget)"))
+        assertFalse(service.contains("destinationTabForPushType(pushType)"))
         assertFalse(service.contains("openSavingsOpportunity"))
+        assertFalse(service.contains("message.data.forEach"))
+        assertFalse(service.contains("putExtras("))
     }
 
     @Test
