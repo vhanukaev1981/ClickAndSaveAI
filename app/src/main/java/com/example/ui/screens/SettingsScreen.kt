@@ -262,7 +262,7 @@ fun SettingsScreen(
                     Icon(Icons.Default.Info, contentDescription = null)
                     Spacer(modifier = Modifier.size(FinancialDesignTokens.cardSpacing))
                     Text(
-                        "שמירת העדפות אינה מאשרת מעבר ספק או פעולה כספית. כל פעולה מול נותן שירות דורשת אישור מפורש שלך להצעה המדויקת.",
+                        "שמירת העדפות אינה יוצרת פנייה לספק ואינה מבצעת מעבר, תשלום או ביטול שירות. לפני העברת פרטים לנותן שירות נבקש ממך אישור מפורש להצעה המדויקת.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
