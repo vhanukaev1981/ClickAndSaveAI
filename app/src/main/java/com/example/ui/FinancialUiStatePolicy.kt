@@ -28,7 +28,7 @@ object FinancialUiStatePolicy {
             body = "הנתונים הקיימים נשארים שמורים. ננסה לעדכן שוב אוטומטית."
         )
         FinancialUiState.UNDER_REVIEW -> FinancialUiMessage(
-            title = "נבדק עבורך",
+            title = "עדיין בודקים עבורך",
             body = "נציג סכום חיסכון רק לאחר שנוכל לאמת הצעה מתאימה ותנאים מלאים."
         )
         FinancialUiState.READY -> FinancialUiMessage(
