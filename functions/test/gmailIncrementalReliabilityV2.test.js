@@ -6,6 +6,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const policy = require("../src/gmailHistoryPolicy");
+const entry = require("../src/entry");
+const syncStatus = require("../src/gmailSyncStatusFunctions");
 
 const watchSource = fs.readFileSync(
   path.join(__dirname, "..", "src", "gmailWatchFunctions.js"),
@@ -65,9 +67,31 @@ test("initial backfill completion and history baseline are persisted by the scan
 });
 
 test("four-hour safety reconciliation uses Gmail History only and never launches a six-month scan", () => {
+  assert.equal(typeof entry.gmailIncrementalReconciliation, "function");
   assert.match(reconciliationSource, /schedule:\s*"0 \*\/4 \* \* \*"/);
   assert.match(reconciliationSource, /users\/me\/profile/);
   assert.match(reconciliationSource, /_processMailboxNotification/);
   assert.doesNotMatch(reconciliationSource, /newer_than:/);
   assert.doesNotMatch(reconciliationSource, /scanGmailInvoices/);
+});
+
+test("Gmail sync status exposes backfill and incremental checkpoint health without mailbox content", () => {
+  const lastIncrementalScanAt = { seconds: 123, nanoseconds: 0 };
+  const result = syncStatus._buildGmailSyncStatus({
+    scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
+    encryptedRefreshToken: "encrypted",
+    parserVersion: 6,
+    initialBackfillCompleted: true,
+    watchHistoryId: "100",
+    pendingHistoryId: "101",
+    historyRecoveryRequired: false,
+    lastIncrementalScanAt,
+  });
+
+  assert.equal(result.initialBackfillCompleted, true);
+  assert.equal(result.incrementalCheckpointHistoryId, "100");
+  assert.equal(result.pendingHistoryId, "101");
+  assert.equal(result.historyRecoveryRequired, false);
+  assert.equal(result.lastIncrementalScanAt, lastIncrementalScanAt);
+  assert.equal(result.syncMode, "INCREMENTAL");
 });
