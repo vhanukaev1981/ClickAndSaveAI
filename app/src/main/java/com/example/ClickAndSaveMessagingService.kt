@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.data.local.AppDatabase
@@ -53,6 +54,10 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
         val pushType = message.data[PUSH_TYPE_EXTRA]
+        val opportunityId = message.data[PUSH_OPPORTUNITY_ID_EXTRA]
+        val offerId = message.data[PUSH_OFFER_ID_EXTRA]
+        val navigationTarget = navigationTargetForPush(pushType, opportunityId, offerId)
+
         if (pushType == PUSH_TYPE_NEW_INVOICE) {
             refreshObservedBillsFromBackend()
         }
@@ -63,7 +68,7 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
         val body = message.notification?.body
             ?: message.data["body"]
             ?: "פתח את ClickAndSaveAI כדי לראות את העדכון."
-        showNotification(title, body, pushType)
+        showNotification(title, body, pushType, navigationTarget)
     }
 
     private fun refreshObservedBillsFromBackend() {
@@ -80,23 +85,41 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
         }
     }
 
-    private fun showNotification(title: String, body: String, pushType: String?) {
+    private fun showNotification(
+        title: String,
+        body: String,
+        pushType: String?,
+        navigationTarget: PushNavigationTarget?
+    ) {
         FinancialNotificationChannels.ensureCreated(this)
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        val destinationTab = destinationTabForPushType(pushType)
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            if (destinationTab != null && pushType != null) {
+            if (pushType != null && navigationTarget != null) {
                 putExtra(PUSH_TYPE_EXTRA, pushType)
+                if (!navigationTarget.opportunityId.isNullOrBlank()) {
+                    putExtra(PUSH_OPPORTUNITY_ID_EXTRA, navigationTarget.opportunityId)
+                }
+                if (!navigationTarget.offerId.isNullOrBlank()) {
+                    putExtra(PUSH_OFFER_ID_EXTRA, navigationTarget.offerId)
+                }
+
+                // PendingIntent identity does not include extras. Give every exact savings pair
+                // a distinct data URI as well as a distinct request code so a newer notification
+                // cannot overwrite another Opportunity -> Offer route.
+                if (navigationTarget.tab == 2) {
+                    data = Uri.Builder()
+                        .scheme("clickandsave")
+                        .authority("push")
+                        .appendPath("savings")
+                        .appendPath(navigationTarget.opportunityId)
+                        .appendPath(navigationTarget.offerId)
+                        .build()
+                }
             }
         }
-        val pendingIntentRequestCode = when (destinationTab) {
-            1 -> 101
-            2 -> 102
-            0 -> 100
-            else -> 199
-        }
+        val pendingIntentRequestCode = pendingIntentRequestCodeForPushTarget(navigationTarget)
         val pendingIntent = PendingIntent.getActivity(
             this,
             pendingIntentRequestCode,
