@@ -15,6 +15,7 @@ class StreamBReleaseReadinessContractTest {
             "../docs/STREAM_B_DEVICE_EVIDENCE_TEMPLATE.md",
             "../docs/STREAM_B_MOTION_CONTRACT.md",
             "../docs/STREAM_B_P0_GAP_MAP.md",
+            "../docs/STREAM_B_NORTH_STAR_STATUS.md",
             "../docs/STREAM_B_ONBOARDING_CONTRACT.md",
             "../docs/STREAM_B_PROVIDER_HANDOFF_CONTRACT.md",
             "../docs/STREAM_B_BILLS_PAYMENT_HANDOFF_CONTRACT.md"
