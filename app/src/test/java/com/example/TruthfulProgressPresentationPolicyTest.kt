@@ -1,7 +1,9 @@
 package com.example
 
 import com.example.ui.CustomerProgressStage
+import com.example.ui.CustomerProgressTone
 import com.example.ui.TruthfulProgressPresentationPolicy
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,6 +22,14 @@ class TruthfulProgressPresentationPolicyTest {
             val message = TruthfulProgressPresentationPolicy.message(stage)
             assertTrue("$stage lost truthful phrase $phrase", message.contains(phrase))
         }
+    }
+
+    @Test
+    fun semanticToneFollowsNorthStarMeaningWithoutInventingState() {
+        assertEquals(CustomerProgressTone.ACTIVE_BLUE, TruthfulProgressPresentationPolicy.tone(CustomerProgressStage.DETECTED))
+        assertEquals(CustomerProgressTone.ACTIVE_BLUE, TruthfulProgressPresentationPolicy.tone(CustomerProgressStage.CHECKED))
+        assertEquals(CustomerProgressTone.VERIFIED_GREEN, TruthfulProgressPresentationPolicy.tone(CustomerProgressStage.VERIFIED))
+        assertEquals(CustomerProgressTone.REVIEW_AMBER, TruthfulProgressPresentationPolicy.tone(CustomerProgressStage.STILL_CHECKING))
     }
 
     @Test
