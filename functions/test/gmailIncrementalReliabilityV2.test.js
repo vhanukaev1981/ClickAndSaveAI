@@ -7,14 +7,11 @@ const assert = require("node:assert/strict");
 
 const policy = require("../src/gmailHistoryPolicy");
 const entry = require("../src/entry");
+const reconciliation = require("../src/gmailIncrementalReconciliation");
 const syncStatus = require("../src/gmailSyncStatusFunctions");
 
-const watchSource = fs.readFileSync(
-  path.join(__dirname, "..", "src", "gmailWatchFunctions.js"),
-  "utf8"
-);
-const scanSource = fs.readFileSync(
-  path.join(__dirname, "..", "src", "gmailScanV5Functions.js"),
+const reliableScanSource = fs.readFileSync(
+  path.join(__dirname, "..", "src", "gmailReliableScanFunctions.js"),
   "utf8"
 );
 const reconciliationSource = fs.readFileSync(
@@ -40,30 +37,31 @@ test("history checkpoint selection is monotonic and never regresses", () => {
   assert.equal(policy.selectMonotonicCheckpoint("", "105"), "105");
 });
 
-test("expired Gmail History enters recovery without advancing watchHistoryId", () => {
-  const expiredBlock = watchSource
-    .split("if (history.expired) {")[1]
-    ?.split("return")[0] || "";
-
-  assert.match(expiredBlock, /pendingHistoryId:\s*notificationHistoryId/);
-  assert.match(expiredBlock, /historyRecoveryRequired:\s*true/);
-  assert.match(expiredBlock, /historyRecoveryReason:\s*"HISTORY_ID_EXPIRED"/);
-  assert.doesNotMatch(expiredBlock, /watchHistoryId\s*:/);
+test("expired Gmail History enters recovery while preserving the last processed checkpoint", () => {
+  assert.match(reconciliationSource, /response\.status === 404\) return false/);
+  assert.match(reconciliationSource, /historyRecoveryRequired:\s*true/);
+  assert.match(reconciliationSource, /historyRecoveryReason:\s*reason/);
+  assert.match(reconciliationSource, /pendingHistoryId:\s*selectMonotonicCheckpoint\(data\.pendingHistoryId, targetHistoryId\)/);
+  assert.match(reconciliationSource, /if \(state\.checkpoint\) update\.watchHistoryId = state\.checkpoint/);
+  assert.doesNotMatch(reconciliationSource, /update\.watchHistoryId = targetHistoryId/);
 });
 
-test("successful incremental processing advances checkpoint through a Firestore transaction", () => {
-  assert.match(watchSource, /db\.runTransaction/);
-  assert.match(watchSource, /selectMonotonicCheckpoint/);
-  assert.match(watchSource, /historyRecoveryRequired === true/);
+test("public incremental processing is serialized and finalizes checkpoints transactionally", () => {
+  assert.equal(entry.gmailPushNotification, reconciliation.gmailPushNotification);
+  assert.match(reconciliationSource, /incrementalLeaseOwner/);
+  assert.match(reconciliationSource, /db\.runTransaction/);
+  assert.match(reconciliationSource, /selectMonotonicCheckpoint/);
+  assert.match(reconciliationSource, /data\.historyRecoveryRequired === true/);
 });
 
-test("initial backfill completion and history baseline are persisted by the scan itself", () => {
-  assert.match(scanSource, /initialBackfillCompleted/);
-  assert.match(scanSource, /initialBackfillCompletedAt/);
-  assert.match(scanSource, /initialBackfillHistoryBaseline/);
-  assert.match(scanSource, /syncMode\(/);
-  assert.match(scanSource, /INCREMENTAL/);
-  assert.match(scanSource, /RECOVERY_REQUIRED/);
+test("public scan persists first-backfill completion and refuses normal six-month rescans", () => {
+  assert.match(reliableScanSource, /initialBackfillCompleted/);
+  assert.match(reliableScanSource, /initialBackfillCompletedAt/);
+  assert.match(reliableScanSource, /initialBackfillHistoryBaseline/);
+  assert.match(reliableScanSource, /syncMode\(/);
+  assert.match(reliableScanSource, /mode === "INCREMENTAL"/);
+  assert.match(reliableScanSource, /mode === "RECOVERY_REQUIRED"/);
+  assert.match(reliableScanSource, /stableScanRunner\(\)\(request\)/);
 });
 
 test("four-hour safety reconciliation uses Gmail History only and never launches a six-month scan", () => {
