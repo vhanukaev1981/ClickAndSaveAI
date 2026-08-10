@@ -146,12 +146,30 @@ class MainActivity : ComponentActivity() {
 
     private fun applyPushDestination(intent: Intent?) {
         if (FirebaseAuth.getInstance().currentUser == null) return
-        val pushType = intent?.getStringExtra(PUSH_TYPE_EXTRA) ?: return
-        val destinationTab = destinationTabForPushType(pushType) ?: return
-        viewModel.setTab(destinationTab)
-        // Consume only a known allowlisted navigation instruction so configuration changes or
-        // repeated delivery cannot unexpectedly re-route a user later.
-        intent.removeExtra(PUSH_TYPE_EXTRA)
+        val pushType = intent?.getStringExtra(PUSH_TYPE_EXTRA)
+        val opportunityId = intent?.getStringExtra(PUSH_OPPORTUNITY_ID_EXTRA)
+        val offerId = intent?.getStringExtra(PUSH_OFFER_ID_EXTRA)
+
+        // Read once, then consume only the allowlisted routing extras before validation. This
+        // prevents a malformed/stale push from being replayed after Activity recreation while
+        // preserving the captured local values for typed validation below.
+        intent?.removeExtra(PUSH_TYPE_EXTRA)
+        intent?.removeExtra(PUSH_OPPORTUNITY_ID_EXTRA)
+        intent?.removeExtra(PUSH_OFFER_ID_EXTRA)
+
+        val navigationTarget = navigationTargetForPush(pushType, opportunityId, offerId) ?: return
+
+        if (
+            navigationTarget.tab == 2 &&
+            navigationTarget.opportunityId != null &&
+            navigationTarget.offerId != null
+        ) {
+            viewModel.setSavingsPushTarget(
+                navigationTarget.opportunityId,
+                navigationTarget.offerId
+            )
+        }
+        viewModel.setTab(navigationTarget.tab)
     }
 
     private fun maybeTriggerDebugTestPush(intent: Intent?) {

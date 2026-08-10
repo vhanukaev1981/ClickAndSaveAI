@@ -69,6 +69,11 @@ sealed class ProviderLeadUiState {
     data class Error(val message: String) : ProviderLeadUiState()
 }
 
+data class SavingsPushTarget(
+    val opportunityId: String,
+    val offerId: String
+)
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val db = AppDatabase.getDatabase(application)
     private val shoppingRepository = ShoppingRepository(db)
@@ -95,6 +100,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _aiErrorMessage = MutableStateFlow("")
     val aiErrorMessage: StateFlow<String> = _aiErrorMessage.asStateFlow()
+
+    private val _savingsPushTarget = MutableStateFlow<SavingsPushTarget?>(null)
+    val savingsPushTarget: StateFlow<SavingsPushTarget?> = _savingsPushTarget.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -227,6 +235,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun signOut() {
         viewModelScope.launch {
+            _savingsPushTarget.value = null
             gmailRepository.disconnectGmail()
             authRepository.signOut()
         }
@@ -351,6 +360,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setTab(index: Int) {
         selectedTab.value = index.coerceIn(0, 4)
+    }
+
+    fun setSavingsPushTarget(opportunityId: String, offerId: String) {
+        val exactOpportunityId = opportunityId.trim()
+        val exactOfferId = offerId.trim()
+        if (exactOpportunityId.isBlank() || exactOfferId.isBlank()) return
+        _savingsPushTarget.value = SavingsPushTarget(
+            opportunityId = exactOpportunityId,
+            offerId = exactOfferId
+        )
+    }
+
+    fun clearSavingsPushTarget() {
+        _savingsPushTarget.value = null
     }
 
     fun setSearchQuery(query: String) {
