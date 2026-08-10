@@ -85,6 +85,7 @@ class StreamBReleaseReadinessContractTest {
             "DashboardProductContractTest.kt",
             "FinancialThemeContractTest.kt",
             "TruthfulProgressPresentationPolicyTest.kt",
+            "OnboardingPresentationPolicyTest.kt",
             "ProviderHandoffPresentationPolicyTest.kt",
             "PaymentHandoffPresentationPolicyTest.kt",
             "StreamBNorthStarContractTest.kt",
