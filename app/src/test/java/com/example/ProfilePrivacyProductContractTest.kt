@@ -22,6 +22,15 @@ class ProfilePrivacyProductContractTest {
     }
 
     @Test
+    fun privacyCopyNeverImpliesClickAndSaveExecutesProviderSwitchOrPayment() {
+        val profile = File(profilePath).readText()
+
+        assertTrue(profile.contains("המערכת אינה מבצעת בעצמה מעבר ספק, תשלום או ביטול שירות"))
+        assertTrue(profile.contains("לפני העברת פרטים שאישרת לנותן שירות נבקש ממך אישור מפורש"))
+        assertFalse(profile.contains("אינה מבצעת מעבר ספק או פעולה כספית ללא אישור מפורש שלך"))
+    }
+
+    @Test
     fun signOutAlwaysRequiresExplicitConfirmation() {
         val profile = File(profilePath).readText()
 
