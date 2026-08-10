@@ -10,6 +10,17 @@ class FinancialThemeContractTest {
     private val typePath = "src/main/java/com/example/ui/theme/Type.kt"
 
     @Test
+    fun northStarSemanticPaletteRemainsDistinct() {
+        val colors = File(colorPath).readText()
+
+        assertTrue(colors.contains("val BrandNavy = Color("))
+        assertTrue(colors.contains("val TechBluePrimary = Color("))
+        assertTrue(colors.contains("val EmeraldSavings = Color("))
+        assertTrue(colors.contains("val AmberDeal = Color("))
+        assertTrue(colors.contains("val AlertRed = Color("))
+    }
+
+    @Test
     fun verifiedSavingsKeepsDedicatedGreenSemanticPalette() {
         val colors = File(colorPath).readText()
 
