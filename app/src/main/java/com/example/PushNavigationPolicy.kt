@@ -46,3 +46,15 @@ internal fun navigationTargetForPush(
         else -> null
     }
 }
+
+internal fun pendingIntentRequestCodeForPushTarget(target: PushNavigationTarget?): Int {
+    return when (target?.tab) {
+        0 -> 100
+        1 -> 101
+        2 -> {
+            val exactPair = "${target.opportunityId.orEmpty()}\u0000${target.offerId.orEmpty()}"
+            1_000 + (exactPair.hashCode() and 0x3fffffff)
+        }
+        else -> 199
+    }
+}
