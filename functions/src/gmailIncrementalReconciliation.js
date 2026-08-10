@@ -248,7 +248,13 @@ async function processMailboxNotification(event) {
     .get();
   if (matches.empty) return { status: "NO_CONNECTION" };
 
-  const lease = await acquireMailboxLease(matches.docs, payload.historyId);
+  const activeDocs = matches.docs.filter((doc) => {
+    const data = doc.data() || {};
+    return data.watchEnabled === true && Boolean(data.encryptedRefreshToken);
+  });
+  if (activeDocs.length === 0) return { status: "NO_ACTIVE_CONNECTION" };
+
+  const lease = await acquireMailboxLease(activeDocs, payload.historyId);
   if (!lease.acquired) {
     throw new Error("Gmail mailbox reconciliation is already in progress.");
   }
@@ -257,17 +263,24 @@ async function processMailboxNotification(event) {
     let needsProcessing = false;
     for (const state of lease.states) {
       const data = state.data;
-      if (data.watchEnabled !== true || !data.encryptedRefreshToken) continue;
+      const mode = syncMode(data, ACTIVE_GMAIL_PARSER_VERSION);
+
+      if (mode === "INITIAL_BACKFILL" || mode === "PARSER_UPGRADE_BACKFILL") {
+        await releaseMailboxLease(lease.states, lease.owner);
+        return { status: "BACKFILL_PENDING", checkpoint: state.checkpoint };
+      }
 
       if (data.historyRecoveryRequired === true) {
         await markRecovery(state, lease.owner, payload.historyId, String(
           data.historyRecoveryReason || "RECOVERY_PENDING"
         ));
+        await releaseMailboxLease(lease.states, lease.owner);
         return { status: "RECOVERY_PENDING", checkpoint: state.checkpoint };
       }
 
       if (!state.checkpoint) {
         await markRecovery(state, lease.owner, payload.historyId, "MISSING_HISTORY_BASELINE");
+        await releaseMailboxLease(lease.states, lease.owner);
         return { status: "RECOVERY_REQUIRED", checkpoint: "" };
       }
 
@@ -278,6 +291,7 @@ async function processMailboxNotification(event) {
       const readable = await historyCheckpointIsReadable(accessToken, state.checkpoint);
       if (!readable) {
         await markRecovery(state, lease.owner, payload.historyId, "HISTORY_ID_EXPIRED");
+        await releaseMailboxLease(lease.states, lease.owner);
         logger.warn("Gmail History expired; checkpoint preserved for explicit recovery", {
           uid: state.ref.id,
         });
@@ -322,6 +336,9 @@ async function reconcileOneConnection(doc) {
   if (mode === "PARSER_UPGRADE_BACKFILL") return { status: "SKIPPED_PARSER_UPGRADE_REQUIRED" };
   if (mode === "RECOVERY_REQUIRED") return { status: "RECOVERY_PENDING" };
 
+  const email = String(data.email || "").trim().toLowerCase();
+  if (!email) return { status: "SKIPPED_MISSING_EMAIL" };
+
   const accessToken = await refreshAccessToken(data.encryptedRefreshToken);
   const currentHistoryId = await getCurrentMailboxHistoryId(accessToken);
   const checkpoint = normalizeHistoryId(data.watchHistoryId);
@@ -336,7 +353,7 @@ async function reconcileOneConnection(doc) {
   }
 
   const result = await processMailboxNotification(
-    syntheticPubSubEvent(String(data.email || "").trim().toLowerCase(), currentHistoryId)
+    syntheticPubSubEvent(email, currentHistoryId)
   );
   await doc.ref.set({
     lastReconciliationAttemptAt: FieldValue.serverTimestamp(),
