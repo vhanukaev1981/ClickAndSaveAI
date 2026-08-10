@@ -149,12 +149,15 @@ class MainActivity : ComponentActivity() {
         val pushType = intent?.getStringExtra(PUSH_TYPE_EXTRA)
         val opportunityId = intent?.getStringExtra(PUSH_OPPORTUNITY_ID_EXTRA)
         val offerId = intent?.getStringExtra(PUSH_OFFER_ID_EXTRA)
-        val navigationTarget = navigationTargetForPush(pushType, opportunityId, offerId) ?: run {
-            intent?.removeExtra(PUSH_TYPE_EXTRA)
-            intent?.removeExtra(PUSH_OPPORTUNITY_ID_EXTRA)
-            intent?.removeExtra(PUSH_OFFER_ID_EXTRA)
-            return
-        }
+
+        // Read once, then consume only the allowlisted routing extras before validation. This
+        // prevents a malformed/stale push from being replayed after Activity recreation while
+        // preserving the captured local values for typed validation below.
+        intent?.removeExtra(PUSH_TYPE_EXTRA)
+        intent?.removeExtra(PUSH_OPPORTUNITY_ID_EXTRA)
+        intent?.removeExtra(PUSH_OFFER_ID_EXTRA)
+
+        val navigationTarget = navigationTargetForPush(pushType, opportunityId, offerId) ?: return
 
         if (
             navigationTarget.tab == 2 &&
@@ -167,12 +170,6 @@ class MainActivity : ComponentActivity() {
             )
         }
         viewModel.setTab(navigationTarget.tab)
-
-        // Consume only the known allowlisted routing fields so configuration changes or repeated
-        // delivery cannot unexpectedly re-route a user later.
-        intent.removeExtra(PUSH_TYPE_EXTRA)
-        intent.removeExtra(PUSH_OPPORTUNITY_ID_EXTRA)
-        intent.removeExtra(PUSH_OFFER_ID_EXTRA)
     }
 
     private fun maybeTriggerDebugTestPush(intent: Intent?) {
