@@ -73,6 +73,15 @@ This file is the coordination source of truth for parallel ChatGPT work on Click
 - hide raw internal values such as `NOT_FOUND`, `GMAIL_READONLY`, verification codes and internal IDs
 - simplify customer-facing wording and visual density seen in the device screenshots
 
+### Current P0 / issue #29 priorities
+1. Keep the experience trust-first and savings-first: Trust → Action → Savings.
+2. Render only evidence-backed progress supplied by Core (`detected / checked / verified / still checking`); never invent percentages or timer-driven progress.
+3. Keep verified savings/success on the semantic green palette while brand/action controls remain blue.
+4. Keep provider handoff explicit: exact offer → ACTION_STARTED → consent → revalidation → provider handoff; never imply Click&SaveAI executes switching/payment/cancellation itself.
+5. Keep Bills payment CTA blocked until Core supplies a trusted verified provider payment destination; no card storage or payment processing in the consumer app.
+6. Do not add a fifth Activity tab until meaningful Core activity state/data exists and navigation is coordinated.
+7. Do not rebase Stream B merely because Core CI is green. Wait for same-tree staging deployment + real-device E2E correction cycle #2 on the locked Core baseline, then rebase using `docs/STREAM_B_INTEGRATION_PLAN.md`.
+
 ### Must not change without coordination
 - backend Functions
 - Firestore schema/rules
