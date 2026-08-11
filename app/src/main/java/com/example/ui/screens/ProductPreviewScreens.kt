@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,7 +18,6 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Login
-import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Savings
@@ -32,7 +32,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,6 +45,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -56,6 +56,7 @@ import com.example.data.repository.FinancialOpportunity
 import com.example.data.repository.OpportunityActionRepository
 import com.example.ui.MainViewModel
 import com.example.ui.theme.BrandNavy
+import com.example.ui.theme.DividerLight
 import com.example.ui.theme.EmeraldSavings
 import com.example.ui.theme.FinancialDesignTokens
 import com.example.ui.theme.SavingsSurface
@@ -101,19 +102,10 @@ fun ProductDashboardScreen(
         verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.sectionSpacing)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)) {
-                Text(
-                    "החיסכון שלך, בלי לנחש",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = BrandNavy
-                )
-                Text(
-                    "Click&SaveAI בודקת שירותים חוזרים ומציגה סכום רק כשיש הצעה תואמת שניתן לאמת.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            ProductScreenIntro(
+                title = "החיסכון שלך, בלי לנחש",
+                subtitle = "אנחנו בודקים שירותים חוזרים ומציגים חיסכון רק אחרי אימות."
+            )
         }
 
         if (!session.isAuthenticated || !connected) {
@@ -146,12 +138,12 @@ fun ProductDashboardScreen(
                     ProductMetricCard(
                         modifier = Modifier.weight(1f),
                         value = context.recurringServiceCount.toString(),
-                        label = "שירותים שזוהו כחוזרים"
+                        label = "שירותים חוזרים"
                     )
                     ProductMetricCard(
                         modifier = Modifier.weight(1f),
                         value = context.observedRecurringMonthlySpend.takeIf(::positiveFinite)?.let(::money) ?: "—",
-                        label = "חיוב חוזר שנצפה"
+                        label = "חיוב חודשי שנצפה"
                     )
                 }
             }
@@ -161,71 +153,57 @@ fun ProductDashboardScreen(
             state.error -> item {
                 ProductMessageCard(
                     title = "לא הצלחנו לעדכן כרגע",
-                    body = "לא נציג נתונים חלקיים כאילו הם עדכניים. אפשר לנסות שוב בעוד רגע.",
+                    body = "לא נציג נתונים חלקיים כאילו הם עדכניים.",
                     testTag = "product_dashboard_error"
                 )
             }
             state.loading -> item {
                 ProductMessageCard(
                     title = "בודקים את הנתונים שלך",
-                    body = "החיווי יוצג רק בזמן בקשה אמיתית למערכת.",
+                    body = "החיווי מופיע רק בזמן בקשה אמיתית למערכת.",
                     testTag = "product_dashboard_loading",
                     showProgress = true
                 )
             }
-            connected && opportunities.isEmpty() -> item {
-                ProductMessageCard(
-                    title = "אנחנו עדיין בודקים עבורך",
-                    body = "עד שלא נמצא ונאמת חלופה מתאימה לא יוצג כאן סכום חיסכון.",
-                    testTag = "product_dashboard_under_review"
-                )
-            }
         }
 
-        if (opportunities.isNotEmpty()) {
+        if (connected && !state.loading && !state.error) {
             item {
-                Text(
-                    "הזדמנויות חיסכון",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = BrandNavy
+                ProductSectionTitle(
+                    title = "הזדמנויות חיסכון",
+                    actionLabel = if (opportunities.isNotEmpty()) "הצג הכל" else null,
+                    onAction = if (opportunities.isNotEmpty()) ({ onNavigateToTab(2) }) else null
                 )
             }
-            items(opportunities.take(3), key = { it.id }) { opportunity ->
-                ProductOpportunityPreviewCard(
-                    opportunity = opportunity,
-                    onClick = { onNavigateToTab(2) }
-                )
-            }
-            item {
-                TextButton(
-                    onClick = { onNavigateToTab(2) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("product_dashboard_all_savings")
-                ) {
-                    Text("לכל הזדמנויות החיסכון")
+
+            if (opportunities.isEmpty()) {
+                item {
+                    ProductEmptyStateCard(
+                        icon = Icons.Default.Savings,
+                        title = "אנחנו עדיין בודקים עבורך",
+                        body = "כשנמצא חלופה תואמת ונאמת את המחיר והתנאים היא תופיע כאן.",
+                        detail = state.result?.context?.recurringServiceCount
+                            ?.takeIf { it > 0 }
+                            ?.let { "נבדקים $it שירותים חוזרים שזוהו." },
+                        testTag = "product_dashboard_under_review"
+                    )
+                }
+            } else {
+                items(opportunities.take(3), key = { it.id }) { opportunity ->
+                    ProductOpportunityPreviewCard(
+                        opportunity = opportunity,
+                        onClick = { onNavigateToTab(2) }
+                    )
                 }
             }
         }
 
         item {
-            Card(
-                shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Row(
-                    modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Icon(Icons.Default.Security, contentDescription = null, tint = TechBluePrimary)
-                    Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
-                    Text(
-                        "אנחנו לא מחליפים ספק ולא משלמים בשמך. כל העברת פרטים לספק דורשת אישור מפורש שלך.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            }
+            ProductTruthStrip(
+                title = "אתה נשאר בשליטה",
+                body = "אנחנו לא מחליפים ספק ולא משלמים בשמך. העברת פרטים לספק דורשת אישור מפורש.",
+                testTag = "product_dashboard_truth"
+            )
         }
     }
 }
@@ -233,6 +211,7 @@ fun ProductDashboardScreen(
 @Composable
 fun ProductBillsScreen(viewModel: MainViewModel) {
     val invoices by viewModel.invoices.collectAsState()
+    var selectedInvoice by remember { mutableStateOf<InvoiceItem?>(null) }
 
     LazyColumn(
         modifier = Modifier
@@ -242,58 +221,46 @@ fun ProductBillsScreen(viewModel: MainViewModel) {
         verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.sectionSpacing)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)) {
-                Text(
-                    "חשבונות שזוהו",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = BrandNavy
-                )
-                Text(
-                    "כאן רואים את החשבונות שנקלטו. זה אינו מסך תקציב או מעקב הוצאות.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            ProductScreenIntro(
+                title = "חשבונות שזוהו",
+                subtitle = "כל חשבון שזוהה מוצג כאן כבסיס לבדיקה ולהשוואה."
+            )
         }
 
         if (invoices.isEmpty()) {
             item {
-                ProductMessageCard(
+                ProductEmptyStateCard(
+                    icon = Icons.Default.ReceiptLong,
                     title = "עדיין אין חשבונות להצגה",
                     body = "לאחר חיבור מקור המסמכים, חשבונות שנזהה יופיעו כאן.",
                     testTag = "product_bills_empty"
                 )
             }
         } else {
+            item { ProductSectionTitle(title = "החשבונות שלך") }
             items(invoices, key = { it.id }) { invoice ->
-                ProductBillCard(invoice)
+                ProductBillCard(
+                    invoice = invoice,
+                    onView = { selectedInvoice = invoice }
+                )
             }
         }
 
         item {
-            Card(
-                modifier = Modifier.testTag("product_bills_payment_truth"),
-                shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(
-                    modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
-                    verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Payments, contentDescription = null, tint = TechBluePrimary)
-                        Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
-                        Text("תשלום נשאר אצל הספק", fontWeight = FontWeight.Bold)
-                    }
-                    Text(
-                        "כפתור 'לתשלום אצל הספק' יוצג רק כאשר נוכל לאמת כתובת תשלום רשמית של הספק. Click&SaveAI אינה שומרת כרטיסי אשראי ואינה סולקת תשלומים.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            ProductTruthStrip(
+                title = "תשלום נשאר אצל הספק",
+                body = "כפתור תשלום יוצג רק עם כתובת תשלום רשמית של הספק שניתן לאמת. Click&SaveAI אינה שומרת כרטיסי אשראי ואינה סולקת תשלומים.",
+                icon = Icons.Default.Payments,
+                testTag = "product_bills_payment_truth"
+            )
         }
+    }
+
+    selectedInvoice?.let { invoice ->
+        ProductBillDetailsDialog(
+            invoice = invoice,
+            onDismiss = { selectedInvoice = null }
+        )
     }
 }
 
@@ -318,24 +285,16 @@ fun ProductSavingsScreen(viewModel: MainViewModel) {
         verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.sectionSpacing)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)) {
-                Text(
-                    "הזדמנויות החיסכון שלך",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = BrandNavy
-                )
-                Text(
-                    "מחיר נוכחי מול הצעה שנבדקה. חיסכון כספי מופיע רק כשהוא מגובה בהצעה מאומתת.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            ProductScreenIntro(
+                title = "הזדמנויות החיסכון שלך",
+                subtitle = "מחיר נוכחי מול חלופה שנבדקה — רק כשיש מספיק ראיות להשוואה."
+            )
         }
 
         when {
             !session.isAuthenticated || !connected -> item {
-                ProductMessageCard(
+                ProductEmptyStateCard(
+                    icon = Icons.Default.Email,
                     title = "צריך לחבר מקור מסמכים",
                     body = "החיבור מתבצע ממסך הבית ובקריאה בלבד.",
                     testTag = "product_savings_requires_connection"
@@ -356,35 +315,51 @@ fun ProductSavingsScreen(viewModel: MainViewModel) {
                     testTag = "product_savings_error"
                 )
             }
-            state.result?.opportunities.orEmpty().isEmpty() -> item {
-                ProductMessageCard(
-                    title = "אנחנו עדיין בודקים עבורך",
-                    body = "כשנמצא חלופה תואמת ונאמת את המחיר והתנאים היא תופיע כאן.",
-                    testTag = "product_savings_under_review"
-                )
+            state.result?.opportunities.orEmpty().isEmpty() -> {
+                item {
+                    ProductEmptyStateCard(
+                        icon = Icons.Default.Savings,
+                        title = "אין עדיין חיסכון מאומת",
+                        body = "אנחנו עדיין בודקים עבורך חלופות תואמות. חיסכון יוצג כאן רק אחרי אימות מחיר ותנאים.",
+                        detail = state.result?.context?.recurringServiceCount
+                            ?.takeIf { it > 0 }
+                            ?.let { "כרגע מוכרים למערכת $it שירותים חוזרים לבדיקה." },
+                        testTag = "product_savings_under_review"
+                    )
+                }
+                item {
+                    ProductTruthStrip(
+                        title = "חיסכון מאומת בלבד",
+                        body = "לא נציג ₪0 כדי לרמוז שבדיקה הסתיימה, ולא נייצר הצעה או סכום שאין להם מקור מאומת.",
+                        testTag = "product_savings_empty_truth"
+                    )
+                }
             }
-            else -> items(state.result?.opportunities.orEmpty(), key = { it.id }) { opportunity ->
-                ProductSavingsOpportunityCard(
-                    opportunity = opportunity,
-                    enabled = !actionStarting && !actionSubmitting,
-                    onAccept = {
-                        val offerId = opportunity.matchedOffer?.offerId.orEmpty()
-                        if (offerId.isBlank() || opportunity.actionMode != PRODUCT_PROVIDER_REQUEST) return@ProductSavingsOpportunityCard
-                        actionStarting = true
-                        actionError = false
-                        actionMessage = null
-                        scope.launch {
-                            runCatching {
-                                actionRepository.recordSavingsActionStarted(opportunity.id, offerId)
-                            }.onSuccess {
-                                selected = opportunity
-                            }.onFailure {
-                                actionError = true
+            else -> {
+                item { ProductSectionTitle(title = "הצעות שנבדקו") }
+                items(state.result?.opportunities.orEmpty(), key = { it.id }) { opportunity ->
+                    ProductSavingsOpportunityCard(
+                        opportunity = opportunity,
+                        enabled = !actionStarting && !actionSubmitting,
+                        onAccept = {
+                            val offerId = opportunity.matchedOffer?.offerId.orEmpty()
+                            if (offerId.isBlank() || opportunity.actionMode != PRODUCT_PROVIDER_REQUEST) return@ProductSavingsOpportunityCard
+                            actionStarting = true
+                            actionError = false
+                            actionMessage = null
+                            scope.launch {
+                                runCatching {
+                                    actionRepository.recordSavingsActionStarted(opportunity.id, offerId)
+                                }.onSuccess {
+                                    selected = opportunity
+                                }.onFailure {
+                                    actionError = true
+                                }
+                                actionStarting = false
                             }
-                            actionStarting = false
                         }
-                    }
-                )
+                    )
+                }
             }
         }
 
@@ -528,23 +503,19 @@ fun ProductMeScreen(
         verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.sectionSpacing)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)) {
-                Text(
-                    "אני",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = BrandNavy
-                )
-                Text(
-                    "חשבון, חיבורים ופרטיות. אין כאן יעד חיסכון מלאכותי או ניהול תקציב.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            ProductScreenIntro(
+                title = "אני",
+                subtitle = "החשבון, החיבורים והפרטיות שלך."
+            )
         }
 
         item {
-            Card(shape = RoundedCornerShape(FinancialDesignTokens.cardRadius)) {
+            Card(
+                shape = RoundedCornerShape(FinancialDesignTokens.cardRadius),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, DividerLight),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
                 Column(
                     modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
                     verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)
@@ -552,19 +523,25 @@ fun ProductMeScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.AccountCircle, contentDescription = null, tint = TechBluePrimary)
                         Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
-                        Text("החשבון שלי", fontWeight = FontWeight.Bold)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("החשבון שלי", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
+                            if (session.isAuthenticated) {
+                                Text(
+                                    session.displayName.ifBlank { "משתמש מחובר" },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(session.email, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            } else {
+                                Text("עדיין לא מחובר", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
                     if (session.isAuthenticated) {
-                        Text(session.displayName.ifBlank { "משתמש מחובר" }, fontWeight = FontWeight.SemiBold)
-                        Text(session.email, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        OutlinedButton(
+                        TextButton(
                             onClick = { confirmSignOut = true },
-                            modifier = Modifier.fillMaxWidth().testTag("product_sign_out")
-                        ) {
-                            Icon(Icons.Default.Logout, contentDescription = null)
-                            Spacer(Modifier.size(FinancialDesignTokens.compactSpacing))
-                            Text("התנתק")
-                        }
+                            modifier = Modifier.testTag("product_sign_out")
+                        ) { Text("התנתק") }
                     } else {
                         Button(
                             onClick = onGoogleSignIn,
@@ -579,63 +556,38 @@ fun ProductMeScreen(
             }
         }
 
+        item { ProductSectionTitle(title = "חיבורים") }
+
         item {
-            Card(
-                shape = RoundedCornerShape(FinancialDesignTokens.cardRadius),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
-                    verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Email, contentDescription = null, tint = TechBluePrimary)
-                        Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
-                        Text("מקור מסמכים", fontWeight = FontWeight.Bold)
-                    }
-                    Text(
-                        if (connected) "מחובר לקריאה בלבד${connectedEmail.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ""}" else "לא מחובר",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    if (session.isAuthenticated && !connected) {
-                        Button(
-                            onClick = { showConsent = true },
-                            enabled = !syncing,
-                            modifier = Modifier.fillMaxWidth().testTag("product_connect_documents")
-                        ) {
-                            Text("חבר לקריאה בלבד")
-                        }
-                    }
-                    if (connected) {
-                        OutlinedButton(
-                            onClick = { confirmDisconnect = true },
-                            enabled = !syncing,
-                            modifier = Modifier.fillMaxWidth().testTag("product_disconnect_documents")
-                        ) {
-                            Text("בטל חיבור")
-                        }
-                    }
-                }
-            }
+            ProductSettingsRow(
+                icon = Icons.Default.Email,
+                title = "מקור מסמכים",
+                subtitle = if (connected) {
+                    "קריאה בלבד${connectedEmail.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}"
+                } else {
+                    "לא מחובר • קריאה בלבד"
+                },
+                actionLabel = when {
+                    session.isAuthenticated && !connected -> "חבר"
+                    connected -> "בטל חיבור"
+                    else -> null
+                },
+                onAction = when {
+                    session.isAuthenticated && !connected -> ({ showConsent = true })
+                    connected -> ({ confirmDisconnect = true })
+                    else -> null
+                },
+                enabled = !syncing,
+                testTag = "product_document_source"
+            )
         }
 
         item {
-            Card(
-                shape = RoundedCornerShape(FinancialDesignTokens.cardRadius),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Row(
-                    modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Icon(Icons.Default.Security, contentDescription = null, tint = TechBluePrimary)
-                    Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
-                    Text(
-                        "Click&SaveAI קוראת רק את המידע שנדרש לזיהוי חשבונות. העברת פרטים לספק דורשת אישור מפורש, ואנחנו לא מבצעים עבורך מעבר שירות או תשלום.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            }
+            ProductTruthStrip(
+                title = "פרטיות לפני פעולה",
+                body = "Click&SaveAI קוראת רק מידע שנדרש לזיהוי חשבונות. העברת פרטים לספק דורשת אישור מפורש; מעבר שירות או תשלום אינם מתבצעים אצלנו.",
+                testTag = "product_me_privacy"
+            )
         }
     }
 }
@@ -674,6 +626,146 @@ private fun rememberFinancialHome(authenticated: Boolean, connected: Boolean): P
 }
 
 @Composable
+private fun ProductScreenIntro(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = BrandNavy
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun ProductSectionTitle(
+    title: String,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = BrandNavy
+        )
+        if (actionLabel != null && onAction != null) {
+            TextButton(onClick = onAction) { Text(actionLabel) }
+        }
+    }
+}
+
+@Composable
+private fun ProductEmptyStateCard(
+    icon: ImageVector,
+    title: String,
+    body: String,
+    testTag: String,
+    detail: String? = null
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag(testTag),
+        shape = RoundedCornerShape(FinancialDesignTokens.cardRadius),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, DividerLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
+            verticalAlignment = Alignment.Top
+        ) {
+            Icon(icon, contentDescription = null, tint = TechBluePrimary)
+            Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
+                Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                detail?.let {
+                    Text(it, style = MaterialTheme.typography.labelMedium, color = TechBluePrimary)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProductTruthStrip(
+    title: String,
+    body: String,
+    testTag: String,
+    icon: ImageVector = Icons.Default.Security
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag(testTag),
+        shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, DividerLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
+            verticalAlignment = Alignment.Top
+        ) {
+            Icon(icon, contentDescription = null, tint = TechBluePrimary)
+            Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)
+            ) {
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = BrandNavy)
+                Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProductSettingsRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    actionLabel: String?,
+    onAction: (() -> Unit)?,
+    enabled: Boolean,
+    testTag: String
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag(testTag),
+        shape = RoundedCornerShape(FinancialDesignTokens.cardRadius),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, DividerLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = TechBluePrimary)
+            Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = BrandNavy)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (actionLabel != null && onAction != null) {
+                TextButton(onClick = onAction, enabled = enabled) { Text(actionLabel) }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ProductSavingsHero(
     monthlySaving: Double?,
     annualSaving: Double?,
@@ -686,7 +778,8 @@ private fun ProductSavingsHero(
         onClick = onOpenSavings,
         modifier = Modifier.testTag("product_savings_hero"),
         shape = RoundedCornerShape(FinancialDesignTokens.heroRadius),
-        colors = CardDefaults.cardColors(containerColor = SavingsSurface)
+        colors = CardDefaults.cardColors(containerColor = SavingsSurface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier.padding(FinancialDesignTokens.heroPadding),
@@ -695,7 +788,7 @@ private fun ProductSavingsHero(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Savings, contentDescription = null, tint = EmeraldSavings)
                 Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
-                Text("חיסכון מאומת שמצאנו", fontWeight = FontWeight.Bold, color = BrandNavy)
+                Text("חיסכון מאומת שמצאנו", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
             }
             when {
                 verified != null -> {
@@ -708,23 +801,23 @@ private fun ProductSavingsHero(
                     Text(
                         annualSaving?.takeIf(::positiveFinite)?.let { "בחודש • ${money(it)} בשנה" }
                             ?: "בחודש • חיסכון שנתי יוצג רק לאחר אימות",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text("$count הזדמנויות מאומתות", style = MaterialTheme.typography.bodySmall, color = BrandNavy)
+                    Text("$count הזדמנויות מאומתות", style = MaterialTheme.typography.labelMedium, color = BrandNavy)
                 }
                 loading -> {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
-                        Text("בודקים עבורך עכשיו", fontWeight = FontWeight.SemiBold, color = BrandNavy)
+                        Text("בודקים עבורך עכשיו", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = BrandNavy)
                     }
                 }
                 else -> {
-                    Text("עדיין בודקים עבורך", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = BrandNavy)
+                    Text("עדיין בודקים עבורך", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = BrandNavy)
                     Text(
                         "לא נציג ₪0 ולא ננחש סכום. חיסכון יופיע רק כשיש הצעה תואמת שנבדקה.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -735,7 +828,13 @@ private fun ProductSavingsHero(
 
 @Composable
 private fun ProductMetricCard(modifier: Modifier, value: String, label: String) {
-    Card(modifier = modifier, shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius)) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, DividerLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
         Column(
             modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
             verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)
@@ -753,13 +852,16 @@ private fun ProductOpportunityPreviewCard(opportunity: FinancialOpportunity, onC
     Card(
         onClick = onClick,
         modifier = Modifier.testTag("product_opportunity_${opportunity.id}"),
-        shape = RoundedCornerShape(FinancialDesignTokens.cardRadius)
+        shape = RoundedCornerShape(FinancialDesignTokens.cardRadius),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, DividerLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
             verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)
         ) {
-            Text("${opportunity.providerName} • ${opportunity.category}", fontWeight = FontWeight.Bold, color = BrandNavy)
+            Text("${opportunity.providerName} • ${opportunity.category}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = BrandNavy)
             if (matched != null && saving != null) {
                 val offerPrice = matched.effectiveMonthlyPrice ?: matched.monthlyPrice
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -774,17 +876,20 @@ private fun ProductOpportunityPreviewCard(opportunity: FinancialOpportunity, onC
                 }
                 Text("חיסכון ${money(saving)} בחודש", color = EmeraldSavings, fontWeight = FontWeight.Bold)
             } else {
-                Text("זיהינו את השירות. חלופה ומחיר יוצגו רק אחרי אימות.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("זיהינו את השירות. חלופה ומחיר יוצגו רק אחרי אימות.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
 }
 
 @Composable
-private fun ProductBillCard(invoice: InvoiceItem) {
+private fun ProductBillCard(invoice: InvoiceItem, onView: () -> Unit) {
     Card(
         modifier = Modifier.testTag("product_bill_${invoice.id}"),
-        shape = RoundedCornerShape(FinancialDesignTokens.cardRadius)
+        shape = RoundedCornerShape(FinancialDesignTokens.cardRadius),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, DividerLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
@@ -792,22 +897,46 @@ private fun ProductBillCard(invoice: InvoiceItem) {
         ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(invoice.providerName, fontWeight = FontWeight.Bold, color = BrandNavy)
+                    Text(invoice.providerName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
                     Text(invoice.category, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Text(money(invoice.monthlyCost), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(money(invoice.monthlyCost), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
             }
             invoice.billDate.takeIf { it.isNotBlank() }?.let {
                 Text("תאריך חשבון: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            HorizontalDivider()
-            Text(
-                "החשבון זוהה. בדיקת חיסכון מתבצעת בנפרד ורק מול הצעה שניתן לאמת.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            TextButton(
+                onClick = onView,
+                modifier = Modifier.testTag("product_view_bill_${invoice.id}")
+            ) {
+                Text("צפייה בחשבון")
+            }
         }
     }
+}
+
+@Composable
+private fun ProductBillDetailsDialog(invoice: InvoiceItem, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("פרטי החשבון") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.cardSpacing)) {
+                Text(invoice.providerName, fontWeight = FontWeight.Bold, color = BrandNavy)
+                Text("שירות: ${invoice.category}")
+                Text("סכום: ${money(invoice.monthlyCost)}")
+                invoice.billDate.takeIf { it.isNotBlank() }?.let { Text("תאריך חשבון: $it") }
+                invoice.accountNumber.takeIf { it.isNotBlank() }?.let { Text("מספר חשבון: $it") }
+                HorizontalDivider(color = DividerLight)
+                Text(
+                    "אלה הפרטים שנקלטו בחשבון. תשלום אצל הספק יוצע רק אם תהיה כתובת רשמית ומאומתת.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("סגור") } }
+    )
 }
 
 @Composable
@@ -821,7 +950,10 @@ private fun ProductSavingsOpportunityCard(
     val verified = matched != null && saving != null
     Card(
         modifier = Modifier.testTag("product_savings_opportunity_${opportunity.id}"),
-        shape = RoundedCornerShape(FinancialDesignTokens.cardRadius)
+        shape = RoundedCornerShape(FinancialDesignTokens.cardRadius),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, DividerLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
@@ -835,7 +967,7 @@ private fun ProductSavingsOpportunityCard(
                 )
                 Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("${opportunity.providerName} • ${opportunity.category}", fontWeight = FontWeight.Bold, color = BrandNavy)
+                    Text("${opportunity.providerName} • ${opportunity.category}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = BrandNavy)
                     Text("מחיר נוכחי: ${money(opportunity.currentMonthlyCost)} לחודש", style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -844,13 +976,23 @@ private fun ProductSavingsOpportunityCard(
                 val offerPrice = matched.effectiveMonthlyPrice ?: matched.monthlyPrice
                 Card(
                     colors = CardDefaults.cardColors(containerColor = SavingsSurface),
-                    shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius)
+                    shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
                         verticalArrangement = Arrangement.spacedBy(FinancialDesignTokens.compactSpacing)
                     ) {
-                        Text("${matched.providerName}: ${money(offerPrice)} לחודש", fontWeight = FontWeight.SemiBold, color = BrandNavy)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column {
+                                Text("היום", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(money(opportunity.currentMonthlyCost), fontWeight = FontWeight.SemiBold)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("${matched.providerName}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(money(offerPrice), fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                         Text("חיסכון מאומת: ${money(saving)} בחודש", color = EmeraldSavings, fontWeight = FontWeight.Bold)
                         opportunity.potentialAnnualSaving?.takeIf(::positiveFinite)?.let {
                             Text("${money(it)} בשנה", color = EmeraldSavings, fontWeight = FontWeight.SemiBold)
@@ -884,7 +1026,7 @@ private fun ProductSavingsOpportunityCard(
             } else {
                 Text(
                     "אנחנו עדיין בודקים חלופה תואמת. אין כאן סכום חיסכון עד שנוכל לאמת אותו.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -969,7 +1111,9 @@ private fun ProductConnectionCard(
 ) {
     Card(
         shape = RoundedCornerShape(FinancialDesignTokens.cardRadius),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, DividerLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier.padding(FinancialDesignTokens.cardPadding),
@@ -978,9 +1122,13 @@ private fun ProductConnectionCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Email, contentDescription = null, tint = TechBluePrimary)
                 Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
-                Text("חיבור אחד כדי להתחיל", fontWeight = FontWeight.Bold, color = BrandNavy)
+                Text("חיבור אחד כדי להתחיל", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = BrandNavy)
             }
-            Text("החיבור הוא לקריאה בלבד. בחיבור הראשון נבדקים מסמכים קיימים ולאחר מכן מסמכים חדשים שנקלטים.")
+            Text(
+                "מקור המסמכים מחובר לקריאה בלבד כדי לזהות חשבונות ולבדוק חיסכון.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Button(
                 onClick = if (authenticated) onConnect else onSignIn,
                 enabled = !syncing,
@@ -1006,8 +1154,10 @@ private fun ProductMessageCard(
         modifier = Modifier.fillMaxWidth().testTag(testTag),
         shape = RoundedCornerShape(FinancialDesignTokens.compactCardRadius),
         colors = CardDefaults.cardColors(
-            containerColor = if (success) SavingsSurface else MaterialTheme.colorScheme.surfaceVariant
-        )
+            containerColor = if (success) SavingsSurface else MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(1.dp, if (success) EmeraldSavings.copy(alpha = 0.25f) else DividerLight),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier.padding(FinancialDesignTokens.compactCardPadding),
@@ -1015,15 +1165,15 @@ private fun ProductMessageCard(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (showProgress) {
-                    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
                 } else if (success) {
                     Icon(Icons.Default.CheckCircle, contentDescription = null, tint = EmeraldSavings)
                     Spacer(Modifier.size(FinancialDesignTokens.cardSpacing))
                 }
-                Text(title, fontWeight = FontWeight.Bold, color = if (success) EmeraldSavings else BrandNavy)
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = if (success) EmeraldSavings else BrandNavy)
             }
-            Text(body, style = MaterialTheme.typography.bodyMedium)
+            Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
