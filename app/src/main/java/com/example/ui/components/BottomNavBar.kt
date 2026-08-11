@@ -51,7 +51,7 @@ fun BottomNavBar(
                 selectedIcon = Icons.Filled.Dashboard,
                 unselectedIcon = Icons.Outlined.Dashboard,
                 label = "בית",
-                contentDescription = "המצב הפיננסי",
+                contentDescription = "בית והחיסכון שלך",
                 testTag = "nav_dashboard"
             )
             FinancialNavItem(
@@ -60,7 +60,7 @@ fun BottomNavBar(
                 selectedIcon = Icons.Filled.ReceiptLong,
                 unselectedIcon = Icons.Outlined.ReceiptLong,
                 label = "חשבונות",
-                contentDescription = "חשבונות וחיובים",
+                contentDescription = "חשבונות שזוהו",
                 testTag = "nav_invoices"
             )
             FinancialNavItem(
@@ -78,7 +78,7 @@ fun BottomNavBar(
                 selectedIcon = Icons.Filled.Person,
                 unselectedIcon = Icons.Outlined.Person,
                 label = "אני",
-                contentDescription = "פרופיל והגדרות",
+                contentDescription = "חשבון, חיבורים ופרטיות",
                 testTag = "nav_profile"
             )
         }
