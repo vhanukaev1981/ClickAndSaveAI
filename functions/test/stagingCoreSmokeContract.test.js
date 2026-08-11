@@ -1,9 +1,12 @@
 "use strict";
 
+const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const test = require("node:test");
 const assert = require("node:assert/strict");
+
+const workflowPath = path.resolve(__dirname, "..", "..", ".github", "workflows", "deploy-staging.yml");
 
 async function loadSmokeModule() {
   const modulePath = path.resolve(__dirname, "..", "..", "scripts", "staging-core-smoke.mjs");
@@ -121,4 +124,20 @@ test("staging smoke rejects a non-staging project or non-immutable source SHA", 
     () => sanitizeSmokeSummary({ projectId: "clickandsaveai-staging", sourceSha: "branch-name" }),
     /40-character/i
   );
+});
+
+test("deployment runs authenticated staging truth smoke only after Firebase deploy and uploads sanitized evidence", () => {
+  const workflow = fs.readFileSync(workflowPath, "utf8");
+  const deployIndex = workflow.indexOf("Deploy functions and Firestore to staging");
+  const smokeIndex = workflow.indexOf("Run authenticated staging truth smoke");
+
+  assert.ok(deployIndex >= 0, "Firebase deploy step is missing");
+  assert.ok(smokeIndex > deployIndex, "staging smoke must run only after Firebase deploy");
+  assert.match(workflow, /STAGING_TEST_FIREBASE_REFRESH_TOKEN/);
+  assert.match(workflow, /STAGING_APPCHECK_DEBUG_TOKEN/);
+  assert.match(workflow, /STAGING_FIREBASE_API_KEY/);
+  assert.match(workflow, /STAGING_APPCHECK_APP_ID/);
+  assert.match(workflow, /node scripts\/staging-core-smoke\.mjs/);
+  assert.match(workflow, /actions\/upload-artifact@v4/);
+  assert.match(workflow, /staging-core-smoke\.json/);
 });
