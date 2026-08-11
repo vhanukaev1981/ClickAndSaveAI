@@ -1,8 +1,12 @@
 import fs from "node:fs/promises";
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
 const STAGING_PROJECT_ID = "clickandsaveai-staging";
 const FUNCTIONS_REGION = "europe-west1";
+const SMOKE_APP_NAME = "clickandsaveai-staging-smoke";
+const SMOKE_TOKEN_TTL_MILLIS = 30 * 60 * 1000;
+const requireFromFunctions = createRequire(new URL("../functions/package.json", import.meta.url));
 
 function finiteNumberOrNull(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -83,39 +87,92 @@ async function parseJsonResponse(response, operationName) {
   throw new Error(`${operationName} returned no callable result.`);
 }
 
-async function exchangeFirebaseRefreshToken({ apiKey, refreshToken, fetchImpl }) {
+async function defaultAdminProvider() {
+  const { applicationDefault, getApps, initializeApp } = requireFromFunctions("firebase-admin/app");
+  const { getAuth } = requireFromFunctions("firebase-admin/auth");
+  const { getAppCheck } = requireFromFunctions("firebase-admin/app-check");
+  return { applicationDefault, getApps, initializeApp, getAuth, getAppCheck };
+}
+
+async function exchangeFirebaseCustomToken({ apiKey, customToken, fetchImpl }) {
   const response = await fetchImpl(
-    `https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(apiKey)}`,
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${encodeURIComponent(apiKey)}`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: customToken,
+        returnSecureToken: true,
       }),
     }
   );
   const payload = await response.json().catch(() => null);
-  if (!response.ok || !payload?.id_token) {
-    throw new Error(`Firebase test-user token refresh failed with HTTP ${response.status}.`);
+  if (!response.ok || !payload?.idToken) {
+    throw new Error(`Firebase custom-token exchange failed with HTTP ${response.status}.`);
   }
-  return String(payload.id_token);
+  return String(payload.idToken);
 }
 
-async function exchangeAppCheckDebugToken({ projectId, appId, apiKey, debugToken, fetchImpl }) {
-  const response = await fetchImpl(
-    `https://firebaseappcheck.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/apps/${encodeURIComponent(appId)}:exchangeDebugToken?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ debugToken }),
-    }
-  );
-  const payload = await response.json().catch(() => null);
-  if (!response.ok || !payload?.token) {
-    throw new Error(`App Check debug-token exchange failed with HTTP ${response.status}.`);
+export async function mintSmokeTokensWithAdmin({
+  uid,
+  projectId = STAGING_PROJECT_ID,
+  appId,
+  apiKey,
+  serviceAccountId,
+  fetchImpl = fetch,
+  adminProvider = defaultAdminProvider,
+}) {
+  if (projectId !== STAGING_PROJECT_ID) {
+    throw new Error("Smoke token minting may target clickandsaveai-staging only.");
   }
-  return String(payload.token);
+  const required = [
+    ["STAGING_SMOKE_USER_UID", uid],
+    ["STAGING_FIREBASE_API_KEY", apiKey],
+    ["STAGING_APPCHECK_APP_ID", appId],
+    ["GCP_DEPLOY_SERVICE_ACCOUNT", serviceAccountId],
+  ];
+  const missing = required
+    .filter(([, value]) => !String(value || "").trim())
+    .map(([name]) => name);
+  if (missing.length > 0) {
+    throw new Error(`Short-lived staging smoke token inputs are missing: ${missing.join(", ")}.`);
+  }
+
+  const admin = await adminProvider();
+  const existingApp = admin.getApps().find((app) => app.name === SMOKE_APP_NAME);
+  const app = existingApp || admin.initializeApp(
+    {
+      credential: admin.applicationDefault(),
+      projectId: STAGING_PROJECT_ID,
+      serviceAccountId,
+    },
+    SMOKE_APP_NAME
+  );
+
+  const auth = admin.getAuth(app);
+  const appCheck = admin.getAppCheck(app);
+  const customAuthTokenPromise = auth.createCustomToken(String(uid));
+  const appCheckTokenPromise = appCheck.createToken(String(appId), {
+    ttlMillis: SMOKE_TOKEN_TTL_MILLIS,
+  });
+  const [customAuthToken, appCheckResult] = await Promise.all([
+    customAuthTokenPromise,
+    appCheckTokenPromise,
+  ]);
+
+  const idToken = await exchangeFirebaseCustomToken({
+    apiKey,
+    customToken: customAuthToken,
+    fetchImpl,
+  });
+  if (!appCheckResult?.token) {
+    throw new Error("Firebase Admin did not return an App Check token.");
+  }
+
+  return {
+    idToken,
+    appCheckToken: String(appCheckResult.token),
+  };
 }
 
 export async function resolveSmokeTokens(env = process.env, fetchImpl = fetch) {
@@ -125,34 +182,14 @@ export async function resolveSmokeTokens(env = process.env, fetchImpl = fetch) {
     return { idToken: directIdToken, appCheckToken: directAppCheckToken };
   }
 
-  const apiKey = String(env.STAGING_FIREBASE_API_KEY || "").trim();
-  const refreshToken = String(env.STAGING_TEST_FIREBASE_REFRESH_TOKEN || "").trim();
-  const appId = String(env.STAGING_APPCHECK_APP_ID || "").trim();
-  const debugToken = String(env.STAGING_APPCHECK_DEBUG_TOKEN || "").trim();
-  const missing = [
-    ["STAGING_FIREBASE_API_KEY", apiKey],
-    ["STAGING_TEST_FIREBASE_REFRESH_TOKEN", refreshToken],
-    ["STAGING_APPCHECK_APP_ID", appId],
-    ["STAGING_APPCHECK_DEBUG_TOKEN", debugToken],
-  ].filter(([, value]) => !value).map(([name]) => name);
-
-  if (missing.length > 0) {
-    throw new Error(
-      `Authenticated staging smoke credentials are not configured. Missing: ${missing.join(", ")}.`
-    );
-  }
-
-  const [idToken, appCheckToken] = await Promise.all([
-    exchangeFirebaseRefreshToken({ apiKey, refreshToken, fetchImpl }),
-    exchangeAppCheckDebugToken({
-      projectId: STAGING_PROJECT_ID,
-      appId,
-      apiKey,
-      debugToken,
-      fetchImpl,
-    }),
-  ]);
-  return { idToken, appCheckToken };
+  return mintSmokeTokensWithAdmin({
+    uid: String(env.STAGING_SMOKE_USER_UID || "").trim(),
+    projectId: STAGING_PROJECT_ID,
+    appId: String(env.STAGING_APPCHECK_APP_ID || "").trim(),
+    apiKey: String(env.STAGING_FIREBASE_API_KEY || "").trim(),
+    serviceAccountId: String(env.GCP_DEPLOY_SERVICE_ACCOUNT || "").trim(),
+    fetchImpl,
+  });
 }
 
 export async function callStagingCallable(
