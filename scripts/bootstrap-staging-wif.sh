@@ -104,6 +104,16 @@ gcloud iam service-accounts add-iam-policy-binding "$DEPLOY_SA_EMAIL" \
   --role="roles/iam.workloadIdentityUser" \
   --condition=None >/dev/null
 
+# The smoke runner needs Firebase Auth and App Check tokens that live only for the
+# duration of the CI job. Grant Token Creator on the deploy service account itself,
+# never project-wide, so ADC can call iam.serviceAccounts.signBlob without a JSON key.
+log "Granting deployer Token Creator on itself for short-lived staging smoke tokens"
+gcloud iam service-accounts add-iam-policy-binding "$DEPLOY_SA_EMAIL" \
+  --project="$PROJECT_ID" \
+  --member="serviceAccount:${DEPLOY_SA_EMAIL}" \
+  --role="roles/iam.serviceAccountTokenCreator" \
+  --condition=None >/dev/null
+
 # Product-specific deployment roles. Firebase Viewer supplies the read-only Firebase
 # project metadata permissions that the CLI needs; write access remains scoped to the
 # services actually deployed by deploy-staging.yml.
