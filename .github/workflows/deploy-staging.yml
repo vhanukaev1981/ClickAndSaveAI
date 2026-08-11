@@ -61,11 +61,18 @@ jobs:
         env:
           WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          STAGING_SMOKE_USER_UID: ${{ vars.STAGING_SMOKE_USER_UID }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "$WIF_PROVIDER" || -z "$DEPLOY_SERVICE_ACCOUNT" ]]; then
-            echo 'The staging environment must define GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_DEPLOY_SERVICE_ACCOUNT.' >&2
+          missing=()
+          [[ -n "$WIF_PROVIDER" ]] || missing+=(GCP_WORKLOAD_IDENTITY_PROVIDER)
+          [[ -n "$DEPLOY_SERVICE_ACCOUNT" ]] || missing+=(GCP_DEPLOY_SERVICE_ACCOUNT)
+          [[ -n "$STAGING_SMOKE_USER_UID" ]] || missing+=(STAGING_SMOKE_USER_UID)
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing staging configuration:' >&2
+            printf ' %s' "${missing[@]}" >&2
+            printf '\n' >&2
             exit 1
           fi
           node <<'NODE'
@@ -149,8 +156,8 @@ jobs:
 
       - name: Run authenticated staging truth smoke
         env:
-          STAGING_TEST_FIREBASE_REFRESH_TOKEN: ${{ secrets.STAGING_TEST_FIREBASE_REFRESH_TOKEN }}
-          STAGING_APPCHECK_DEBUG_TOKEN: ${{ secrets.STAGING_APPCHECK_DEBUG_TOKEN }}
+          STAGING_SMOKE_USER_UID: ${{ vars.STAGING_SMOKE_USER_UID }}
+          GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
           STAGING_SMOKE_OUTPUT: ${{ runner.temp }}/staging-core-smoke.json
         shell: bash
         run: |
