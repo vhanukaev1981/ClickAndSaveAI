@@ -49,16 +49,19 @@ object CustomerPresentationPolicy {
         if (raw.isBlank()) return "המידע מתעדכן"
         val upper = raw.uppercase()
 
+        // Explicit customer-meaningful lifecycle states win before the closed-world
+        // internal-token filter. Everything technical is then hidden before generic
+        // failure wording can expose infrastructure details through classification.
         if (upper.contains("UNVERIFIED") || upper.contains("PENDING") || upper.contains("PROCESSING")) {
             return "נמצא בבדיקה"
-        }
-        if (upper.contains("FAILED") || upper.contains("ERROR") || upper.contains("EXCEPTION")) {
-            return "לא הצלחנו לעדכן כרגע"
         }
         if (upper in setOf("VERIFIED", "VALIDATED", "READY")) {
             return "המידע אומת"
         }
         if (containsInternalSignal(raw, upper)) return "המידע מתעדכן"
+        if (upper.contains("FAILED") || upper.contains("ERROR") || upper.contains("EXCEPTION")) {
+            return "לא הצלחנו לעדכן כרגע"
+        }
 
         // Closed-world presentation: unknown backend/domain text is never passed through
         // to the customer just because it does not look technical yet.
