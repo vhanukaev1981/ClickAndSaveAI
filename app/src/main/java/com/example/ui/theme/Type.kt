@@ -9,15 +9,15 @@ import androidx.compose.ui.unit.sp
 /**
  * Click&SaveAI Light Premium typography.
  *
- * Savings and primary decisions remain prominent, while screen titles and
+ * Verified money remains deliberately prominent, while screen titles and
  * supporting copy stay compact enough to match the approved mobile hierarchy.
  */
 val Typography = Typography(
     displaySmall = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Bold,
-        fontSize = 30.sp,
-        lineHeight = 36.sp,
+        fontSize = 36.sp,
+        lineHeight = 42.sp,
         letterSpacing = (-0.4).sp
     ),
     headlineLarge = TextStyle(
