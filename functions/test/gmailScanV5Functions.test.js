@@ -1,5 +1,7 @@
 "use strict";
 
+const fs = require("node:fs");
+const path = require("node:path");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
@@ -39,4 +41,25 @@ test("stored invoice normalization does not invent a service type", () => {
   });
 
   assert.equal(Object.hasOwn(invoice, "serviceType"), false);
+});
+
+test("scan callable preserves aggregate recovery metadata required by staging proof", () => {
+  const source = fs.readFileSync(
+    path.resolve(__dirname, "..", "src", "gmailScanV5Functions.js"),
+    "utf8"
+  );
+  const returnBlock = source.slice(source.lastIndexOf("return {"));
+
+  for (const field of [
+    "invoices",
+    "scannedMessages",
+    "importedCount",
+    "lookback",
+    "parserVersion",
+    "upgradedMessages",
+    "agentRefreshed",
+  ]) {
+    assert.match(returnBlock, new RegExp(`\\b${field}\\b`), `scan response lost ${field}`);
+  }
+  assert.match(source, /const INITIAL_GMAIL_LOOKBACK = "6m"/);
 });
