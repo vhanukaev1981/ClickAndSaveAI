@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  SOURCE_SHA: e05181e386a49c8dfe7ee1b0a1ddc47065334e42
+  SOURCE_SHA: 3880aab4f0d5d081fb957f4d4ba8f61ade9cb708
 
 jobs:
   validate-and-build:
@@ -126,7 +126,7 @@ jobs:
       - name: Upload exact-SHA APK
         uses: actions/upload-artifact@v4
         with:
-          name: clickandsaveai-stream-b-approved-design-e05181e3
+          name: clickandsaveai-stream-b-approved-design-3880aab4
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
