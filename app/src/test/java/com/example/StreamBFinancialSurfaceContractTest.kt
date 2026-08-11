@@ -25,7 +25,7 @@ class StreamBFinancialSurfaceContractTest {
 
         assertTrue(preview.contains("product_bills_screen"))
         assertTrue(preview.contains("חשבונות שזוהו"))
-        assertTrue(preview.contains("החשבון זוהה"))
+        assertTrue(preview.contains("כל חשבון שזוהה"))
         assertFalse("Primary Bills must not expose manual expense entry", preview.contains("add_manual_bill"))
         assertFalse("Primary Bills must not expose manual expense save", preview.contains("save_manual_bill"))
         assertFalse("Primary Bills must not be spend-first", preview.contains("הוצאה חודשית מזוהה"))
