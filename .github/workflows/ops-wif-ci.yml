@@ -71,6 +71,23 @@ jobs:
             exit 1
           fi
 
+      - name: Require one-command GitHub staging variable configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          script='scripts/configure-github-staging-vars.sh'
+          grep -Fq 'STAGING_SMOKE_USER_UID="${STAGING_SMOKE_USER_UID:-}"' "$script"
+          grep -Fq '[[ -n "$STAGING_SMOKE_USER_UID" ]] || fail' "$script"
+          grep -Fq 'gh variable set STAGING_SMOKE_USER_UID' "$script"
+          grep -Fq 'ACTUAL_SMOKE_UID=' "$script"
+          grep -Fq '[[ "$ACTUAL_SMOKE_UID" == "$STAGING_SMOKE_USER_UID" ]]' "$script"
+          grep -Fq 'PASS: GitHub staging variables configured and verified.' "$script"
+
+          if grep -Eq 'STAGING_SMOKE_USER_UID=\$\{|STAGING_SMOKE_USER_UID=\$STAGING_SMOKE_USER_UID|STAGING_SMOKE_USER_UID=\$\{STAGING_SMOKE_USER_UID\}' "$script"; then
+            echo 'The staging smoke UID must not be printed in helper output.' >&2
+            exit 1
+          fi
+
       - name: Enforce immutable staging deployment source
         shell: bash
         run: |
