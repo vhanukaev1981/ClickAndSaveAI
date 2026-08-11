@@ -1,21 +1,25 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.BrandNavy
@@ -23,12 +27,10 @@ import com.example.ui.theme.EmeraldSavings
 import com.example.ui.theme.TechBluePrimary
 
 /**
- * Click & Save AI Brand Logo Composable
- * Matches the official Brand Identity Guide & Colors:
- * Primary Blue: #2563EB
- * Primary Green: #00C896
- * Dark Navy: #0F172A
- * Tagline: "לחיצה אחת לחיסכון חכם"
+ * Click&SaveAI brand mark.
+ *
+ * The surrounding app is RTL, but the canonical Latin wordmark is an LTR brand
+ * token and must never be reordered by the Hebrew layout direction.
  */
 @Composable
 fun ClickAndSaveLogo(
@@ -39,18 +41,14 @@ fun ClickAndSaveLogo(
 ) {
     Row(
         modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Start
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // Brand Ring + Click Icon Badge
         Box(
-            modifier = Modifier.size(iconSize + 10.dp),
+            modifier = Modifier.size(iconSize + 6.dp),
             contentAlignment = Alignment.Center
         ) {
             Canvas(modifier = Modifier.size(iconSize)) {
-                val strokeWidth = iconSize.toPx() * 0.12f
-                
-                // Ring Gradient (Tech Blue #2563EB to Emerald Green #00C896)
+                val strokeWidth = iconSize.toPx() * 0.11f
                 drawArc(
                     brush = Brush.sweepGradient(
                         colors = listOf(TechBluePrimary, EmeraldSavings, TechBluePrimary)
@@ -60,68 +58,41 @@ fun ClickAndSaveLogo(
                     useCenter = false,
                     style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
                 )
-
-                // Inner click circle
-                val centerPx = size.width / 2f
                 drawCircle(
-                    color = if (isDarkTheme) Color.White.copy(alpha = 0.15f) else TechBluePrimary.copy(alpha = 0.12f),
-                    radius = centerPx * 0.45f
+                    color = if (isDarkTheme) {
+                        Color.White.copy(alpha = 0.12f)
+                    } else {
+                        TechBluePrimary.copy(alpha = 0.08f)
+                    },
+                    radius = size.width * 0.22f
                 )
             }
 
-            // Click Hand Indicator Text / Symbol
             Text(
                 text = "👆",
-                fontSize = (iconSize.value * 0.42f).sp,
-                modifier = Modifier.align(Alignment.Center)
+                fontSize = (iconSize.value * 0.40f).sp
             )
-
-            // Shekel Badge Badge in bottom right
-            Box(
-                modifier = Modifier
-                    .size(iconSize * 0.4f)
-                    .align(Alignment.BottomEnd)
-                    .clip(CircleShape)
-                    .background(EmeraldSavings),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "₪",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = (iconSize.value * 0.22f).sp
-                )
-            }
         }
 
-        Spacer(modifier = Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(8.dp))
 
-        // Brand Typography Title & Tagline
         Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 Text(
-                    text = "Click & ",
-                    fontSize = (iconSize.value * 0.48f).sp,
+                    text = "Click&SaveAI",
+                    fontSize = (iconSize.value * 0.50f).sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = if (isDarkTheme) Color.White else BrandNavy,
-                    letterSpacing = (-0.5).sp
-                )
-                Text(
-                    text = "Save AI",
-                    fontSize = (iconSize.value * 0.48f).sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = EmeraldSavings,
-                    letterSpacing = (-0.5).sp
+                    letterSpacing = (-0.4).sp
                 )
             }
 
             if (showTagline) {
                 Text(
                     text = "לחיצה אחת לחיסכון חכם",
-                    fontSize = (iconSize.value * 0.26f).sp,
+                    fontSize = (iconSize.value * 0.25f).sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = EmeraldSavings,
-                    letterSpacing = 0.sp
+                    color = EmeraldSavings
                 )
             }
         }
