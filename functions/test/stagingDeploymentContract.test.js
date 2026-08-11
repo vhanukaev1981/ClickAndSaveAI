@@ -16,11 +16,17 @@ test("staging deploy is pinned to an immutable source SHA", () => {
   assert.doesNotMatch(workflow, /default:\s*agent\/ai-native-financial-core/);
 });
 
-test("staging deploy remains fail-closed on target project and credentials", () => {
+test("staging deploy remains fail-closed on target project and required identity inputs", () => {
   assert.match(workflow, /clickandsaveai-staging/);
-  assert.match(workflow, /GCP_WORKLOAD_IDENTITY_PROVIDER/);
-  assert.match(workflow, /GCP_DEPLOY_SERVICE_ACCOUNT/);
-  assert.match(workflow, /if \[\[ -z \"\$WIF_PROVIDER\" \|\| -z \"\$DEPLOY_SERVICE_ACCOUNT\" \]\]/);
+  assert.match(workflow, /WIF_PROVIDER:\s*\$\{\{ vars\.GCP_WORKLOAD_IDENTITY_PROVIDER \}\}/);
+  assert.match(workflow, /DEPLOY_SERVICE_ACCOUNT:\s*\$\{\{ vars\.GCP_DEPLOY_SERVICE_ACCOUNT \}\}/);
+  assert.match(workflow, /STAGING_SMOKE_USER_UID:\s*\$\{\{ vars\.STAGING_SMOKE_USER_UID \}\}/);
+  assert.match(workflow, /missing=\(\)/);
+  assert.match(workflow, /missing\+=\(GCP_WORKLOAD_IDENTITY_PROVIDER\)/);
+  assert.match(workflow, /missing\+=\(GCP_DEPLOY_SERVICE_ACCOUNT\)/);
+  assert.match(workflow, /missing\+=\(STAGING_SMOKE_USER_UID\)/);
+  assert.match(workflow, /if \(\( \$\{#missing\[@\]\} > 0 \)\); then/);
+  assert.match(workflow, /exit 1/);
 });
 
 test("staging deploy includes only required Firebase Core targets", () => {
