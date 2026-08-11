@@ -1,4 +1,4 @@
-name: P0 Stream B correction GREEN exact APK
+name: P0 Stream B correction candidate exact APK
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  SOURCE_SHA: a6b6962688da16e2e0f7d632fb619890b524e165
+  SOURCE_SHA: dfa2b66dcf3f6b0af9f9f8574fce0118099125cd
 
 jobs:
   validate-and-build:
@@ -126,7 +126,7 @@ jobs:
       - name: Upload exact-SHA APK
         uses: actions/upload-artifact@v4
         with:
-          name: clickandsaveai-stream-b-p0-correction-a6b69626
+          name: clickandsaveai-stream-b-p0-correction-dfa2b66d
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
