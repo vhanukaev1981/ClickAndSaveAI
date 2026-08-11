@@ -1,4 +1,4 @@
-name: P0 Stream B approved design exact APK
+name: P0 Stream B correction RED
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  SOURCE_SHA: 3880aab4f0d5d081fb957f4d4ba8f61ade9cb708
+  SOURCE_SHA: df6ff758cfd5f27051d7bf5f3d295cf314a7a044
 
 jobs:
   validate-and-build:
@@ -113,7 +113,6 @@ jobs:
             echo 'Debug APK was not found.' >&2
             exit 1
           fi
-          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
           sha256sum "$APK"
           CERT_OUTPUT="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK")"
           EXPECTED_SHA256='e7275c2b8bb8fd1559cb2a4439f44def5257c101ec8b7ff91587023a9d3f9ad2'
@@ -126,7 +125,7 @@ jobs:
       - name: Upload exact-SHA APK
         uses: actions/upload-artifact@v4
         with:
-          name: clickandsaveai-stream-b-approved-design-3880aab4
+          name: clickandsaveai-stream-b-correction-red-df6ff758
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
