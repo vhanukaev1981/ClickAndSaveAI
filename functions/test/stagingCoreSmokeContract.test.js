@@ -10,7 +10,7 @@ const workflowPath = path.resolve(__dirname, "..", "..", ".github", "workflows",
 
 async function loadSmokeModule() {
   const modulePath = path.resolve(__dirname, "..", "..", "scripts", "staging-core-smoke.mjs");
-  return import(pathToFileURL(modulePath).href);
+  return import(`${pathToFileURL(modulePath).href}?t=${Date.now()}-${Math.random()}`);
 }
 
 test("staging smoke summary keeps unknown financial values null rather than inventing zero", async () => {
@@ -126,6 +126,77 @@ test("staging smoke rejects a non-staging project or non-immutable source SHA", 
   );
 });
 
+test("WIF smoke mints short-lived Firebase Auth and App Check tokens for an explicit staging UID", async () => {
+  const { mintSmokeTokensWithAdmin } = await loadSmokeModule();
+  const calls = [];
+  const fakeApp = { name: "fake-smoke-app" };
+  const adminProvider = async () => ({
+    applicationDefault: () => ({ kind: "adc" }),
+    getApps: () => [],
+    initializeApp: (options, name) => {
+      calls.push(["initializeApp", options, name]);
+      return fakeApp;
+    },
+    getAuth: (app) => {
+      assert.equal(app, fakeApp);
+      return {
+        createCustomToken: async (uid) => {
+          calls.push(["createCustomToken", uid]);
+          return "short-lived-custom-auth-token";
+        },
+      };
+    },
+    getAppCheck: (app) => {
+      assert.equal(app, fakeApp);
+      return {
+        createToken: async (appId, options) => {
+          calls.push(["createAppCheckToken", appId, options]);
+          return { token: "short-lived-app-check-token", ttlMillis: options.ttlMillis };
+        },
+      };
+    },
+  });
+  const fetchImpl = async (url, options) => {
+    calls.push(["fetch", String(url), JSON.parse(options.body)]);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ idToken: "short-lived-firebase-id-token" }),
+    };
+  };
+
+  const tokens = await mintSmokeTokensWithAdmin({
+    uid: "staging-user-uid",
+    projectId: "clickandsaveai-staging",
+    appId: "1:1234567890:android:abcdef",
+    apiKey: "api-key-for-test",
+    serviceAccountId: "clickandsaveai-github-deployer@clickandsaveai-staging.iam.gserviceaccount.com",
+    fetchImpl,
+    adminProvider,
+  });
+
+  assert.deepEqual(tokens, {
+    idToken: "short-lived-firebase-id-token",
+    appCheckToken: "short-lived-app-check-token",
+  });
+  assert.deepEqual(calls[0], [
+    "initializeApp",
+    {
+      credential: { kind: "adc" },
+      projectId: "clickandsaveai-staging",
+      serviceAccountId: "clickandsaveai-github-deployer@clickandsaveai-staging.iam.gserviceaccount.com",
+    },
+    "clickandsaveai-staging-smoke",
+  ]);
+  assert.deepEqual(calls[1], ["createCustomToken", "staging-user-uid"]);
+  assert.equal(calls[2][0], "createAppCheckToken");
+  assert.equal(calls[2][1], "1:1234567890:android:abcdef");
+  assert.equal(calls[2][2].ttlMillis, 30 * 60 * 1000);
+  assert.match(calls[3][1], /accounts:signInWithCustomToken/);
+  assert.equal(calls[3][2].token, "short-lived-custom-auth-token");
+  assert.equal(calls[3][2].returnSecureToken, true);
+});
+
 test("deployment runs authenticated staging truth smoke only after Firebase deploy and uploads sanitized evidence", () => {
   const workflow = fs.readFileSync(workflowPath, "utf8");
   const deployIndex = workflow.indexOf("Deploy functions and Firestore to staging");
@@ -133,8 +204,10 @@ test("deployment runs authenticated staging truth smoke only after Firebase depl
 
   assert.ok(deployIndex >= 0, "Firebase deploy step is missing");
   assert.ok(smokeIndex > deployIndex, "staging smoke must run only after Firebase deploy");
-  assert.match(workflow, /STAGING_TEST_FIREBASE_REFRESH_TOKEN/);
-  assert.match(workflow, /STAGING_APPCHECK_DEBUG_TOKEN/);
+  assert.match(workflow, /STAGING_SMOKE_USER_UID/);
+  assert.match(workflow, /GCP_DEPLOY_SERVICE_ACCOUNT/);
+  assert.doesNotMatch(workflow, /STAGING_TEST_FIREBASE_REFRESH_TOKEN/);
+  assert.doesNotMatch(workflow, /STAGING_APPCHECK_DEBUG_TOKEN/);
   assert.match(workflow, /node scripts\/staging-core-smoke\.mjs/);
   assert.match(workflow, /actions\/upload-artifact@v4/);
   assert.match(workflow, /staging-core-smoke\.json/);
