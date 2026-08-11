@@ -36,8 +36,8 @@ class ProductPreviewSourceOfTruthGuardTest {
         assertTrue(activity.contains("statusBarsPadding()"))
         assertTrue(activity.contains("ClickAndSaveLogo("))
         assertTrue(activity.contains("isDarkTheme = false"))
-        assertTrue("Approved header stays compact", activity.contains("iconSize = 28.dp"))
-        assertTrue("Approved header stays compact", activity.contains("vertical = 4.dp"))
+        assertTrue("P0 correction keeps the header visually compact", activity.contains("iconSize = 24.dp"))
+        assertTrue("P0 correction removes excess vertical header space", activity.contains("vertical = 2.dp"))
     }
 
     @Test
@@ -62,6 +62,23 @@ class ProductPreviewSourceOfTruthGuardTest {
         assertTrue("Approved primary cards stay on clean white surface", preview.contains("containerColor = MaterialTheme.colorScheme.surface"))
         assertFalse("Lavender cast is outside the approved Light Premium direction", colors.contains("0xFFEEF2F8"))
         assertTrue("Savings surface must remain subtle; green is for verified values", colors.contains("val SavingsSurface = Color(0xFFF4FBF8)"))
+    }
+
+    @Test
+    fun p0CorrectionUsesReusableCompactProductStructure() {
+        assertTrue("Screen intros must be compact and shared", preview.contains("private fun ProductScreenIntro("))
+        assertTrue("Sections need a consistent compact title", preview.contains("private fun ProductSectionTitle("))
+        assertTrue("Empty states must be designed cards, not bare page copy", preview.contains("private fun ProductEmptyStateCard("))
+        assertTrue("Trust copy must use a compact reusable strip", preview.contains("private fun ProductTruthStrip("))
+        assertTrue("Profile connections must use settings-style rows", preview.contains("private fun ProductSettingsRow("))
+    }
+
+    @Test
+    fun billsAndProfileDoNotKeepTheHeavyPlaceholderCopy() {
+        assertFalse(preview.contains("החשבון זוהה. בדיקת חיסכון מתבצעת בנפרד ורק מול הצעה שניתן לאמת."))
+        assertFalse(preview.contains("חשבון, חיבורים ופרטיות. אין כאן יעד חיסכון מלאכותי או ניהול תקציב."))
+        assertTrue("Bills need an explicit document-view action", preview.contains("צפייה בחשבון"))
+        assertTrue("Gmail read-only status must remain explicit", preview.contains("קריאה בלבד"))
     }
 
     @Test
