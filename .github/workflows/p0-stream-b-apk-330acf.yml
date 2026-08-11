@@ -13,7 +13,7 @@ env:
 
 jobs:
   validate-and-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 40
     env:
       STAGING_DEBUG_KEYSTORE_B64: ${{ secrets.STAGING_DEBUG_KEYSTORE_B64 }}
