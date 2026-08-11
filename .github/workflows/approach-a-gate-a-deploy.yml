@@ -1,0 +1,135 @@
+name: Approach A Gate A Staging Proof
+
+on:
+  push:
+    branches:
+      - ops/approach-a-gate-a-deploy
+    paths:
+      - .github/workflows/approach-a-gate-a-deploy.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: approach-a-gate-a-clickandsaveai-staging
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: 6f76153c5a23134f6dd956dfc84a82d8be91ea9d
+  CORE_BASE_SHA: ac2105098d698df06159f929f41595f91505c855
+
+jobs:
+  deploy-and-smoke:
+    runs-on: ubuntu-22.04
+    environment: staging
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out exact Gate A Core candidate
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Verify immutable Core source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if [[ "$ACTUAL_SHA" != "$SOURCE_SHA" ]]; then
+            echo "Expected $SOURCE_SHA but checked out $ACTUAL_SHA." >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$CORE_BASE_SHA" "$ACTUAL_SHA"; then
+            echo "Gate A candidate is not descended from approved Core base $CORE_BASE_SHA." >&2
+            exit 1
+          fi
+          node <<'NODE'
+          const fs = require('fs');
+          const config = JSON.parse(fs.readFileSync('.firebaserc.example', 'utf8'));
+          if (config?.projects?.default !== 'clickandsaveai-staging') {
+            throw new Error('Repository staging guard does not target clickandsaveai-staging');
+          }
+          NODE
+          echo "Verified exact Gate A source: $ACTUAL_SHA"
+
+      - name: Verify deployment prerequisites
+        env:
+          WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          FIREBASE_API_KEY: ${{ secrets.STAGING_FIREBASE_API_KEY }}
+          FIREBASE_REFRESH_TOKEN: ${{ secrets.STAGING_TEST_FIREBASE_REFRESH_TOKEN }}
+          APPCHECK_APP_ID: ${{ vars.STAGING_APPCHECK_APP_ID }}
+          APPCHECK_DEBUG_TOKEN: ${{ secrets.STAGING_APPCHECK_DEBUG_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "$WIF_PROVIDER" ]] || missing+=(GCP_WORKLOAD_IDENTITY_PROVIDER)
+          [[ -n "$DEPLOY_SERVICE_ACCOUNT" ]] || missing+=(GCP_DEPLOY_SERVICE_ACCOUNT)
+          [[ -n "$FIREBASE_API_KEY" ]] || missing+=(STAGING_FIREBASE_API_KEY)
+          [[ -n "$FIREBASE_REFRESH_TOKEN" ]] || missing+=(STAGING_TEST_FIREBASE_REFRESH_TOKEN)
+          [[ -n "$APPCHECK_APP_ID" ]] || missing+=(STAGING_APPCHECK_APP_ID)
+          [[ -n "$APPCHECK_DEBUG_TOKEN" ]] || missing+=(STAGING_APPCHECK_DEBUG_TOKEN)
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing staging configuration:' >&2
+            printf ' %s' "${missing[@]}" >&2
+            printf '\n' >&2
+            exit 1
+          fi
+          echo 'All required staging configuration names are populated.'
+
+      - id: auth
+        name: Authenticate to Google Cloud with GitHub OIDC
+        uses: google-github-actions/auth@v3
+        with:
+          create_credentials_file: 'true'
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Install backend dependencies
+        working-directory: functions
+        run: npm install --ignore-scripts
+
+      - name: Run backend tests on exact candidate
+        working-directory: functions
+        run: npm test
+
+      - name: Install pinned Firebase CLI
+        run: npm install --global firebase-tools@15.1.0
+
+      - name: Deploy exact Core candidate to staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase deploy \
+            --project clickandsaveai-staging \
+            --only firestore:rules,firestore:indexes,functions \
+            --non-interactive
+
+      - name: Run authenticated Gmail to Financial Home smoke
+        env:
+          STAGING_FIREBASE_API_KEY: ${{ secrets.STAGING_FIREBASE_API_KEY }}
+          STAGING_TEST_FIREBASE_REFRESH_TOKEN: ${{ secrets.STAGING_TEST_FIREBASE_REFRESH_TOKEN }}
+          STAGING_APPCHECK_APP_ID: ${{ vars.STAGING_APPCHECK_APP_ID }}
+          STAGING_APPCHECK_DEBUG_TOKEN: ${{ secrets.STAGING_APPCHECK_DEBUG_TOKEN }}
+          STAGING_SMOKE_OUTPUT: ${{ runner.temp }}/staging-core-smoke.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/staging-core-smoke.mjs
+
+      - name: Upload sanitized Gate A evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: approach-a-gate-a-staging-proof-6f76153c
+          path: ${{ runner.temp }}/staging-core-smoke.json
+          if-no-files-found: error
+          retention-days: 14
