@@ -113,3 +113,23 @@ jobs:
             --project clickandsaveai-staging \
             --only firestore:rules,firestore:indexes,functions \
             --non-interactive
+
+      - name: Run authenticated staging truth smoke
+        env:
+          STAGING_FIREBASE_API_KEY: ${{ secrets.STAGING_FIREBASE_API_KEY }}
+          STAGING_TEST_FIREBASE_REFRESH_TOKEN: ${{ secrets.STAGING_TEST_FIREBASE_REFRESH_TOKEN }}
+          STAGING_APPCHECK_APP_ID: ${{ vars.STAGING_APPCHECK_APP_ID }}
+          STAGING_APPCHECK_DEBUG_TOKEN: ${{ secrets.STAGING_APPCHECK_DEBUG_TOKEN }}
+          STAGING_SMOKE_OUTPUT: ${{ runner.temp }}/staging-core-smoke.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/staging-core-smoke.mjs
+
+      - name: Upload sanitized staging smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-core-smoke-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/staging-core-smoke.json
+          if-no-files-found: error
+          retention-days: 14
