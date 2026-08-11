@@ -9,6 +9,7 @@ class ProductPreviewSourceOfTruthGuardTest {
     private val preview = File("src/main/java/com/example/ui/screens/ProductPreviewScreens.kt").readText()
     private val activity = File("src/main/java/com/example/MainActivity.kt").readText()
     private val nav = File("src/main/java/com/example/ui/components/BottomNavBar.kt").readText()
+    private val logo = File("src/main/java/com/example/ui/components/ClickAndSaveLogo.kt").readText()
 
     @Test
     fun primaryNavigationRoutesToP0ProductPreview() {
@@ -32,6 +33,23 @@ class ProductPreviewSourceOfTruthGuardTest {
         assertTrue(activity.contains("statusBarsPadding()"))
         assertTrue(activity.contains("ClickAndSaveLogo("))
         assertTrue(activity.contains("isDarkTheme = false"))
+    }
+
+    @Test
+    fun brandWordmarkStaysCanonicalAndLtrInsideHebrewUi() {
+        assertTrue("Brand wordmark must be forced LTR inside the RTL app", logo.contains("LocalLayoutDirection"))
+        assertTrue("Brand wordmark must be forced LTR inside the RTL app", logo.contains("LayoutDirection.Ltr"))
+        assertTrue("Canonical brand text must be Click&SaveAI", logo.contains("text = \"Click&SaveAI\""))
+        assertFalse("Do not split the wordmark into RTL-reorderable fragments", logo.contains("text = \"Click & \""))
+        assertFalse("Do not split the wordmark into RTL-reorderable fragments", logo.contains("text = \"Save AI\""))
+    }
+
+    @Test
+    fun approvedCompactVisualHierarchyIsSharedAcrossPrimaryScreens() {
+        assertTrue("Primary screens need the approved compact header hierarchy", preview.contains("private fun ProductScreenHeader("))
+        assertTrue("Approved screen header must use compact title typography", preview.contains("style = MaterialTheme.typography.titleLarge"))
+        assertTrue("Dashboard must keep a compact savings hero", preview.contains("private fun ProductSavingsHero("))
+        assertTrue("Approved primary cards stay on clean white surface", preview.contains("containerColor = MaterialTheme.colorScheme.surface"))
     }
 
     @Test
