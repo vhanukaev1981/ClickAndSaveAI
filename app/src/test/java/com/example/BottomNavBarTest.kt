@@ -41,10 +41,10 @@ class BottomNavBarTest {
             }
         }
 
-        composeTestRule.onNodeWithContentDescription("המצב הפיננסי").assertIsDisplayed()
-        composeTestRule.onNodeWithContentDescription("חשבונות וחיובים").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("בית והחיסכון שלך").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("חשבונות שזוהו").assertIsDisplayed()
         composeTestRule.onNodeWithContentDescription("הזדמנויות חיסכון").assertIsDisplayed()
-        composeTestRule.onNodeWithContentDescription("פרופיל והגדרות").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("חשבון, חיבורים ופרטיות").assertIsDisplayed()
     }
 
     @Test
