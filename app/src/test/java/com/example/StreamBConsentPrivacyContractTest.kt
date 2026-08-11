@@ -6,40 +6,39 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StreamBConsentPrivacyContractTest {
-    private val savingsPath = "src/main/java/com/example/ui/screens/ProvidersScreen.kt"
-    private val profilePath = "src/main/java/com/example/ui/screens/ProfileScreen.kt"
-    private val settingsPath = "src/main/java/com/example/ui/screens/SettingsScreen.kt"
+    private val previewPath = "src/main/java/com/example/ui/screens/ProductPreviewScreens.kt"
 
     @Test
     fun providerActionRequiresExplicitContactConsent() {
-        val savings = File(savingsPath).readText()
-        assertTrue(savings.contains("savings_contact_consent"))
-        assertTrue(savings.contains("accepted && name.isNotBlank() && phone.isNotBlank() && email.isNotBlank()"))
-        assertTrue(savings.contains("תוכן תיבת הדואר ותמונת ההוצאות המלאה שלך אינם נשלחים"))
-        assertTrue(savings.contains("אני מאשר/ת להעביר את פרטי הקשר לצורך קבלת ההצעה שבחרתי"))
+        val preview = File(previewPath).readText()
+        assertTrue(preview.contains("product_submit_provider_details"))
+        assertTrue(preview.contains("accepted && name.isNotBlank() && phone.isNotBlank() && email.isNotBlank()"))
+        assertTrue(preview.contains("תוכן תיבת הדואר ונתוני הוצאות אחרים אינם נשלחים"))
+        assertTrue(preview.contains("אני מאשר/ת במפורש את העברת פרטי הקשר לספק עבור ההצעה הזו"))
     }
 
     @Test
     fun customerCopyDoesNotClaimAutomaticProviderSwitch() {
-        val combined = listOf(savingsPath, profilePath, settingsPath)
-            .joinToString("\n") { File(it).readText() }
-        assertFalse(combined.contains("נעביר אותך אוטומטית"))
-        assertFalse(combined.contains("המעבר יתבצע אוטומטית"))
-        assertTrue(combined.contains("כל פעולה מול נותן שירות דורשת אישור מפורש שלך"))
+        val preview = File(previewPath).readText()
+        assertFalse(preview.contains("נעביר אותך אוטומטית"))
+        assertFalse(preview.contains("המעבר יתבצע אוטומטית"))
+        assertTrue(preview.contains("Click&SaveAI לא מבצעת את המעבר"))
+        assertTrue(preview.contains("אישור מפורש"))
     }
 
     @Test
     fun savingsActionStaysBoundToDisplayedOfferBeforeConsent() {
-        val savings = File(savingsPath).readText()
-        assertTrue(savings.contains("displayedOfferId"))
-        assertTrue(savings.contains("expectedOfferId = displayedOfferId"))
-        assertTrue(savings.contains("recordSavingsActionStarted("))
-        assertTrue(savings.contains("acceptSavingsOpportunity("))
+        val preview = File(previewPath).readText()
+        assertTrue(preview.contains("val offerId = opportunity.matchedOffer?.offerId.orEmpty()"))
+        assertTrue(preview.contains("expectedOfferId = offerId"))
+        assertTrue(preview.contains("recordSavingsActionStarted("))
+        assertTrue(preview.contains("acceptSavingsOpportunity("))
     }
 
     @Test
-    fun privacyCopyKeepsMailboxAndFullSpendOutOfProviderPayloadPromise() {
-        val profile = File(profilePath).readText()
-        assertTrue(profile.contains("אינה מעבירה לנותן שירות את תוכן תיבת הדואר או את תמונת ההוצאות המלאה שלך"))
+    fun providerPayloadPromiseExcludesMailboxAndUnrelatedSpendData() {
+        val preview = File(previewPath).readText()
+        assertTrue(preview.contains("תוכן תיבת הדואר ונתוני הוצאות אחרים אינם נשלחים"))
+        assertTrue(preview.contains("נעביר רק שם, טלפון, אימייל ומזהה ההצעה שאישרת"))
     }
 }
