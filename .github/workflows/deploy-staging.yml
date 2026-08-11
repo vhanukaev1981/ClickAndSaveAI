@@ -80,6 +80,39 @@ jobs:
           }
           NODE
 
+      - name: Derive staging Firebase smoke config
+        env:
+          STAGING_GOOGLE_SERVICES_JSON_B64: ${{ secrets.STAGING_GOOGLE_SERVICES_JSON_B64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$STAGING_GOOGLE_SERVICES_JSON_B64" ]]; then
+            echo 'STAGING_GOOGLE_SERVICES_JSON_B64 is required for authenticated staging smoke.' >&2
+            exit 1
+          fi
+          CONFIG_PATH="$RUNNER_TEMP/google-services-staging.json"
+          printf '%s' "$STAGING_GOOGLE_SERVICES_JSON_B64" | base64 --decode > "$CONFIG_PATH"
+          chmod 600 "$CONFIG_PATH"
+          STAGING_FIREBASE_CONFIG_PATH="$CONFIG_PATH" node <<'NODE'
+          const fs = require('fs');
+          const config = JSON.parse(fs.readFileSync(process.env.STAGING_FIREBASE_CONFIG_PATH, 'utf8'));
+          if (config?.project_info?.project_id !== 'clickandsaveai-staging') {
+            throw new Error('google-services staging config targets the wrong project');
+          }
+          const client = (Array.isArray(config.client) ? config.client : []).find(
+            (item) => item?.client_info?.android_client_info?.package_name === 'com.aistudio.clickandsaveai.app'
+          );
+          const apiKey = client?.api_key?.[0]?.current_key;
+          const appId = client?.client_info?.mobilesdk_app_id;
+          if (!apiKey || !appId) {
+            throw new Error('staging google-services config is missing API key or Android app ID');
+          }
+          fs.appendFileSync(process.env.GITHUB_ENV, `STAGING_FIREBASE_API_KEY=${apiKey}\n`, { encoding: 'utf8' });
+          fs.appendFileSync(process.env.GITHUB_ENV, `STAGING_APPCHECK_APP_ID=${appId}\n`, { encoding: 'utf8' });
+          NODE
+          rm -f "$CONFIG_PATH"
+          echo 'Derived staging Firebase smoke config without logging its values.'
+
       - id: auth
         name: Authenticate to Google Cloud with GitHub OIDC
         uses: google-github-actions/auth@v3
@@ -116,9 +149,7 @@ jobs:
 
       - name: Run authenticated staging truth smoke
         env:
-          STAGING_FIREBASE_API_KEY: ${{ secrets.STAGING_FIREBASE_API_KEY }}
           STAGING_TEST_FIREBASE_REFRESH_TOKEN: ${{ secrets.STAGING_TEST_FIREBASE_REFRESH_TOKEN }}
-          STAGING_APPCHECK_APP_ID: ${{ vars.STAGING_APPCHECK_APP_ID }}
           STAGING_APPCHECK_DEBUG_TOKEN: ${{ secrets.STAGING_APPCHECK_DEBUG_TOKEN }}
           STAGING_SMOKE_OUTPUT: ${{ runner.temp }}/staging-core-smoke.json
         shell: bash
