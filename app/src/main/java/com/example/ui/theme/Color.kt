@@ -13,7 +13,7 @@ val EmeraldSavings = Color(0xFF079A72)
 val EmeraldSavingsLight = Color(0xFF32B68E)
 val EmeraldSavingsDark = Color(0xFF057457)
 
-// Deep navy anchors hero surfaces and high-value financial information.
+// Deep navy anchors primary product information.
 val BrandNavy = Color(0xFF101B3D)
 val BrandNavySoft = Color(0xFF172554)
 
@@ -22,18 +22,18 @@ val AlertRed = Color(0xFFDC3F4F)
 val AmberDeal = Color(0xFFC47A12)
 val AmberDealLight = Color(0xFFF2B84B)
 
-// Premium neutral system: softer canvas, clean white cards, restrained dividers.
+// Premium neutral system: near-white canvas, white cards and restrained dividers.
 val BackgroundDark = Color(0xFF0B1224)
 val SurfaceDark = Color(0xFF151F35)
 val SurfaceVariantDark = Color(0xFF26334D)
 val TextPrimaryDark = Color(0xFFF8FAFC)
 val TextSecondaryDark = Color(0xFFA9B4C7)
 
-val BackgroundLight = Color(0xFFF6F8FC)
+val BackgroundLight = Color(0xFFF7F9FC)
 val SurfaceLight = Color(0xFFFFFFFF)
-val SurfaceVariantLight = Color(0xFFEEF2F8)
+val SurfaceVariantLight = Color(0xFFF7F9FC)
 val TextPrimaryLight = Color(0xFF101828)
 val TextSecondaryLight = Color(0xFF667085)
-val DividerLight = Color(0xFFE4E9F2)
-val HeroBlueSurface = Color(0xFFEAF0FF)
-val SavingsSurface = Color(0xFFEAF8F3)
+val DividerLight = Color(0xFFE7ECF3)
+val HeroBlueSurface = Color(0xFFF3F7FF)
+val SavingsSurface = Color(0xFFF4FBF8)
