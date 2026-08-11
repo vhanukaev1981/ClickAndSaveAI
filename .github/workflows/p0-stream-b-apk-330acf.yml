@@ -1,0 +1,132 @@
+name: P0 Stream B 330acf Exact APK
+
+on:
+  push:
+    branches:
+      - ci/p0-stream-b-apk
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: 330acf558f36bde062d4a9f819ac83fe17538472
+
+jobs:
+  validate-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      STAGING_DEBUG_KEYSTORE_B64: ${{ secrets.STAGING_DEBUG_KEYSTORE_B64 }}
+      STAGING_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.STAGING_DEBUG_KEYSTORE_PASSWORD }}
+      STAGING_GOOGLE_SERVICES_JSON_B64: ${{ secrets.STAGING_GOOGLE_SERVICES_JSON_B64 }}
+
+    steps:
+      - name: Check out exact Stream B source SHA
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Verify immutable source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if [[ "$ACTUAL_SHA" != "$SOURCE_SHA" ]]; then
+            echo "Expected $SOURCE_SHA but checked out $ACTUAL_SHA" >&2
+            exit 1
+          fi
+          echo "Validated exact Stream B source: $ACTUAL_SHA"
+
+      - name: Restore staging Firebase config
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$STAGING_GOOGLE_SERVICES_JSON_B64" ]]; then
+            echo 'Missing STAGING_GOOGLE_SERVICES_JSON_B64.' >&2
+            exit 1
+          fi
+          printf '%s' "$STAGING_GOOGLE_SERVICES_JSON_B64" | base64 --decode > app/google-services.json
+          node <<'NODE'
+          const fs = require('fs');
+          const config = JSON.parse(fs.readFileSync('app/google-services.json', 'utf8'));
+          if (config?.project_info?.project_id !== 'clickandsaveai-staging') {
+            throw new Error('google-services.json does not target clickandsaveai-staging');
+          }
+          const clients = Array.isArray(config.client) ? config.client : [];
+          if (!clients.some((c) => c?.client_info?.android_client_info?.package_name === 'com.aistudio.clickandsaveai.app')) {
+            throw new Error('google-services.json does not contain the Click&SaveAI Android package');
+          }
+          NODE
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install required Android SDK packages
+        run: sdkmanager 'platforms;android-36.1' 'build-tools;36.0.0'
+
+      - name: Restore stable staging debug key
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$STAGING_DEBUG_KEYSTORE_B64" || -z "$STAGING_DEBUG_KEYSTORE_PASSWORD" ]]; then
+            echo 'Missing stable staging signing secrets.' >&2
+            exit 1
+          fi
+          KEYSTORE="$RUNNER_TEMP/clickandsaveai-staging.jks"
+          printf '%s' "$STAGING_DEBUG_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          EXPECTED_SHA256='E7275C2B8BB8FD1559CB2A4439F44DEF5257C101EC8B7FF91587023A9D3F9AD2'
+          CERT_OUTPUT="$(keytool -list -v -keystore "$KEYSTORE" -storepass "$STAGING_DEBUG_KEYSTORE_PASSWORD" -alias clickandsaveai-staging)"
+          NORMALIZED="$(printf '%s' "$CERT_OUTPUT" | tr '[:lower:]' '[:upper:]' | tr -d ':')"
+          if ! printf '%s' "$NORMALIZED" | grep -q "$EXPECTED_SHA256"; then
+            echo 'Staging debug certificate fingerprint mismatch.' >&2
+            exit 1
+          fi
+          echo "STAGING_DEBUG_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Run Android unit tests
+        run: gradle --no-daemon testDebugUnitTest --stacktrace
+
+      - name: Run Android lint
+        run: gradle --no-daemon lintDebug --stacktrace
+
+      - name: Assemble installable debug APK
+        run: gradle --no-daemon assembleDebug --stacktrace
+
+      - name: Verify APK and stable staging certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          if [[ -z "$APK" ]]; then
+            echo 'Debug APK was not found.' >&2
+            exit 1
+          fi
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
+          sha256sum "$APK"
+          CERT_OUTPUT="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK")"
+          EXPECTED_SHA256='e7275c2b8bb8fd1559cb2a4439f44def5257c101ec8b7ff91587023a9d3f9ad2'
+          NORMALIZED="$(printf '%s' "$CERT_OUTPUT" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          if ! printf '%s' "$NORMALIZED" | grep -q "$EXPECTED_SHA256"; then
+            echo 'Built APK certificate does not match the registered staging certificate.' >&2
+            exit 1
+          fi
+
+      - name: Upload exact-SHA APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: clickandsaveai-stream-b-p0-330acf558f36
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
