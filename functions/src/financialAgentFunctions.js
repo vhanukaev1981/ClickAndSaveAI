@@ -400,14 +400,21 @@ exports.getFinancialHome = onCall(
       await runFinancialAgentForUser(uid);
       contextSnapshot = await userRef.collection("financialContext").doc("current").get();
     }
+    if (!contextSnapshot.exists) {
+      throw new HttpsError(
+        "unavailable",
+        "Financial context is not available yet."
+      );
+    }
 
-    const context = contextSnapshot.data() || {};
+    const context = contextSnapshot.data();
     const [insights, opportunities] = await Promise.all([
       loadDocsByIds(userRef.collection("financialInsights"), context.activeInsightIds),
       loadDocsByIds(userRef.collection("opportunities"), context.activeOpportunityIds),
     ]);
 
     return {
+      contextStatus: "READY",
       context: {
         sourceCoverage: Array.isArray(context.sourceCoverage) ? context.sourceCoverage.map(String) : [],
         isCompleteHouseholdSpend: context.isCompleteHouseholdSpend === true,
