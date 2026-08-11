@@ -16,10 +16,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -27,15 +27,15 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.example.ui.MainViewModel
 import com.example.ui.components.BottomNavBar
-import com.example.ui.screens.DashboardScreen
-import com.example.ui.screens.InvoicesScreen
-import com.example.ui.screens.ProfileScreen
-import com.example.ui.screens.ProvidersScreen
+import com.example.ui.components.ClickAndSaveLogo
+import com.example.ui.screens.ProductBillsScreen
+import com.example.ui.screens.ProductDashboardScreen
+import com.example.ui.screens.ProductMeScreen
+import com.example.ui.screens.ProductSavingsScreen
 import com.example.ui.theme.ClickAndSaveTheme
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         if (result.resultCode != Activity.RESULT_OK || result.data == null) {
-            viewModel.reportGmailAuthorizationError("הרשאת Gmail בוטלה ולא נשמר מידע.")
+            viewModel.reportGmailAuthorizationError("האישור בוטל ולא נשמר מידע.")
             return@registerForActivityResult
         }
 
@@ -68,9 +68,7 @@ class MainActivity : ComponentActivity() {
         }.onSuccess(::handleGmailAuthorizationResult)
             .onFailure { error ->
                 Log.e("MainActivity", "Gmail authorization result failed", error)
-                viewModel.reportGmailAuthorizationError(
-                    error.localizedMessage ?: "לא ניתן היה להשלים את הרשאת Gmail."
-                )
+                viewModel.reportGmailAuthorizationError("לא ניתן היה להשלים את אישור הקריאה. אפשר לנסות שוב.")
             }
     }
 
@@ -89,7 +87,7 @@ class MainActivity : ComponentActivity() {
                             val clientId = getString(R.string.google_web_client_id).trim()
                             if (clientId.isBlank()) {
                                 viewModel.reportGmailAuthorizationError(
-                                    "חסר google_web_client_id. יש להשלים את הגדרת Firebase/OAuth."
+                                    "לא ניתן להתחבר כרגע. הגדרת ההתחברות אינה זמינה."
                                 )
                             } else {
                                 viewModel.signInWithGoogle(this, clientId)
@@ -150,7 +148,7 @@ class MainActivity : ComponentActivity() {
         val clientId = getString(R.string.google_web_client_id).trim()
         if (clientId.isBlank()) {
             viewModel.reportGmailAuthorizationError(
-                "חסר google_web_client_id. יש להשלים את הגדרת Firebase/OAuth."
+                "לא ניתן לחבר כרגע את מקור המסמכים. אפשר לנסות שוב לאחר שהחיבור יוגדר."
             )
             return
         }
@@ -166,7 +164,7 @@ class MainActivity : ComponentActivity() {
                 if (authorizationResult.hasResolution()) {
                     val pendingIntent = authorizationResult.pendingIntent
                     if (pendingIntent == null) {
-                        viewModel.reportGmailAuthorizationError("Google לא החזיר מסך הרשאה תקף.")
+                        viewModel.reportGmailAuthorizationError("לא ניתן לפתוח את מסך האישור. אפשר לנסות שוב.")
                         return@addOnSuccessListener
                     }
                     gmailAuthorizationLauncher.launch(
@@ -178,21 +176,19 @@ class MainActivity : ComponentActivity() {
             }
             .addOnFailureListener { error ->
                 Log.e("MainActivity", "Gmail authorization failed", error)
-                viewModel.reportGmailAuthorizationError(
-                    error.localizedMessage ?: "בקשת הרשאת Gmail נכשלה."
-                )
+                viewModel.reportGmailAuthorizationError("בקשת אישור הקריאה לא הושלמה. אפשר לנסות שוב.")
             }
     }
 
     private fun handleGmailAuthorizationResult(result: AuthorizationResult) {
         if (!result.grantedScopes.contains(GMAIL_READONLY_SCOPE)) {
-            viewModel.reportGmailAuthorizationError("הרשאת gmail.readonly לא אושרה.")
+            viewModel.reportGmailAuthorizationError("הרשאת הקריאה לא אושרה.")
             return
         }
         val serverAuthCode = result.serverAuthCode?.takeIf { it.isNotBlank() }
         if (serverAuthCode == null) {
             viewModel.reportGmailAuthorizationError(
-                "Google לא החזיר קוד שרת. יש לנתק את ההרשאה ולאשר מחדש."
+                "האישור לא הושלם. יש לבטל את החיבור ולאשר מחדש."
             )
             return
         }
@@ -224,17 +220,19 @@ fun MainAppStructure(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.secondaryContainer
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding(),
+                color = MaterialTheme.colorScheme.surface
             ) {
-                Text(
-                    text = "Click&SaveAI עובדת ברקע ומחפשת התייעלויות עבורך",
+                ClickAndSaveLogo(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                    iconSize = 32.dp,
+                    showTagline = false,
+                    isDarkTheme = false
                 )
             }
         },
@@ -245,29 +243,28 @@ fun MainAppStructure(
             )
         }
     ) { innerPadding ->
-        Box(modifier = Modifier.padding(innerPadding)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
             when (selectedTab) {
-                0 -> DashboardScreen(
+                0 -> ProductDashboardScreen(
                     viewModel = viewModel,
                     onNavigateToTab = viewModel::setTab,
-                    onOpenReceiptScan = viewModel::reportReceiptScanUnavailable,
                     onGoogleSignIn = onGoogleSignIn,
                     onRequestGmailAuthorization = onRequestGmailAuthorization
                 )
-                1 -> InvoicesScreen(
-                    viewModel = viewModel,
-                    onOpenReceiptScan = viewModel::reportReceiptScanUnavailable
-                )
-                2 -> ProvidersScreen(viewModel)
-                3, 4 -> ProfileScreen(
+                1 -> ProductBillsScreen(viewModel)
+                2 -> ProductSavingsScreen(viewModel)
+                3, 4 -> ProductMeScreen(
                     viewModel = viewModel,
                     onGoogleSignIn = onGoogleSignIn,
                     onRequestGmailAuthorization = onRequestGmailAuthorization
                 )
-                else -> DashboardScreen(
+                else -> ProductDashboardScreen(
                     viewModel = viewModel,
                     onNavigateToTab = viewModel::setTab,
-                    onOpenReceiptScan = viewModel::reportReceiptScanUnavailable,
                     onGoogleSignIn = onGoogleSignIn,
                     onRequestGmailAuthorization = onRequestGmailAuthorization
                 )
