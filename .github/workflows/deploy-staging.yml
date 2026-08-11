@@ -3,10 +3,9 @@ name: Deploy Firebase Staging
 on:
   workflow_dispatch:
     inputs:
-      ref:
-        description: Git ref to deploy after CI is green
+      source_sha:
+        description: Exact 40-character Core commit SHA to deploy after CI is green
         required: true
-        default: agent/ai-native-financial-core
         type: string
       confirm_project:
         description: Type clickandsaveai-staging to confirm the deployment target
@@ -21,6 +20,10 @@ concurrency:
   group: deploy-clickandsaveai-staging
   cancel-in-progress: false
 
+env:
+  SOURCE_SHA: ${{ inputs.source_sha }}
+  CORE_BASE_SHA: ac2105098d698df06159f929f41595f91505c855
+
 jobs:
   deploy:
     if: ${{ inputs.confirm_project == 'clickandsaveai-staging' }}
@@ -29,10 +32,30 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Check out requested ref
+      - name: Check out exact Core source SHA
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Verify immutable Core source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'source_sha must be an exact lowercase 40-character commit SHA.' >&2
+            exit 1
+          fi
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if [[ "$ACTUAL_SHA" != "$SOURCE_SHA" ]]; then
+            echo "Expected Core SHA $SOURCE_SHA but checked out $ACTUAL_SHA." >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$CORE_BASE_SHA" "$ACTUAL_SHA"; then
+            echo "Requested SHA is not descended from approved Core base $CORE_BASE_SHA." >&2
+            exit 1
+          fi
+          echo "Verified immutable Core source: $ACTUAL_SHA"
 
       - name: Verify staging deployment configuration
         env:
