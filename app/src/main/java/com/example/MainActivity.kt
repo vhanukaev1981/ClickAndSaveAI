@@ -229,8 +229,8 @@ fun MainAppStructure(
                 color = MaterialTheme.colorScheme.surface
             ) {
                 ClickAndSaveLogo(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    iconSize = 32.dp,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp),
+                    iconSize = 28.dp,
                     showTagline = false,
                     isDarkTheme = false
                 )
