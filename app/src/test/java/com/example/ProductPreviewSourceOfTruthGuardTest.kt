@@ -10,6 +10,9 @@ class ProductPreviewSourceOfTruthGuardTest {
     private val activity = File("src/main/java/com/example/MainActivity.kt").readText()
     private val nav = File("src/main/java/com/example/ui/components/BottomNavBar.kt").readText()
     private val logo = File("src/main/java/com/example/ui/components/ClickAndSaveLogo.kt").readText()
+    private val tokens = File("src/main/java/com/example/ui/theme/FinancialDesignTokens.kt").readText()
+    private val typography = File("src/main/java/com/example/ui/theme/Type.kt").readText()
+    private val colors = File("src/main/java/com/example/ui/theme/Color.kt").readText()
 
     @Test
     fun primaryNavigationRoutesToP0ProductPreview() {
@@ -33,6 +36,8 @@ class ProductPreviewSourceOfTruthGuardTest {
         assertTrue(activity.contains("statusBarsPadding()"))
         assertTrue(activity.contains("ClickAndSaveLogo("))
         assertTrue(activity.contains("isDarkTheme = false"))
+        assertTrue("Approved header stays compact", activity.contains("iconSize = 28.dp"))
+        assertTrue("Approved header stays compact", activity.contains("vertical = 4.dp"))
     }
 
     @Test
@@ -46,10 +51,17 @@ class ProductPreviewSourceOfTruthGuardTest {
 
     @Test
     fun approvedCompactVisualHierarchyIsSharedAcrossPrimaryScreens() {
-        assertTrue("Primary screens need the approved compact header hierarchy", preview.contains("private fun ProductScreenHeader("))
-        assertTrue("Approved screen header must use compact title typography", preview.contains("style = MaterialTheme.typography.titleLarge"))
-        assertTrue("Dashboard must keep a compact savings hero", preview.contains("private fun ProductSavingsHero("))
+        assertTrue(tokens.contains("val screenTopPadding: Dp = 12.dp"))
+        assertTrue(tokens.contains("val sectionSpacing: Dp = 10.dp"))
+        assertTrue(tokens.contains("val compactSpacing: Dp = 4.dp"))
+        assertTrue(tokens.contains("val heroPadding: Dp = 16.dp"))
+        assertTrue(tokens.contains("val compactCardPadding: Dp = 12.dp"))
+        assertTrue("Touch targets must remain accessible", tokens.contains("val minimumTouchTarget: Dp = 48.dp"))
+        assertTrue("Compact screen titles must use the approved 20sp level", typography.contains("fontSize = 20.sp"))
+        assertTrue("Dashboard must keep its truthful savings hero", preview.contains("private fun ProductSavingsHero("))
         assertTrue("Approved primary cards stay on clean white surface", preview.contains("containerColor = MaterialTheme.colorScheme.surface"))
+        assertFalse("Lavender cast is outside the approved Light Premium direction", colors.contains("0xFFEEF2F8"))
+        assertTrue("Savings surface must remain subtle; green is for verified values", colors.contains("val SavingsSurface = Color(0xFFF4FBF8)"))
     }
 
     @Test
