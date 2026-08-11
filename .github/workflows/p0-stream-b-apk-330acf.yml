@@ -1,4 +1,4 @@
-name: P0 Stream B 330acf Exact APK
+name: P0 Stream B f9cdb2 Exact APK
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  SOURCE_SHA: 330acf558f36bde062d4a9f819ac83fe17538472
+  SOURCE_SHA: f9cdb2beeb66032edc4bf1ecff58f84658935a3c
 
 jobs:
   validate-and-build:
@@ -126,7 +126,7 @@ jobs:
       - name: Upload exact-SHA APK
         uses: actions/upload-artifact@v4
         with:
-          name: clickandsaveai-stream-b-p0-330acf558f36
+          name: clickandsaveai-stream-b-p0-f9cdb2beeb66
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 7
