@@ -1,27 +1,42 @@
 name: P0 Stream B Exact APK
 
 on:
-  push:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
-      - ci/p0-stream-b-apk
+      - agent/ai-native-financial-core
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact 40-character Stream B SHA to validate and build
+        required: true
+        type: string
 
 permissions:
   contents: read
 
-env:
-  SOURCE_SHA: 5e037007fd6facce32fe613678be2ee90b34d7c3
-
 jobs:
   validate-and-build:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.number == 24 }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || inputs.source_sha }}
       STAGING_DEBUG_KEYSTORE_B64: ${{ secrets.STAGING_DEBUG_KEYSTORE_B64 }}
       STAGING_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.STAGING_DEBUG_KEYSTORE_PASSWORD }}
       STAGING_GOOGLE_SERVICES_JSON_B64: ${{ secrets.STAGING_GOOGLE_SERVICES_JSON_B64 }}
 
     steps:
+      - name: Guard exact source SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'SOURCE_SHA must be an exact lowercase 40-character Git commit SHA.' >&2
+            exit 1
+          fi
+          echo "Requested Stream B source: $SOURCE_SHA"
+
       - name: Check out exact Stream B source SHA
         uses: actions/checkout@v6
         with:
