@@ -39,20 +39,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'GITHUB_REPOSITORY_ID="${GITHUB_REPOSITORY_ID:-1314210715}"' scripts/bootstrap-staging-wif.sh
-          grep -Fq 'GITHUB_REPOSITORY_OWNER_ID="${GITHUB_REPOSITORY_OWNER_ID:-64756523}"' scripts/bootstrap-staging-wif.sh
-          grep -Fq 'GITHUB_ENVIRONMENT="${GITHUB_ENVIRONMENT:-staging}"' scripts/bootstrap-staging-wif.sh
-          grep -Fq 'GITHUB_REF="${GITHUB_REF:-refs/heads/main}"' scripts/bootstrap-staging-wif.sh
-          grep -Fq 'GITHUB_JOB_WORKFLOW_REF="${GITHUB_JOB_WORKFLOW_REF:-vhanukaev1981/ClickAndSaveAI/.github/workflows/deploy-staging.yml@refs/heads/main}"' scripts/bootstrap-staging-wif.sh
-          grep -Fq "assertion.repository_id=='\${GITHUB_REPOSITORY_ID}'" scripts/bootstrap-staging-wif.sh
-          grep -Fq "assertion.repository_owner_id=='\${GITHUB_REPOSITORY_OWNER_ID}'" scripts/bootstrap-staging-wif.sh
-          grep -Fq "assertion.environment=='\${GITHUB_ENVIRONMENT}'" scripts/bootstrap-staging-wif.sh
-          grep -Fq "assertion.ref=='\${GITHUB_REF}'" scripts/bootstrap-staging-wif.sh
-          grep -Fq "assertion.job_workflow_ref=='\${GITHUB_JOB_WORKFLOW_REF}'" scripts/bootstrap-staging-wif.sh
+          script='scripts/bootstrap-staging-wif.sh'
+          grep -Fq 'GITHUB_REPOSITORY_ID="${GITHUB_REPOSITORY_ID:-1314210715}"' "$script"
+          grep -Fq 'GITHUB_REPOSITORY_OWNER_ID="${GITHUB_REPOSITORY_OWNER_ID:-64756523}"' "$script"
+          grep -Fq 'GITHUB_ENVIRONMENT="${GITHUB_ENVIRONMENT:-staging}"' "$script"
+          grep -Fq 'GITHUB_REF="${GITHUB_REF:-refs/heads/main}"' "$script"
+          grep -Fq 'GITHUB_JOB_WORKFLOW_REF="${GITHUB_JOB_WORKFLOW_REF:-vhanukaev1981/ClickAndSaveAI/.github/workflows/deploy-staging.yml@refs/heads/main}"' "$script"
+          grep -Fq "assertion.repository_id=='\${GITHUB_REPOSITORY_ID}'" "$script"
+          grep -Fq "assertion.repository_owner_id=='\${GITHUB_REPOSITORY_OWNER_ID}'" "$script"
+          grep -Fq "assertion.environment=='\${GITHUB_ENVIRONMENT}'" "$script"
+          grep -Fq "assertion.ref=='\${GITHUB_REF}'" "$script"
+          grep -Fq "assertion.job_workflow_ref=='\${GITHUB_JOB_WORKFLOW_REF}'" "$script"
 
           if grep -Eq 'service-accounts keys (create|upload)|iam service-accounts keys create' \
             scripts/bootstrap-staging-wif.sh scripts/verify-staging-wif.sh scripts/configure-github-staging-vars.sh; then
             echo 'Service-account key creation is forbidden for this bootstrap.' >&2
+            exit 1
+          fi
+
+      - name: Require deployer self-signing only for short-lived smoke tokens
+        shell: bash
+        run: |
+          set -euo pipefail
+          script='scripts/bootstrap-staging-wif.sh'
+          grep -Fq 'roles/iam.serviceAccountTokenCreator' "$script"
+          grep -Fq -- '--member="serviceAccount:${DEPLOY_SA_EMAIL}"' "$script"
+          grep -Fq 'Granting deployer Token Creator on itself for short-lived staging smoke tokens' "$script"
+
+          if grep -Eq 'projects add-iam-policy-binding.*serviceAccountTokenCreator|PROJECT_ROLES=.*serviceAccountTokenCreator' "$script"; then
+            echo 'Token Creator must not be granted project-wide.' >&2
             exit 1
           fi
 
