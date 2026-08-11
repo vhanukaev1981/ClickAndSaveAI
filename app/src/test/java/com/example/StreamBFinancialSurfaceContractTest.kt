@@ -6,12 +6,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StreamBFinancialSurfaceContractTest {
-    private val billsPath = "src/main/java/com/example/ui/screens/InvoicesScreen.kt"
-    private val savingsPath = "src/main/java/com/example/ui/screens/ProvidersScreen.kt"
+    private val previewPath = "src/main/java/com/example/ui/screens/ProductPreviewScreens.kt"
 
     @Test
-    fun billsRemainSpendFirstAndUseSharedFinancialDesignTokens() {
-        val bills = File(billsPath).readText()
+    fun billsRemainRecognitionFirstAndUseSharedFinancialDesignTokens() {
+        val preview = File(previewPath).readText()
 
         listOf(
             "FinancialDesignTokens.screenHorizontalPadding",
@@ -21,81 +20,60 @@ class StreamBFinancialSurfaceContractTest {
             "FinancialDesignTokens.cardRadius",
             "FinancialDesignTokens.cardPadding"
         ).forEach { token ->
-            assertTrue("Bills lost shared design token $token", bills.contains(token))
+            assertTrue("Product Preview lost shared design token $token", preview.contains(token))
         }
 
-        assertTrue(bills.contains("bills_monthly_overview"))
-        assertTrue(bills.contains("bills_action_feedback"))
-        assertTrue(bills.contains("הוצאה חודשית מזוהה"))
-        assertFalse(
-            "Bills must not present local potential as verified savings",
-            bills.contains("חיסכון פוטנציאלי")
-        )
+        assertTrue(preview.contains("product_bills_screen"))
+        assertTrue(preview.contains("חשבונות שזוהו"))
+        assertTrue(preview.contains("החשבון זוהה"))
+        assertFalse("Primary Bills must not expose manual expense entry", preview.contains("add_manual_bill"))
+        assertFalse("Primary Bills must not expose manual expense save", preview.contains("save_manual_bill"))
+        assertFalse("Primary Bills must not be spend-first", preview.contains("הוצאה חודשית מזוהה"))
     }
 
     @Test
-    fun manualBillFlowKeepsStableInputsCategoriesAndConfirmationHooks() {
-        val bills = File(billsPath).readText()
-
-        listOf(
-            "add_manual_bill",
-            "manual_bill_provider",
-            "manual_bill_amount",
-            "save_manual_bill",
-            "cancel_manual_bill",
-            "confirm_delete_bill",
-            "cancel_delete_bill"
-        ).forEach { tag ->
-            assertTrue("Bills lost E2E hook $tag", bills.contains(tag))
-        }
-
-        listOf(
-            "manual_bill_category_electricity",
-            "manual_bill_category_cellular",
-            "manual_bill_category_internet",
-            "manual_bill_category_communications",
-            "manual_bill_category_insurance",
-            "manual_bill_category_television"
-        ).forEach { tag ->
-            assertTrue("Manual bill category lost stable hook $tag", bills.contains(tag))
-        }
+    fun billsPaymentHandoffNeverPretendsToProcessPayment() {
+        val preview = File(previewPath).readText()
+        assertTrue(preview.contains("product_bills_payment_truth"))
+        assertTrue(preview.contains("תשלום נשאר אצל הספק"))
+        assertTrue(preview.contains("כתובת תשלום רשמית של הספק"))
+        assertTrue(preview.contains("Click&SaveAI אינה שומרת כרטיסי אשראי ואינה סולקת תשלומים"))
+        assertFalse("Preview must not contain a fabricated provider payment URL", preview.contains("https://pay."))
     }
 
     @Test
     fun savingsRemainVerifiedOfferFirstAndNeverInferAnnualEconomics() {
-        val savings = File(savingsPath).readText()
+        val preview = File(previewPath).readText()
 
-        assertTrue(savings.contains("CustomerPresentationPolicy.verifiedSavingsLabel"))
-        assertTrue(savings.contains("result.potentialAnnualSaving"))
+        assertTrue(preview.contains("potentialMonthlySaving?.takeIf(::positiveFinite)"))
+        assertTrue(preview.contains("potentialAnnualSaving?.takeIf(::positiveFinite)"))
+        assertTrue(preview.contains("EmeraldSavings"))
+        assertTrue(preview.contains("מחיר נוכחי:"))
+        assertTrue(preview.contains("חיסכון מאומת:"))
         assertFalse(
             "Savings UI must not synthesize annual economics from monthly savings",
-            savings.contains("result.potentialMonthlySaving * 12.0")
+            preview.contains("* 12.0") || preview.contains("*12.0")
         )
-        assertTrue(savings.contains("VIEW_ONLY").not() || savings.contains("פעולה ישירה מתוך האפליקציה עדיין אינה זמינה"))
     }
 
     @Test
-    fun savingsActionKeepsIntentConsentProgressRetryAndDuplicateProtection() {
-        val savings = File(savingsPath).readText()
+    fun savingsActionKeepsIntentConsentProgressAndDuplicateProtection() {
+        val preview = File(previewPath).readText()
 
         listOf(
-            "savings_action_starting",
-            "savings_action_submitting",
-            "savings_retry_refresh",
-            "savings_contact_name",
-            "savings_contact_phone",
-            "savings_contact_email",
-            "savings_contact_consent",
-            "submit_savings_request",
-            "cancel_savings_request",
-            "savings_action_success"
+            "product_savings_action_starting",
+            "product_savings_action_submitting",
+            "product_submit_provider_details",
+            "product_savings_action_success",
+            "product_savings_action_error"
         ).forEach { tag ->
-            assertTrue("Savings lost E2E/action hook $tag", savings.contains(tag))
+            assertTrue("Savings lost P0 E2E/action hook $tag", preview.contains(tag))
         }
 
-        assertTrue(savings.contains("recordSavingsActionStarted("))
-        assertTrue(savings.contains("actionEnabled = !actionIntentStarting && !actionSubmitting"))
-        assertTrue(savings.contains("if (actionSubmitting) return@SavingsActionDialog"))
-        assertTrue(savings.contains("תוכן תיבת הדואר ותמונת ההוצאות המלאה שלך אינם נשלחים"))
+        assertTrue(preview.contains("recordSavingsActionStarted("))
+        assertTrue(preview.contains("acceptSavingsOpportunity("))
+        assertTrue(preview.contains("enabled = !actionStarting && !actionSubmitting"))
+        assertTrue(preview.contains("if (actionSubmitting) return@ProductProviderConsentDialog"))
+        assertTrue(preview.contains("תוכן תיבת הדואר ונתוני הוצאות אחרים אינם נשלחים"))
     }
 }
