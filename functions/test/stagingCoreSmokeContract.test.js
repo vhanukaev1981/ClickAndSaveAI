@@ -135,9 +135,19 @@ test("deployment runs authenticated staging truth smoke only after Firebase depl
   assert.ok(smokeIndex > deployIndex, "staging smoke must run only after Firebase deploy");
   assert.match(workflow, /STAGING_TEST_FIREBASE_REFRESH_TOKEN/);
   assert.match(workflow, /STAGING_APPCHECK_DEBUG_TOKEN/);
-  assert.match(workflow, /STAGING_FIREBASE_API_KEY/);
-  assert.match(workflow, /STAGING_APPCHECK_APP_ID/);
   assert.match(workflow, /node scripts\/staging-core-smoke\.mjs/);
   assert.match(workflow, /actions\/upload-artifact@v4/);
   assert.match(workflow, /staging-core-smoke\.json/);
+});
+
+test("deployment derives Firebase API key and Android app ID from the already-provisioned staging google-services config", () => {
+  const workflow = fs.readFileSync(workflowPath, "utf8");
+
+  assert.match(workflow, /STAGING_GOOGLE_SERVICES_JSON_B64/);
+  assert.match(workflow, /Derive staging Firebase smoke config/);
+  assert.match(workflow, /com\.aistudio\.clickandsaveai\.app/);
+  assert.match(workflow, /STAGING_FIREBASE_API_KEY=/);
+  assert.match(workflow, /STAGING_APPCHECK_APP_ID=/);
+  assert.doesNotMatch(workflow, /secrets\.STAGING_FIREBASE_API_KEY/);
+  assert.doesNotMatch(workflow, /vars\.STAGING_APPCHECK_APP_ID/);
 });
