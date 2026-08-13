@@ -16,12 +16,21 @@ import com.example.data.local.WatchlistItem
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.AuthState
 import com.example.data.repository.BackendRepository
+import com.example.data.repository.FinancialHomeResult
+import com.example.data.repository.FinancialRefreshReason
+import com.example.data.repository.FinancialSessionRecovery
+import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.GmailRepository
+import com.example.data.repository.GmailScanResult
 import com.example.data.repository.GmailSyncState
 import com.example.data.repository.ProviderLeadRequest
 import com.example.data.repository.ProviderLeadResult
 import com.example.data.repository.ShoppingRepository
 import com.example.data.repository.UserSession
+import com.example.data.repository.financialHomeOrNull
+import com.example.data.repository.latestScanOrNull
+import com.example.data.repository.observedRecurringMonthlySpendOrNull
+import com.example.data.repository.recurringServiceCountOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -77,6 +86,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val authRepository = AuthRepository(application)
     val gmailRepository = GmailRepository(shoppingRepository, backendRepository)
+
+    private val financialSessionRecovery = FinancialSessionRecovery(
+        getConnectionStatus = { gmailRepository.refreshConnectionStatus().getOrThrow() },
+        recoverInvoices = { gmailRepository.scanInvoices().getOrThrow() },
+        getFinancialHome = { backendRepository.getFinancialHome() }
+    )
+
+    private val _financialSyncState =
+        MutableStateFlow<FinancialSyncState>(FinancialSyncState.Unauthenticated)
+    val financialSyncState: StateFlow<FinancialSyncState> = _financialSyncState.asStateFlow()
+
+    val authoritativeFinancialHome: StateFlow<FinancialHomeResult?> = financialSyncState
+        .map { it.financialHomeOrNull }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val latestRecoveredGmailScan: StateFlow<GmailScanResult?> = financialSyncState
+        .map { it.latestScanOrNull }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val observedRecurringMonthlySpend: StateFlow<Double?> = financialSyncState
+        .map { it.observedRecurringMonthlySpendOrNull }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val recurringServiceCount: StateFlow<Int?> = financialSyncState
+        .map { it.recurringServiceCountOrNull }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val userSession: StateFlow<UserSession> = authRepository.userSession
     val authState: StateFlow<AuthState> = authRepository.authState
@@ -200,11 +235,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         showPushBanner.value = false
     }
 
+    fun refreshFinancialSession(reason: FinancialRefreshReason) {
+        viewModelScope.launch { recoverFinancialSession(reason) }
+    }
+
+    @Suppress("UNUSED_PARAMETER")
+    private suspend fun recoverFinancialSession(reason: FinancialRefreshReason) {
+        if (!userSession.value.isAuthenticated) {
+            _financialSyncState.value = FinancialSyncState.Unauthenticated
+            return
+        }
+
+        financialSessionRecovery.refresh(
+            previous = _financialSyncState.value
+        ) { state ->
+            _financialSyncState.value = state
+        }
+    }
+
     fun completeGmailAuthorization(serverAuthCode: String) {
         viewModelScope.launch {
             val email = userSession.value.email
             val connected = gmailRepository.connectWithAuthorizationCode(serverAuthCode, email)
-            if (connected.isSuccess) gmailRepository.scanInvoices()
+            if (connected.isSuccess) {
+                recoverFinancialSession(FinancialRefreshReason.GMAIL_CONNECTED)
+            }
         }
     }
 
@@ -214,11 +269,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun triggerGmailSync() {
-        viewModelScope.launch { gmailRepository.scanInvoices() }
+        refreshFinancialSession(FinancialRefreshReason.MANUAL_SCAN)
     }
 
     fun disconnectGmail() {
-        viewModelScope.launch { gmailRepository.disconnectGmail() }
+        viewModelScope.launch {
+            val disconnected = gmailRepository.disconnectGmail()
+            if (disconnected.isSuccess) {
+                _financialSyncState.value = FinancialSyncState.Disconnected
+            }
+        }
     }
 
     fun signInWithGoogle(activity: Activity, webClientId: String) {
@@ -227,7 +287,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun signOut() {
         viewModelScope.launch {
-            gmailRepository.disconnectGmail()
+            _financialSyncState.value = FinancialSyncState.Unauthenticated
             authRepository.signOut()
         }
     }

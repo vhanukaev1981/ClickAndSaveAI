@@ -17,6 +17,35 @@ sealed class GmailSyncState {
     data class Error(val errorMessage: String, val isAuthRequired: Boolean) : GmailSyncState()
 }
 
+internal suspend fun projectGmailScanToLocalCache(
+    shoppingRepository: ShoppingRepository,
+    result: GmailScanResult
+) {
+    // Only explicit backend removals are deletion evidence. Never infer stale Gmail rows
+    // merely because a source is absent from one scan response, and never touch manual bills.
+    shoppingRepository.deleteObservedGmailInvoicesBySourceIds(result.removedSourceMessageIds)
+
+    result.invoices.forEach { invoice ->
+        shoppingRepository.upsertObservedGmailInvoice(
+            InvoiceItem(
+                providerName = invoice.providerName,
+                category = invoice.category,
+                monthlyCost = invoice.monthlyCost,
+                recommendedAlternative = "טרם בוצעה השוואה מאומתת",
+                alternativeMonthlyCost = 0.0,
+                potentialMonthlySavings = 0.0,
+                status = "יובא מ-Gmail - ממתין לאימות",
+                isSwitchRequested = false,
+                accountNumber = "",
+                billDate = invoice.receivedDate,
+                sourceMessageId = invoice.sourceMessageId,
+                sourceType = "GMAIL_READONLY",
+                verificationStatus = invoice.verificationStatus
+            )
+        )
+    }
+}
+
 class GmailRepository(
     private val shoppingRepository: ShoppingRepository,
     private val backendRepository: BackendRepository = BackendRepository()
@@ -121,30 +150,8 @@ class GmailRepository(
         _syncState.value = GmailSyncState.Syncing("סורק בשרת חשבוניות וחיובים רלוונטיים...", 45)
         return runCatching {
             val result = backendRepository.scanGmailInvoices()
+            projectGmailScanToLocalCache(shoppingRepository, result)
 
-            // The backend audit is authoritative. Remove parser-obsolete source rows first so
-            // a body->PDF migration cannot temporarily appear as two separate household bills.
-            shoppingRepository.deleteObservedGmailInvoicesBySourceIds(result.removedSourceMessageIds)
-
-            result.invoices.forEach { invoice ->
-                shoppingRepository.upsertObservedGmailInvoice(
-                    InvoiceItem(
-                        providerName = invoice.providerName,
-                        category = invoice.category,
-                        monthlyCost = invoice.monthlyCost,
-                        recommendedAlternative = "טרם בוצעה השוואה מאומתת",
-                        alternativeMonthlyCost = 0.0,
-                        potentialMonthlySavings = 0.0,
-                        status = "יובא מ-Gmail - ממתין לאימות",
-                        isSwitchRequested = false,
-                        accountNumber = "",
-                        billDate = invoice.receivedDate,
-                        sourceMessageId = invoice.sourceMessageId,
-                        sourceType = "GMAIL_READONLY",
-                        verificationStatus = invoice.verificationStatus
-                    )
-                )
-            }
             _lastScanTime.value = "עכשיו"
             val removedCount = result.removedSourceMessageIds.size
             val recoveredCount = (result.invoices.size - result.importedCount).coerceAtLeast(0)
