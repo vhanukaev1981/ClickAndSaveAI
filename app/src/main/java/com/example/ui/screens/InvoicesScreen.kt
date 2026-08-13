@@ -14,14 +14,12 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,37 +33,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.data.local.InvoiceItem
+import com.example.data.repository.BackendInvoice
+import com.example.data.repository.FinancialHomeResult
 import com.example.data.repository.FinancialSyncState
+import com.example.data.repository.latestScanOrNull
 import com.example.ui.MainViewModel
 import com.example.ui.theme.TechBluePrimary
 
 @Composable
 fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
-    val invoices by viewModel.invoices.collectAsState()
     val financialSyncState by viewModel.financialSyncState.collectAsState()
     val financialHome by viewModel.authoritativeFinancialHome.collectAsState()
     var selectedCategory by remember { mutableStateOf("הכל") }
     val categories = listOf("הכל", "חשמל", "סלולר", "אינטרנט", "תקשורת", "ביטוח", "טלוויזיה")
-    val filteredInvoices = if (selectedCategory == "הכל") invoices else invoices.filter { it.category == selectedCategory }
-    val observedMonthlySpend = financialHome?.context?.observedRecurringMonthlySpend
+    val authoritativeBills = financialSyncState.latestScanOrNull?.invoices
+    val filteredBills = authoritativeBills?.let { bills ->
+        if (selectedCategory == "הכל") bills else bills.filter { it.category == selectedCategory }
+    }
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag("invoices_screen"),
+        modifier = Modifier.fillMaxSize().testTag("invoices_screen"),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("החשבונות שלי", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(
-                    "החשבונות שלי",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "כל החיובים שהמערכת זיהתה במקום אחד.",
+                    "חיובים שנצפו במקור הסמכותי המחובר.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -77,31 +72,14 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                 shape = RoundedCornerShape(22.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        formatAuthoritativeMoney(observedMonthlySpend),
+                        formatAuthoritativeMoney(financialHome?.context?.observedRecurringMonthlySpend),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        "הוצאה חודשית מזוהה",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        financialTruthStatus(financialSyncState),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        "חיסכון יוצג רק אחרי אימות של הצעה מתאימה.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TechBluePrimary,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text("הוצאה חודשית חוזרת שנצפתה")
+                    Text(financialTruthStatus(financialSyncState), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -118,40 +96,21 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
             }
         }
 
-        if (filteredInvoices.isEmpty()) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(18.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Info, contentDescription = null)
-                        Spacer(Modifier.size(10.dp))
-                        Text(
-                            if (selectedCategory == "הכל") {
-                                when (financialSyncState) {
-                                    FinancialSyncState.CheckingConnection,
-                                    FinancialSyncState.Recovering -> "המידע עדיין נטען. לא יוצג אפס במקום מידע שעדיין אינו ידוע."
-                                    is FinancialSyncState.Failed -> "הסנכרון לא הושלם. לא הומצאו נתונים חלופיים."
-                                    is FinancialSyncState.Partial -> "המידע חלקי כרגע. מוצגים רק נתונים שכבר אומתו."
-                                    else -> "עדיין לא זוהו חשבונות מהמקור המחובר."
-                                }
-                            } else {
-                                "אין כרגע חשבונות בקטגוריה $selectedCategory."
-                            }
-                        )
-                    }
-                }
+        when {
+            filteredBills == null -> item {
+                BillsStateCard(unknownBillsMessage(financialSyncState))
             }
-        } else {
-            items(filteredInvoices, key = { it.id }) { invoice ->
-                InvoiceCard(
-                    invoice = invoice,
-                    onDelete = { viewModel.deleteInvoice(invoice.id) }
+            filteredBills.isEmpty() -> item {
+                BillsStateCard(
+                    if (selectedCategory == "הכל") {
+                        "הסריקה הסמכותית הזמינה לא החזירה חשבונות מזוהים. זהו מצב ריק ידוע של אותה סריקה."
+                    } else {
+                        "בסריקה הסמכותית הזמינה אין חשבונות בקטגוריה $selectedCategory."
+                    }
                 )
+            }
+            else -> items(filteredBills, key = { it.sourceMessageId }) { bill ->
+                AuthoritativeBillCard(bill = bill, financialHome = financialHome)
             }
         }
 
@@ -160,14 +119,11 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
                     Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = TechBluePrimary)
                     Spacer(Modifier.size(10.dp))
                     Text(
-                        "חשבונות הם מקור המידע. אם נמצאת חלופה טובה ומאומתת, הפעולה תופיע במסך חיסכון — לא צריך לבקש בדיקה מכל חשבון בנפרד.",
+                        "רשומה מוצגת רק כאשר היא קיימת בתוצאת הסריקה הסמכותית. שדות חסרים נשארים לא ידועים.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -179,6 +135,67 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
     val receiptScanKeptForApiCompatibility = onOpenReceiptScan
 }
 
+@Composable
+private fun AuthoritativeBillCard(
+    bill: BackendInvoice,
+    financialHome: FinancialHomeResult?
+) {
+    val recurring = financialHome?.context?.recurringServices?.firstOrNull {
+        it.providerName == bill.providerName && it.category == bill.category
+    }
+    val opportunity = financialHome?.opportunities?.firstOrNull {
+        it.providerName == bill.providerName && it.category == bill.category
+    }
+
+    Card(shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(bill.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
+            Text(bill.category.ifBlank { "קטגוריה לא ידועה" }, style = MaterialTheme.typography.bodySmall)
+            Text("סכום שנצפה: ${money(bill.monthlyCost)}", fontWeight = FontWeight.SemiBold)
+            Text(
+                if (recurring != null) {
+                    "חיוב חוזר שזוהה • ${recurring.observationCount} תצפיות"
+                } else {
+                    "מצב מחזור החיוב לא ידוע"
+                },
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                "מקור: Gmail קריאה בלבד • ${bill.verificationStatus}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (opportunity != null) {
+                Text("מצב הזדמנות: ${opportunity.status}", style = MaterialTheme.typography.bodySmall)
+                opportunity.potentialMonthlySaving?.let { saving ->
+                    Text("חיסכון פוטנציאלי: ${money(saving)} לחודש", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BillsStateCard(message: String) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Info, contentDescription = null)
+            Spacer(Modifier.size(10.dp))
+            Text(message)
+        }
+    }
+}
+
+private fun unknownBillsMessage(state: FinancialSyncState): String = when (state) {
+    FinancialSyncState.Unauthenticated -> "נדרשת התחברות כדי לדעת אילו חשבונות קיימים."
+    FinancialSyncState.CheckingConnection -> "מצב החשבונות עדיין לא ידוע; בודקים את החיבור."
+    FinancialSyncState.Disconnected -> "Gmail אינו מחובר, ולכן אין כרגע מקור סמכותי לחשבונות."
+    FinancialSyncState.Recovering -> "החשבונות עדיין נטענים; רשימה ריקה לא תוצג כמידע אמיתי."
+    is FinancialSyncState.Partial -> "כיסוי החשבונות עדיין אינו ידוע במלואו."
+    is FinancialSyncState.Failed -> "טעינת החשבונות נכשלה; לא נציג רשימה ריקה במקום שגיאה."
+    is FinancialSyncState.Ready -> "מצב החשבונות לא ידוע."
+}
+
 private fun financialTruthStatus(state: FinancialSyncState): String = when (state) {
     FinancialSyncState.Unauthenticated -> "נדרשת התחברות כדי לטעון מידע סמכותי."
     FinancialSyncState.CheckingConnection -> "בודקים את מקור המידע."
@@ -187,51 +204,4 @@ private fun financialTruthStatus(state: FinancialSyncState): String = when (stat
     is FinancialSyncState.Partial -> "המידע חלקי; ערכים חסרים נשארים לא ידועים."
     is FinancialSyncState.Failed -> "הסנכרון נכשל; ערכים חסרים נשארים לא ידועים."
     is FinancialSyncState.Ready -> "הנתונים מבוססים על הסנכרון הסמכותי האחרון."
-}
-
-@Composable
-private fun InvoiceCard(invoice: InvoiceItem, onDelete: () -> Unit) {
-    Card(shape = RoundedCornerShape(18.dp)) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(invoice.providerName, fontWeight = FontWeight.Bold)
-                    Text(
-                        invoice.category,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.DeleteOutline, contentDescription = "מחק")
-                }
-            }
-            Text(
-                "₪${String.format("%.2f", invoice.monthlyCost)} לחודש",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                customerStatus(invoice),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-private fun customerStatus(invoice: InvoiceItem): String {
-    val raw = "${invoice.status} ${invoice.verificationStatus}".uppercase()
-    return when {
-        raw.contains("LEAD") || raw.contains("CRM") || raw.contains("ליד") -> "בקשת חיסכון קודמת נמצאת בטיפול"
-        raw.contains("UNVERIFIED") || raw.contains("NOT_FOUND") || raw.contains("GMAIL_READONLY") -> "החשבון זוהה ונמצא בבדיקה"
-        else -> "נבדק אוטומטית להזדמנויות חיסכון"
-    }
 }
