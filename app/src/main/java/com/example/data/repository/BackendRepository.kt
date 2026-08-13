@@ -79,8 +79,8 @@ data class FinancialCategorySummary(
 )
 
 data class FinancialHomeContext(
-    val observedRecurringMonthlySpend: Double,
-    val recurringServiceCount: Int,
+    val observedRecurringMonthlySpend: Double?,
+    val recurringServiceCount: Int?,
     val isCompleteHouseholdSpend: Boolean,
     val sourceCoverage: List<String>,
     val recurringServices: List<FinancialRecurringService>,
@@ -256,9 +256,12 @@ class BackendRepository(
                 FinancialRecurringService(
                     providerName = map["providerName"] as? String ?: return@mapNotNull null,
                     category = map["category"] as? String ?: "",
-                    latestMonthlyCost = (map["latestMonthlyCost"] as? Number)?.toDouble() ?: 0.0,
-                    observationCount = (map["observationCount"] as? Number)?.toInt() ?: 0,
-                    observedMonths = (map["observedMonths"] as? Number)?.toInt() ?: 0
+                    latestMonthlyCost = (map["latestMonthlyCost"] as? Number)?.toDouble()
+                        ?: return@mapNotNull null,
+                    observationCount = (map["observationCount"] as? Number)?.toInt()
+                        ?: return@mapNotNull null,
+                    observedMonths = (map["observedMonths"] as? Number)?.toInt()
+                        ?: return@mapNotNull null
                 )
             }
         val categories = (contextMap["categories"] as? List<*>)
@@ -267,12 +270,13 @@ class BackendRepository(
                 val map = item.asStringMapOrNull() ?: return@mapNotNull null
                 FinancialCategorySummary(
                     category = map["category"] as? String ?: return@mapNotNull null,
-                    observedMonthlySpend = (map["observedMonthlySpend"] as? Number)?.toDouble() ?: 0.0
+                    observedMonthlySpend = (map["observedMonthlySpend"] as? Number)?.toDouble()
+                        ?: return@mapNotNull null
                 )
             }
         val context = FinancialHomeContext(
-            observedRecurringMonthlySpend = (contextMap["observedRecurringMonthlySpend"] as? Number)?.toDouble() ?: 0.0,
-            recurringServiceCount = (contextMap["recurringServiceCount"] as? Number)?.toInt() ?: 0,
+            observedRecurringMonthlySpend = (contextMap["observedRecurringMonthlySpend"] as? Number)?.toDouble(),
+            recurringServiceCount = (contextMap["recurringServiceCount"] as? Number)?.toInt(),
             isCompleteHouseholdSpend = contextMap["isCompleteHouseholdSpend"] as? Boolean ?: false,
             sourceCoverage = (contextMap["sourceCoverage"] as? List<*>)?.map { it.toString() }.orEmpty(),
             recurringServices = recurringServices,
@@ -287,10 +291,14 @@ class BackendRepository(
                     type = map["type"] as? String ?: "",
                     providerName = map["providerName"] as? String ?: "",
                     category = map["category"] as? String ?: "",
-                    currentMonthlyCost = (map["currentMonthlyCost"] as? Number)?.toDouble() ?: 0.0,
-                    previousMonthlyCost = (map["previousMonthlyCost"] as? Number)?.toDouble() ?: 0.0,
-                    monthlyIncrease = (map["monthlyIncrease"] as? Number)?.toDouble() ?: 0.0,
-                    percentIncrease = (map["percentIncrease"] as? Number)?.toDouble() ?: 0.0,
+                    currentMonthlyCost = (map["currentMonthlyCost"] as? Number)?.toDouble()
+                        ?: return@mapNotNull null,
+                    previousMonthlyCost = (map["previousMonthlyCost"] as? Number)?.toDouble()
+                        ?: return@mapNotNull null,
+                    monthlyIncrease = (map["monthlyIncrease"] as? Number)?.toDouble()
+                        ?: return@mapNotNull null,
+                    percentIncrease = (map["percentIncrease"] as? Number)?.toDouble()
+                        ?: return@mapNotNull null,
                     severity = map["severity"] as? String ?: "INFO"
                 )
             }
@@ -307,10 +315,14 @@ class BackendRepository(
                     providerName = map["providerName"] as? String ?: "",
                     category = map["category"] as? String ?: "",
                     serviceType = map["serviceType"] as? String ?: "",
-                    currentMonthlyCost = (map["currentMonthlyCost"] as? Number)?.toDouble() ?: 0.0,
-                    previousMonthlyCost = (map["previousMonthlyCost"] as? Number)?.toDouble() ?: 0.0,
-                    monthlyIncrease = (map["monthlyIncrease"] as? Number)?.toDouble() ?: 0.0,
-                    percentIncrease = (map["percentIncrease"] as? Number)?.toDouble() ?: 0.0,
+                    currentMonthlyCost = (map["currentMonthlyCost"] as? Number)?.toDouble()
+                        ?: return@mapNotNull null,
+                    previousMonthlyCost = (map["previousMonthlyCost"] as? Number)?.toDouble()
+                        ?: return@mapNotNull null,
+                    monthlyIncrease = (map["monthlyIncrease"] as? Number)?.toDouble()
+                        ?: return@mapNotNull null,
+                    percentIncrease = (map["percentIncrease"] as? Number)?.toDouble()
+                        ?: return@mapNotNull null,
                     potentialMonthlySaving = (map["potentialMonthlySaving"] as? Number)?.toDouble(),
                     potentialAnnualSaving = (map["potentialAnnualSaving"] as? Number)?.toDouble(),
                     recommendationAction = map["recommendationAction"] as? String ?: "",
@@ -319,7 +331,7 @@ class BackendRepository(
                             offerId = it["offerId"] as? String ?: return@let null,
                             providerName = it["providerName"] as? String ?: "",
                             pricingModel = it["pricingModel"] as? String ?: "",
-                            monthlyPrice = (it["monthlyPrice"] as? Number)?.toDouble() ?: 0.0,
+                            monthlyPrice = (it["monthlyPrice"] as? Number)?.toDouble() ?: return@let null,
                             effectiveMonthlyPrice = (it["effectiveMonthlyPrice"] as? Number)?.toDouble(),
                             priceGuaranteedMonths = (it["priceGuaranteedMonths"] as? Number)?.toInt(),
                             requiredRecurringFees = (it["requiredRecurringFees"] as? Number)?.toDouble(),
@@ -329,7 +341,7 @@ class BackendRepository(
                             serviceType = it["serviceType"] as? String ?: "",
                             verifiedAt = it["verifiedAt"] as? String ?: "",
                             validUntil = it["validUntil"] as? String ?: "",
-                            userFitScore = (it["userFitScore"] as? Number)?.toDouble() ?: 0.0
+                            userFitScore = (it["userFitScore"] as? Number)?.toDouble() ?: return@let null
                         )
                     }
                 )
