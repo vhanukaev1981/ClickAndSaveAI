@@ -58,6 +58,11 @@ const gmailReliableScanFunctions = require("./gmailReliableScanFunctions");
 const gmailReliabilityGuard = require("./gmailReliabilityGuard");
 const gmailInvoiceNotificationFunctions = require("./gmailInvoiceNotificationFunctions");
 
+// Preserve the historical public-module identity contract while routing public scans through
+// Block 3 reliability semantics. gmailReliableScanFunctions captured the original stable v6
+// handler before this assignment, so backfill/recovery still execute that bounded engine.
+gmailScanV5Functions.scanGmailInvoices = gmailReliableScanFunctions.scanGmailInvoices;
+
 module.exports = {
   ...coreFunctions,
   ...pushFunctions,
