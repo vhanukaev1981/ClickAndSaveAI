@@ -133,8 +133,12 @@ class MainViewModel(
 
     val userSession: StateFlow<UserSession> = authRepository.userSession
     val authState: StateFlow<AuthState> = authRepository.authState
-    val isGmailConnected: StateFlow<Boolean> = gmailRepository.isConnected
-    val connectedEmail: StateFlow<String> = gmailRepository.connectedEmail
+    val isGmailConnected: StateFlow<Boolean> = financialSyncState
+        .map { it.gmailConnectionOrNull?.connected == true }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val connectedEmail: StateFlow<String> = financialSyncState
+        .map { it.gmailConnectionOrNull?.email.orEmpty() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
     val lastScanTime: StateFlow<String> = gmailRepository.lastScanTime
 
     private val _isSyncingGmail = MutableStateFlow(false)
@@ -362,9 +366,7 @@ class MainViewModel(
         viewModelScope.launch {
             val email = userSession.value.email
             val connected = gmailRepository.connectWithAuthorizationCode(serverAuthCode, email)
-            if (connected.isSuccess) {
-                recoverFinancialSession(FinancialRefreshReason.GMAIL_CONNECTED)
-            }
+            if (connected.isSuccess) recoverFinancialSession(FinancialRefreshReason.GMAIL_CONNECTED)
         }
     }
 
@@ -380,9 +382,7 @@ class MainViewModel(
     fun disconnectGmail() {
         viewModelScope.launch {
             val disconnected = gmailRepository.disconnectGmail()
-            if (disconnected.isSuccess) {
-                _financialSyncState.value = FinancialSyncState.Disconnected
-            }
+            if (disconnected.isSuccess) _financialSyncState.value = FinancialSyncState.Disconnected
         }
     }
 
@@ -408,7 +408,29 @@ class MainViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val savingsRecords: StateFlow<List<SavingsRecord>> = shoppingRepository.savingsRecords
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    val invoices: StateFlow<List<InvoiceItem>> = shoppingRepository.invoices
+
+    val invoices: StateFlow<List<InvoiceItem>> = financialSyncState
+        .map { state ->
+            state.latestScanOrNull?.invoices?.map { invoice ->
+                InvoiceItem(
+                    id = invoice.sourceMessageId.hashCode().toLong(),
+                    providerName = invoice.providerName,
+                    category = invoice.category,
+                    monthlyCost = invoice.monthlyCost,
+                    recommendedAlternative = "לא ידוע",
+                    alternativeMonthlyCost = 0.0,
+                    potentialMonthlySavings = 0.0,
+                    status = "נמצא בסריקה הסמכותית",
+                    isSwitchRequested = false,
+                    dateAdded = 0L,
+                    accountNumber = "",
+                    billDate = invoice.receivedDate,
+                    sourceMessageId = invoice.sourceMessageId,
+                    sourceType = "GMAIL_READONLY",
+                    verificationStatus = invoice.verificationStatus
+                )
+            }.orEmpty()
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val totalMonthlySavingsPotential: StateFlow<Double> = shoppingRepository.totalMonthlySavingsPotential
