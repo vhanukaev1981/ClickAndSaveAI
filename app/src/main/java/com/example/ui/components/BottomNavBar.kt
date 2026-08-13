@@ -2,10 +2,12 @@ package com.example.ui.components
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Savings
@@ -77,7 +79,21 @@ fun BottomNavBar(
             onClick = { onTabSelected(3) },
             icon = {
                 Icon(
-                    if (selectedTab == 3) Icons.Filled.Person else Icons.Outlined.Person,
+                    if (selectedTab == 3) Icons.Filled.History else Icons.Outlined.History,
+                    contentDescription = "פעילות וסנכרון"
+                )
+            },
+            label = { Text("פעילות") },
+            colors = navColors(),
+            modifier = Modifier.testTag("nav_activity")
+        )
+
+        NavigationBarItem(
+            selected = selectedTab == 4,
+            onClick = { onTabSelected(4) },
+            icon = {
+                Icon(
+                    if (selectedTab == 4) Icons.Filled.Person else Icons.Outlined.Person,
                     contentDescription = "פרופיל והגדרות"
                 )
             },

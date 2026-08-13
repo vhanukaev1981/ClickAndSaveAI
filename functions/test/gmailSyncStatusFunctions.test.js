@@ -36,3 +36,56 @@ test("disconnected account never requests parser backfill", () => {
   assert.equal(result.connected, false);
   assert.equal(result.upgradeRequired, false);
 });
+
+test("authoritative product context preserves unknown values", () => {
+  const result = status._normalizeFinancialHomeContext({
+    sourceCoverage: ["GMAIL_READONLY"],
+    isCompleteHouseholdSpend: false,
+  });
+
+  assert.equal(result.observedRecurringMonthlySpend, null);
+  assert.equal(result.recurringServiceCount, null);
+  assert.deepEqual(result.sourceCoverage, ["GMAIL_READONLY"]);
+});
+
+test("authoritative activity ledger contains only timestamp-backed events", () => {
+  const result = status._buildFinancialActivityLedger({
+    connection: {
+      consentedAt: "2026-08-13T08:00:00.000Z",
+      lastScanAt: "2026-08-13T09:00:00.000Z",
+    },
+    imports: [{
+      id: "import-1",
+      importedAt: "2026-08-13T08:30:00.000Z",
+      invoices: [{
+        sourceMessageId: "source-1",
+        providerName: "Provider A",
+        category: "INTERNET",
+        monthlyCost: 99,
+        verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
+      }],
+    }],
+  });
+
+  assert.deepEqual(result.events.map((event) => event.type), [
+    "SCAN_COMPLETED",
+    "BILL_DETECTED",
+    "GMAIL_CONNECTED",
+  ]);
+  assert.equal(result.events[1].observedAmount, 99);
+  assert.equal(result.events[1].providerName, "Provider A");
+  assert.equal(result.isCompleteHistory, false);
+});
+
+test("missing activity timestamps never fabricate history", () => {
+  const result = status._buildFinancialActivityLedger({
+    connection: {},
+    imports: [{ id: "import-1", invoices: [{ providerName: "Provider A" }] }],
+  });
+  assert.deepEqual(result.events, []);
+});
+
+test("entry exposes the authoritative product-state callables", () => {
+  assert.equal(entry.getFinancialHome, status.getFinancialHome);
+  assert.equal(entry.getFinancialActivity, status.getFinancialActivity);
+});

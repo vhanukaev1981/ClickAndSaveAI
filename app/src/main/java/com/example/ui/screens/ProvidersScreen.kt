@@ -15,7 +15,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Savings
-import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -28,7 +27,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,9 +38,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.data.repository.BackendRepository
-import com.example.data.repository.FinancialHomeResult
 import com.example.data.repository.FinancialOpportunity
+import com.example.data.repository.FinancialRefreshReason
+import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.OpportunityActionRepository
 import com.example.ui.MainViewModel
 import com.example.ui.theme.TechBluePrimary
@@ -59,33 +57,13 @@ private val lockedOpportunityStatuses = setOf(
 @Composable
 fun ProvidersScreen(viewModel: MainViewModel) {
     val session by viewModel.userSession.collectAsState()
-    val isGmailConnected by viewModel.isGmailConnected.collectAsState()
-    val backendRepository = remember { BackendRepository() }
+    val financialSyncState by viewModel.financialSyncState.collectAsState()
+    val financialHome by viewModel.authoritativeFinancialHome.collectAsState()
     val actionRepository = remember { OpportunityActionRepository() }
     val scope = rememberCoroutineScope()
-    var financialHome by remember { mutableStateOf<FinancialHomeResult?>(null) }
-    var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     var selectedOpportunity by remember { mutableStateOf<FinancialOpportunity?>(null) }
     var actionMessage by remember { mutableStateOf("") }
-    var refreshKey by remember { mutableStateOf(0) }
-
-    LaunchedEffect(session.isAuthenticated, isGmailConnected, refreshKey) {
-        if (!session.isAuthenticated || !isGmailConnected) {
-            financialHome = null
-            return@LaunchedEffect
-        }
-        loading = true
-        runCatching { backendRepository.getFinancialHome() }
-            .onSuccess {
-                financialHome = it
-                error = ""
-            }
-            .onFailure {
-                error = it.localizedMessage ?: "לא ניתן לטעון כרגע את הזדמנויות החיסכון."
-            }
-        loading = false
-    }
 
     Column(
         modifier = Modifier
@@ -116,66 +94,92 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                             )
                         }
                         Text(
-                            "המערכת מדרגת לפי הערך עבורך. מעבר מתוך Click&SaveAI זמין רק כשקיים מסלול ספק מאומת שניתן לעקוב אחריו עד להשלמת העסקה.",
+                            "המערכת מדרגת הזדמנויות לפי הערך הפוטנציאלי עבורך. חיסכון מוצג כהערכה עד שהוא מתממש בפועל. יצירת בקשה אינה אישור שהפרטים נמסרו לספק.",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
             }
 
-            if (!session.isAuthenticated || !isGmailConnected) {
-                item {
-                    MessageCard(
-                        title = "המערכת עדיין לא יכולה לעבוד ברקע",
-                        body = "התחבר וחבר Gmail פעם אחת. לאחר מכן Click&SaveAI תזהה ותבדוק הזדמנויות עבורך אוטומטית."
-                    )
-                }
-            } else if (loading && financialHome == null) {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                }
-            } else {
-                val opportunities = financialHome?.opportunities.orEmpty()
-                if (opportunities.isEmpty()) {
+            when {
+                financialSyncState == FinancialSyncState.Unauthenticated ||
+                    financialSyncState == FinancialSyncState.Disconnected -> {
                     item {
                         MessageCard(
-                            title = "ה-AI ממשיך לבדוק",
-                            body = "כרגע אין צורך לחפש ידנית. אם יזוהה שירות שניתן לייעל או תימצא הצעה מתאימה, היא תופיע כאן אוטומטית."
+                            title = "עדיין אין מספיק מידע",
+                            body = "יש להשלים חיבור מאומת לפני שניתן להציג הזדמנויות חיסכון סמכותיות."
                         )
                     }
-                } else {
-                    items(opportunities, key = { it.id }) { opportunity ->
-                        OpportunityCard(
-                            opportunity = opportunity,
-                            onAccept = {
-                                if (opportunity.actionMode == IN_APP_PROVIDER_REQUEST) {
-                                    val displayedOfferId = opportunity.matchedOffer?.offerId.orEmpty()
-                                    if (displayedOfferId.isBlank()) {
-                                        error = "ההצעה השתנתה או אינה זמינה כרגע."
-                                    } else {
-                                        scope.launch {
-                                            runCatching {
-                                                actionRepository.recordSavingsActionStarted(
-                                                    opportunityId = opportunity.id,
-                                                    expectedOfferId = displayedOfferId
-                                                )
-                                            }.onSuccess {
-                                                error = ""
-                                                selectedOpportunity = opportunity
-                                            }.onFailure { throwable ->
-                                                error = throwable.localizedMessage
-                                                    ?: "לא ניתן להתחיל את בקשת החיסכון כרגע. ההצעה תיבדק מחדש לפני ניסיון נוסף."
+                }
+
+                (financialSyncState == FinancialSyncState.CheckingConnection ||
+                    financialSyncState == FinancialSyncState.Recovering) && financialHome == null -> {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                }
+
+                financialSyncState is FinancialSyncState.Failed && financialHome == null -> {
+                    item {
+                        MessageCard(
+                            title = "לא ניתן להשלים את הבדיקה",
+                            body = "המידע הפיננסי אינו זמין כרגע. לא הומצאו ערכי חיסכון חלופיים."
+                        )
+                    }
+                }
+
+                financialSyncState is FinancialSyncState.Partial && financialHome == null -> {
+                    item {
+                        MessageCard(
+                            title = "עדיין אין מספיק מידע",
+                            body = "הסנכרון חלקי ואין כרגע הקשר פיננסי מאומת להצגת חיסכון."
+                        )
+                    }
+                }
+
+                else -> {
+                    val opportunities = financialHome?.opportunities.orEmpty()
+                    if (opportunities.isEmpty()) {
+                        item {
+                            MessageCard(
+                                title = "ה-AI ממשיך לבדוק",
+                                body = "כרגע אין צורך לחפש ידנית. אם יזוהה שירות שניתן לייעל או תימצא הצעה מתאימה, היא תופיע כאן אוטומטית."
+                            )
+                        }
+                    } else {
+                        items(opportunities, key = { it.id }) { opportunity ->
+                            OpportunityCard(
+                                opportunity = opportunity,
+                                onAccept = {
+                                    if (opportunity.actionMode == IN_APP_PROVIDER_REQUEST) {
+                                        val displayedOfferId = opportunity.matchedOffer?.offerId.orEmpty()
+                                        if (displayedOfferId.isBlank()) {
+                                            error = "ההצעה השתנתה או אינה זמינה כרגע."
+                                        } else {
+                                            scope.launch {
+                                                runCatching {
+                                                    actionRepository.recordSavingsActionStarted(
+                                                        opportunityId = opportunity.id,
+                                                        expectedOfferId = displayedOfferId
+                                                    )
+                                                }.onSuccess {
+                                                    error = ""
+                                                    selectedOpportunity = opportunity
+                                                }.onFailure { throwable ->
+                                                    error = throwable.localizedMessage
+                                                        ?: "לא ניתן להתחיל את בקשת החיסכון כרגע. ההצעה תיבדק מחדש לפני ניסיון נוסף."
+                                                }
                                             }
                                         }
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -199,7 +203,6 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                 onSubmit = { name, phone, email ->
                     val displayedOfferId = opportunity.matchedOffer?.offerId.orEmpty()
                     selectedOpportunity = null
-                    loading = true
                     scope.launch {
                         runCatching {
                             actionRepository.acceptSavingsOpportunity(
@@ -210,13 +213,17 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                                 contactEmail = email
                             )
                         }.onSuccess { result ->
-                            actionMessage = "יצרנו בקשה מאומתת ל-${opportunity.matchedOffer?.providerName.orEmpty()}. החיסכון שנבדק: ${money(result.potentialMonthlySaving)} בחודש."
+                            actionMessage = result.potentialMonthlySaving
+                                ?.takeIf { it > 0.0 }
+                                ?.let { saving ->
+                                    "הבקשה נוצרה ב-Click&SaveAI. אין עדיין אישור שהפרטים נמסרו לספק. חיסכון פוטנציאלי לפי ההצעה: ${money(saving)} בחודש."
+                                }
+                                ?: "הבקשה נוצרה ב-Click&SaveAI. אין עדיין אישור שהפרטים נמסרו לספק. סכום החיסכון הפוטנציאלי אינו ידוע."
                             error = ""
-                            refreshKey += 1
+                            viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY)
                         }.onFailure { throwable ->
                             error = throwable.localizedMessage ?: "ההצעה השתנתה, אינה זמינה או שאין כרגע מסלול מעבר מאומת."
                         }
-                        loading = false
                     }
                 }
             )
@@ -233,7 +240,6 @@ private fun OpportunityCard(
 ) {
     val matched = opportunity.matchedOffer
     val monthlySaving = opportunity.potentialMonthlySaving
-    val verifiedSaving = matched != null && monthlySaving != null && monthlySaving > 0.0
     val lifecycleLocked = opportunity.status.uppercase() in lockedOpportunityStatuses
     val inAppActionAvailable = opportunity.actionMode == IN_APP_PROVIDER_REQUEST
 
@@ -244,7 +250,7 @@ private fun OpportunityCard(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    if (verifiedSaving) Icons.Default.Verified else Icons.Default.Savings,
+                    Icons.Default.Savings,
                     contentDescription = null,
                     tint = TechBluePrimary
                 )
@@ -262,17 +268,36 @@ private fun OpportunityCard(
                 }
             }
 
-            if (verifiedSaving && matched != null) {
+            if (matched != null && monthlySaving != null && monthlySaving > 0.0) {
                 val effectiveMonthly = matched.effectiveMonthlyPrice ?: matched.monthlyPrice
+                val annualSaving = opportunity.potentialAnnualSaving
+                val annualSavingText = if (annualSaving != null && annualSaving > 0.0) {
+                    " • ${money(annualSaving)} בשנה"
+                } else {
+                    ""
+                }
                 Text(
-                    "מצאנו ${matched.providerName} בעלות חודשית אפקטיבית של ${money(effectiveMonthly)}.",
+                    "נמצאה הצעה של ${matched.providerName} בעלות חודשית אפקטיבית של ${money(effectiveMonthly)}.",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    "חיסכון מאומת: ${money(monthlySaving ?: 0.0)} בחודש • ${money(opportunity.potentialAnnualSaving ?: 0.0)} בשנה",
+                    "חיסכון פוטנציאלי: ${money(monthlySaving)} בחודש$annualSavingText",
                     color = TechBluePrimary,
                     fontWeight = FontWeight.SemiBold
                 )
+                if (matched.verifiedAt.isBlank()) {
+                    Text(
+                        "סטטוס אימות ההצעה לא ידוע",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        "ההצעה נבדקה לאחרונה: ${matched.verifiedAt}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 matched.firstYearCost?.let {
                     Text(
                         "עלות שנה ראשונה: ${money(it)}${matched.oneTimeFees?.takeIf { fee -> fee > 0.0 }?.let { fee -> " • כולל ${money(fee)} עלויות חד-פעמיות" } ?: ""}",
@@ -288,7 +313,7 @@ private fun OpportunityCard(
                     )
                 }
                 Text(
-                    "החיסכון חושב לפי מחיר צרכני מלא לשנה הראשונה וההצעה נבדקת מחדש לפני כל פעולה.",
+                    "החיסכון הפוטנציאלי הוא הערכה לפי מחיר צרכני מלא לשנה הראשונה. ההצעה נבדקת מחדש לפני כל פעולה.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -299,13 +324,13 @@ private fun OpportunityCard(
                     inAppActionAvailable -> {
                         if (opportunity.status.equals("PROVIDER_REJECTED", ignoreCase = true)) {
                             Text(
-                                "הפנייה הקודמת לא הושלמה. אם ההצעה עדיין בתוקף אפשר לנסות שוב.",
+                                "הבקשה הקודמת לא הושלמה. אם ההצעה עדיין בתוקף אפשר לנסות שוב.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         Button(onClick = onAccept, modifier = Modifier.fillMaxWidth()) {
-                            Text("אני רוצה לחסוך ${money(monthlySaving ?: 0.0)} בחודש")
+                            Text("בדוק בקשה לחיסכון פוטנציאלי של ${money(monthlySaving)} בחודש")
                         }
                     }
                     else -> {
@@ -328,16 +353,21 @@ private fun OpportunityCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Text(
+                    "סטטוס אימות ההצעה לא ידוע",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
 }
 
 private fun opportunityLifecycleMessage(status: String): String = when (status.uppercase()) {
-    "USER_ACCEPTED" -> "הבקשה נשלחה וננעלה להצעה שאישרת."
-    "PROVIDER_PROCESSING" -> "הספק מטפל בבקשה שלך."
-    "ACTIVATED" -> "השירות החדש הופעל. אנחנו ממתינים לאישור סופי של העסקה."
-    "COMPLETED" -> "המעבר הושלם והחיסכון נרשם."
+    "USER_ACCEPTED" -> "הבקשה נוצרה ב-Click&SaveAI. אין עדיין אישור שהפרטים נמסרו לספק."
+    "PROVIDER_PROCESSING" -> "הבקשה נמצאת בתהליך במערכת. אין במסך זה אישור מסירה לספק."
+    "ACTIVATED" -> "סטטוס ההזדמנות עודכן. אין במסך זה אישור שהשירות הופעל בפועל על-ידי הספק."
+    "COMPLETED" -> "הבקשה מסומנת כהושלמה במערכת. אין בכך אישור שחיסכון כספי התממש בפועל."
     else -> ""
 }
 
@@ -356,11 +386,11 @@ private fun SavingsActionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("אישור פנייה לספק") },
+        title = { Text("אישור יצירת בקשה") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Text(
-                    "Click&SaveAI תעביר לספק רק את פרטי הקשר הדרושים ואת ההצעה שבחרת. לא נשלח תוכן Gmail."
+                    "Click&SaveAI תשתמש בפרטי הקשר ובהצעה שבחרת כדי ליצור בקשה. לא נשלח תוכן Gmail. יצירת הבקשה אינה אישור שהפרטים נמסרו לספק."
                 )
                 OutlinedTextField(
                     value = name,
@@ -385,7 +415,7 @@ private fun SavingsActionDialog(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = accepted, onCheckedChange = { accepted = it })
-                    Text("אני מאשר/ת להעביר לספק את פרטי הקשר לצורך קבלת ההצעה.")
+                    Text("אני מאשר/ת להשתמש בפרטי הקשר לצורך יצירת הבקשה.")
                 }
             }
         },
@@ -394,7 +424,7 @@ private fun SavingsActionDialog(
                 onClick = { onSubmit(name.trim(), phone.trim(), email.trim()) },
                 enabled = accepted && name.isNotBlank() && phone.isNotBlank() && email.isNotBlank()
             ) {
-                Text("שלח בקשה")
+                Text("צור בקשה")
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("ביטול") } }

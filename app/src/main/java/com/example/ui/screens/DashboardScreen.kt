@@ -15,12 +15,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Savings
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.outlined.CloudSync
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -28,11 +27,9 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,9 +40,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.data.repository.BackendRepository
 import com.example.data.repository.FinancialHomeResult
 import com.example.data.repository.FinancialOpportunity
+import com.example.data.repository.FinancialRefreshReason
+import com.example.data.repository.FinancialSyncState
+import com.example.data.repository.latestScanOrNull
 import com.example.ui.MainViewModel
 import com.example.ui.theme.TechBluePrimary
 
@@ -57,42 +56,12 @@ fun DashboardScreen(
     onGoogleSignIn: () -> Unit,
     onRequestGmailAuthorization: () -> Unit
 ) {
-    val invoices by viewModel.invoices.collectAsState()
-    val localTotalMonthlyCost by viewModel.totalMonthlyCost.collectAsState()
+    val financialSyncState by viewModel.financialSyncState.collectAsState()
+    val financialHome by viewModel.authoritativeFinancialHome.collectAsState()
+    val latestScan = financialSyncState.latestScanOrNull
     val session by viewModel.userSession.collectAsState()
-    val isConnected by viewModel.isGmailConnected.collectAsState()
     val isSyncing by viewModel.isSyncingGmail.collectAsState()
     var showGmailConsent by remember { mutableStateOf(false) }
-    var financialHome by remember { mutableStateOf<FinancialHomeResult?>(null) }
-    var financialHomeError by remember { mutableStateOf("") }
-    val backendRepository = remember { BackendRepository() }
-
-    LaunchedEffect(session.isAuthenticated, isConnected, invoices.size) {
-        if (session.isAuthenticated && isConnected) {
-            runCatching { backendRepository.getFinancialHome() }
-                .onSuccess {
-                    financialHome = it
-                    financialHomeError = ""
-                }
-                .onFailure {
-                    financialHomeError = it.localizedMessage ?: "הנתונים עדיין לא זמינים."
-                }
-        } else {
-            financialHome = null
-            financialHomeError = ""
-        }
-    }
-
-    val verifiedOpportunities = financialHome?.opportunities
-        .orEmpty()
-        .filter { (it.potentialMonthlySaving ?: 0.0) > 0.0 && it.matchedOffer != null }
-    val verifiedMonthlySavings = verifiedOpportunities.sumOf { it.potentialMonthlySaving ?: 0.0 }
-    val verifiedAnnualSavings = verifiedOpportunities.sumOf { it.potentialAnnualSaving ?: 0.0 }
-    val detectedOpportunities = financialHome?.opportunities.orEmpty()
-    val observedMonthlySpend = financialHome?.context?.observedRecurringMonthlySpend
-        ?.takeIf { it > 0.0 }
-        ?: localTotalMonthlyCost
-    val recurringServiceCount = financialHome?.context?.recurringServiceCount
 
     if (showGmailConsent) {
         GmailConsentDialog(
@@ -114,20 +83,37 @@ fun DashboardScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "המצב הפיננסי שלך",
+                    text = "החיסכון שלך מתחיל במה שאנחנו יודעים באמת",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "המערכת עוקבת אחרי ההוצאות החוזרות ומחפשת עבורך אפשרויות לחסוך.",
+                    text = "Click&SaveAI מזהה חיובים חוזרים ומציגה הזדמנויות רק כשהנתונים וההצעה ניתנים לאימות.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        if (!session.isAuthenticated || !isConnected) {
-            item {
+        when (val state = financialSyncState) {
+            FinancialSyncState.Unauthenticated -> item {
+                InitialGmailOnboardingCard(
+                    authenticated = false,
+                    syncing = isSyncing,
+                    onGoogleSignIn = onGoogleSignIn,
+                    onConnectGmail = { showGmailConsent = true }
+                )
+            }
+
+            FinancialSyncState.CheckingConnection,
+            FinancialSyncState.Recovering -> item {
+                HomeStatusCard(
+                    title = "המידע הפיננסי עדיין נטען",
+                    body = "אנחנו משחזרים את המידע המאומת מהשרת. עד שהבדיקה תסתיים לא נציג אפס במקום ערך שעדיין אינו ידוע."
+                )
+            }
+
+            FinancialSyncState.Disconnected -> item {
                 InitialGmailOnboardingCard(
                     authenticated = session.isAuthenticated,
                     syncing = isSyncing,
@@ -135,70 +121,49 @@ fun DashboardScreen(
                     onConnectGmail = { showGmailConsent = true }
                 )
             }
-        }
 
-        item {
-            SavingsHeroCard(
-                annualSavings = verifiedAnnualSavings,
-                monthlySavings = verifiedMonthlySavings,
-                opportunities = verifiedOpportunities.size,
-                onOpenSavings = { onNavigateToTab(2) }
-            )
-        }
+            is FinancialSyncState.Partial -> {
+                item {
+                    HomeStatusCard(
+                        title = "המידע האחרון נשמר",
+                        body = "חלק מהסנכרון אינו זמין כרגע. אנחנו מציגים רק מידע סמכותי שכבר אומת, ושומרים את השאר כלא ידוע."
+                    )
+                }
+                if (financialHome != null) {
+                    authoritativeHomeItems(
+                        home = financialHome!!,
+                        onNavigateToTab = onNavigateToTab
+                    )
+                }
+                item {
+                    Button(onClick = { viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY) }) {
+                        Text("נסה לסנכרן שוב")
+                    }
+                }
+            }
 
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                MetricCard(
-                    modifier = Modifier.weight(1f),
-                    title = "הוצאה חודשית מזוהה",
-                    value = money(observedMonthlySpend),
-                    supporting = "חיובים שנצפו"
-                )
-                MetricCard(
-                    modifier = Modifier.weight(1f),
-                    title = "שירותים חוזרים",
-                    value = recurringServiceCount?.toString() ?: "—",
-                    supporting = if (recurringServiceCount == null) "ממתינים לניתוח" else "שאומתו כחוזרים"
-                )
+            is FinancialSyncState.Failed -> item {
+                HomeStatusCard(
+                    title = "לא הצלחנו להשלים את הסנכרון",
+                    body = "לא הומצאו נתונים חלופיים. אפשר לנסות שוב כשהחיבור זמין."
+                ) {
+                    Button(onClick = { viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY) }) {
+                        Text("נסה שוב")
+                    }
+                }
             }
-        }
 
-        if (detectedOpportunities.isNotEmpty()) {
-            item {
-                Text(
-                    "מה מצאנו עבורך",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            items(detectedOpportunities.take(3), key = { it.id }) { opportunity ->
-                ProactiveOpportunityCard(opportunity)
-            }
-        } else if (isConnected) {
-            item {
-                EmptyStateCard(
-                    title = "הבדיקה ממשיכה ברקע",
-                    body = "כרגע אין הזדמנות חיסכון מאומתת. אם מחיר ישתנה או תופיע הצעה טובה ומתאימה יותר, היא תיבדק אוטומטית."
-                )
-            }
-        }
-
-        if (financialHomeError.isNotBlank()) {
-            item {
-                Text(
-                    financialHomeError,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            is FinancialSyncState.Ready -> {
+                authoritativeHomeItems(
+                    home = state.financialHome,
+                    onNavigateToTab = onNavigateToTab
                 )
             }
         }
 
         item {
             Text(
-                "ניהול",
+                "גישה מהירה",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -208,91 +173,69 @@ fun DashboardScreen(
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 DashboardActionButton(
                     text = "החשבונות שלי",
-                    subtitle = "כל החשבוניות והחיובים שהמערכת זיהתה",
+                    subtitle = "החשבוניות והחיובים שהמערכת זיהתה",
                     icon = Icons.Default.ReceiptLong,
                     onClick = { onNavigateToTab(1) }
                 )
                 DashboardActionButton(
-                    text = "החיסכון שלי",
-                    subtitle = "הצעות שנבדקו מול השירותים והמחירים שלך",
+                    text = "הזדמנויות חיסכון",
+                    subtitle = "השוואות שנבדקו מול השירותים שלך",
                     icon = Icons.Default.Storefront,
                     onClick = { onNavigateToTab(2) }
                 )
                 DashboardActionButton(
-                    text = "אני והעדפות",
-                    subtitle = "חשבון, יעדי חיסכון, פרטיות וחיבורים",
-                    icon = Icons.Default.Tune,
+                    text = "פעילות וסנכרון",
+                    subtitle = "מצב השחזור והפעילות שניתן לאמת",
+                    icon = Icons.Outlined.CloudSync,
                     onClick = { onNavigateToTab(3) }
                 )
-            }
-        }
-
-        item {
-            Text(
-                "פעילות אחרונה",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        if (invoices.isEmpty()) {
-            item {
-                EmptyStateCard(
-                    title = if (isConnected) "עדיין אין חשבונות להצגה" else "חיבור אחד כדי להתחיל",
-                    body = if (isConnected) {
-                        "כשנזהה חשבונית חדשה היא תופיע כאן ותיבדק אוטומטית להזדמנויות חיסכון."
-                    } else {
-                        "בחיבור הראשון נבדוק עד 6 חודשים אחורה. לאחר מכן חשבוניות חדשות נקלטות אוטומטית."
-                    }
+                DashboardActionButton(
+                    text = "אני והעדפות",
+                    subtitle = "חשבון, פרטיות וחיבורים",
+                    icon = Icons.Default.Tune,
+                    onClick = { onNavigateToTab(4) }
                 )
             }
-        } else {
-            items(invoices.take(4), key = { it.id }) { invoice ->
-                Card(shape = RoundedCornerShape(18.dp)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(15.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            shape = RoundedCornerShape(14.dp)
+        }
+
+        val recentInvoices = latestScan?.invoices
+        if (recentInvoices != null) {
+            if (recentInvoices.isNotEmpty()) {
+                item {
+                    Text(
+                        "חשבונות שזוהו לאחרונה",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                items(recentInvoices.take(3), key = { it.sourceMessageId }) { invoice ->
+                    Card(shape = RoundedCornerShape(18.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(15.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                Icons.Default.ReceiptLong,
-                                contentDescription = null,
-                                modifier = Modifier.padding(10.dp),
-                                tint = TechBluePrimary
-                            )
-                        }
-                        Spacer(modifier = Modifier.size(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(invoice.providerName, fontWeight = FontWeight.Bold)
-                            Text(
-                                invoice.category,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
+                            Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = TechBluePrimary)
+                            Spacer(modifier = Modifier.size(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(invoice.providerName, fontWeight = FontWeight.Bold)
+                                Text(
+                                    invoice.category,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             Text(money(invoice.monthlyCost), fontWeight = FontWeight.Bold)
-                            Text(
-                                "נבדק ברקע",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                         }
                     }
                 }
-            }
-
-            item {
-                TextButton(
-                    onClick = { onNavigateToTab(1) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("לכל החשבונות")
+            } else {
+                item {
+                    HomeStatusCard(
+                        title = "אין כרגע חשבונות מזוהים להצגה",
+                        body = "זהו מצב ריק מהסריקה הסמכותית האחרונה, לא ערך שנוצר כברירת מחדל."
+                    )
                 }
             }
         }
@@ -302,11 +245,89 @@ fun DashboardScreen(
     val receiptScanCallbackKeptForApiCompatibility = onOpenReceiptScan
 }
 
+private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItems(
+    home: FinancialHomeResult,
+    onNavigateToTab: (Int) -> Unit
+) {
+    item {
+        AuthoritativeSummaryCard(home)
+    }
+
+    if (home.opportunities.isNotEmpty()) {
+        item {
+            Text(
+                "מה מצאנו עבורך",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        items(home.opportunities.take(3), key = { it.id }) { opportunity ->
+            ProactiveOpportunityCard(opportunity)
+        }
+        item {
+            TextButton(
+                onClick = { onNavigateToTab(2) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("לכל הזדמנויות החיסכון")
+            }
+        }
+    } else {
+        item {
+            HomeStatusCard(
+                title = "אין כרגע הזדמנות חיסכון מאומתת",
+                body = "המערכת בדקה את ההקשר הפיננסי הזמין. חיסכון יוצג רק לאחר שתימצא הצעה עדכנית ומתאימה שניתן לאמת."
+            )
+        }
+    }
+}
+
+@Composable
+private fun AuthoritativeSummaryCard(home: FinancialHomeResult) {
+    val context = home.context
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("התמונה שזוהתה", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                MetricCard(
+                    modifier = Modifier.weight(1f),
+                    title = "חיוב חודשי חוזר שזוהה",
+                    value = context.observedRecurringMonthlySpend?.let(::money) ?: "לא ידוע",
+                    supporting = if (context.isCompleteHouseholdSpend) "כיסוי שסומן כמלא" else "כיסוי חלקי מהמקורות המחוברים"
+                )
+                MetricCard(
+                    modifier = Modifier.weight(1f),
+                    title = "שירותים חוזרים",
+                    value = context.recurringServiceCount?.toString() ?: "לא ידוע",
+                    supporting = "לפי ההקשר הסמכותי"
+                )
+            }
+            if (context.sourceCoverage.isNotEmpty()) {
+                Text(
+                    text = "מקור נתונים: ${context.sourceCoverage.joinToString()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun ProactiveOpportunityCard(opportunity: FinancialOpportunity) {
     Card(
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Row(
             modifier = Modifier
@@ -316,38 +337,52 @@ private fun ProactiveOpportunityCard(opportunity: FinancialOpportunity) {
         ) {
             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = TechBluePrimary)
             Spacer(modifier = Modifier.size(10.dp))
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    "${opportunity.providerName} • ${opportunity.category}",
-                    fontWeight = FontWeight.Bold
-                )
-                val matchedOffer = opportunity.matchedOffer
-                if (matchedOffer != null && (opportunity.potentialMonthlySaving ?: 0.0) > 0.0) {
-                    val effectiveMonthly = matchedOffer.effectiveMonthlyPrice ?: matchedOffer.monthlyPrice
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("${opportunity.providerName} • ${opportunity.category}", fontWeight = FontWeight.Bold)
+                val offer = opportunity.matchedOffer
+                val saving = opportunity.potentialMonthlySaving
+                if (offer != null && saving != null && saving > 0.0) {
+                    val newPrice = offer.effectiveMonthlyPrice ?: offer.monthlyPrice
+                    Text("המחיר הנוכחי שזוהה: ${money(opportunity.currentMonthlyCost)}")
+                    Text("הצעה מאומתת: ${money(newPrice)} לחודש")
                     Text(
-                        "מצאנו ${matchedOffer.providerName} בעלות חודשית אפקטיבית של ${money(effectiveMonthly)}.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        "חיסכון מאומת: ${money(opportunity.potentialMonthlySaving ?: 0.0)} בחודש • ${money(opportunity.potentialAnnualSaving ?: 0.0)} בשנה",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = TechBluePrimary
+                        "חיסכון אפשרי לפי ההצעה: ${money(saving)} בחודש",
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 } else {
-                    val detectionText = if (opportunity.type == "COMPARE_AFTER_PRICE_INCREASE") {
-                        "זוהתה עליית מחיר של ${String.format("%.1f", opportunity.percentIncrease)}%. אנחנו בודקים חלופה תואמת."
-                    } else {
-                        "זהו שירות חודשי חוזר. אנחנו בודקים אם קיימת חלופה טובה ומתאימה יותר."
-                    }
-                    Text(detectionText, style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        "סכום חיסכון יוצג רק לאחר שתימצא הצעה עדכנית שניתן לאמת ולהתאים לשירות שלך.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        "זוהתה אפשרות לבדיקה, אך אין עדיין סכום חיסכון מאומת להצגה.",
+                        style = MaterialTheme.typography.bodyMedium
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun HomeStatusCard(
+    title: String,
+    body: String,
+    action: (@Composable () -> Unit)? = null
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.ErrorOutline, contentDescription = null)
+                Spacer(modifier = Modifier.size(8.dp))
+                Text(title, fontWeight = FontWeight.Bold)
+            }
+            Text(body, style = MaterialTheme.typography.bodyMedium)
+            action?.invoke()
         }
     }
 }
@@ -370,10 +405,10 @@ private fun InitialGmailOnboardingCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Email, contentDescription = null, tint = TechBluePrimary)
                 Spacer(modifier = Modifier.size(9.dp))
-                Text("חיבור אחד כדי להתחיל", fontWeight = FontWeight.Bold)
+                Text("חיבור מאובטח כדי להתחיל", fontWeight = FontWeight.Bold)
             }
             Text(
-                "נשתמש בגישה לקריאה בלבד כדי לזהות חשבוניות ומסמכי חיוב. בחיבור הראשון נבדוק עד 6 חודשים אחורה, ובהמשך מסמכים חדשים ייקלטו אוטומטית.",
+                "Gmail משמש לקריאה בלבד כדי לזהות מסמכי חיוב. לא נשלח מידע לספק ללא פעולה מפורשת שלך.",
                 style = MaterialTheme.typography.bodyMedium
             )
             Button(
@@ -381,106 +416,27 @@ private fun InitialGmailOnboardingCard(
                 enabled = !syncing,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(
-                    if (authenticated) Icons.Default.Security else Icons.Default.Login,
-                    contentDescription = null
-                )
-                Spacer(modifier = Modifier.size(7.dp))
-                Text(if (authenticated) "חבר את החשבון" else "התחבר כדי להתחיל")
+                Text(if (authenticated) "חבר Gmail לקריאה בלבד" else "התחבר עם Google")
             }
         }
     }
-}
-
-@Composable
-private fun SavingsHeroCard(
-    annualSavings: Double,
-    monthlySavings: Double,
-    opportunities: Int,
-    onOpenSavings: () -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = TechBluePrimary)
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(7.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Savings, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
-                Spacer(modifier = Modifier.size(8.dp))
-                Text(
-                    "החיסכון שמצאנו עבורך",
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Text(
-                if (opportunities > 0) money(annualSavings) else "עדיין בבדיקה",
-                style = MaterialTheme.typography.displaySmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimary
-            )
-            Text(
-                if (opportunities > 0) {
-                    "בשנה • ${money(monthlySavings)} בחודש"
-                } else {
-                    "נציג כאן סכום רק אחרי שנמצא ונאמת חיסכון אמיתי"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimary
-            )
-            if (opportunities > 0) {
-                Button(onClick = onOpenSavings, modifier = Modifier.fillMaxWidth()) {
-                    Text("צפה ב-$opportunities הזדמנויות מאומתות")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun GmailConsentDialog(onDismiss: () -> Unit, onApprove: () -> Unit) {
-    var accepted by remember { mutableStateOf(false) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("אישור גישה לקריאה בלבד") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("הגישה משמשת לאיתור חשבוניות וקבלות ולחילוץ פרטי החיוב הדרושים לצורך בדיקת חיסכון.")
-                Text("אין אפשרות לשלוח, למחוק או לערוך הודעות. אפשר לבטל את החיבור בכל עת דרך פרטיות וחיבורים בפרופיל.")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = accepted, onCheckedChange = { accepted = it })
-                    Text("קראתי ואני מאשר/ת גישה זו במפורש.")
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = onApprove, enabled = accepted) { Text("המשך ל-Google") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("ביטול") }
-        }
-    )
 }
 
 @Composable
 private fun MetricCard(
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
     title: String,
     value: String,
     supporting: String
 ) {
     Card(modifier = modifier, shape = RoundedCornerShape(18.dp)) {
-        Column(modifier = Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-            Text(
-                supporting,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text(supporting, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -498,44 +454,44 @@ private fun DashboardActionButton(
         shape = RoundedCornerShape(18.dp)
     ) {
         Row(
-            modifier = Modifier.padding(15.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(15.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = RoundedCornerShape(13.dp)
-            ) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    modifier = Modifier.padding(9.dp),
-                    tint = TechBluePrimary
-                )
-            }
+            Icon(icon, contentDescription = null, tint = TechBluePrimary)
             Spacer(modifier = Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(text, fontWeight = FontWeight.Bold)
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
 }
 
 @Composable
-private fun EmptyStateCard(title: String, body: String) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(title, fontWeight = FontWeight.Bold)
-            Text(body, style = MaterialTheme.typography.bodySmall)
-        }
-    }
+private fun GmailConsentDialog(
+    onDismiss: () -> Unit,
+    onApprove: () -> Unit
+) {
+    var accepted by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("חיבור Gmail לקריאה בלבד") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("ההרשאה משמשת לזיהוי חשבוניות וחיובים. Click&SaveAI אינה שולחת הודעות ואינה משנה מידע ב-Gmail.")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = accepted, onCheckedChange = { accepted = it })
+                    Text("אני מאשר/ת גישת קריאה בלבד")
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onApprove, enabled = accepted) { Text("המשך ל-Google") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("ביטול") } }
+    )
 }
 
-private fun money(value: Double): String = "₪${String.format("%.2f", value)}"
+private fun money(value: Double): String = "₪${String.format("%,.0f", value)}"

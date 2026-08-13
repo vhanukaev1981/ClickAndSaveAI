@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import com.example.data.repository.FinancialRefreshReason
 import com.example.ui.MainViewModel
 import com.example.ui.components.BottomNavBar
+import com.example.ui.screens.ActivityScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.InvoicesScreen
 import com.example.ui.screens.ProfileScreen
@@ -244,7 +245,7 @@ fun MainAppStructure(
         },
         bottomBar = {
             BottomNavBar(
-                selectedTab = selectedTab.coerceIn(0, 3),
+                selectedTab = selectedTab.coerceIn(0, 4),
                 onTabSelected = viewModel::setTab
             )
         }
@@ -263,7 +264,8 @@ fun MainAppStructure(
                     onOpenReceiptScan = viewModel::reportReceiptScanUnavailable
                 )
                 2 -> ProvidersScreen(viewModel)
-                3, 4 -> ProfileScreen(
+                3 -> ActivityScreen(viewModel)
+                4 -> ProfileScreen(
                     viewModel = viewModel,
                     onGoogleSignIn = onGoogleSignIn,
                     onRequestGmailAuthorization = onRequestGmailAuthorization
