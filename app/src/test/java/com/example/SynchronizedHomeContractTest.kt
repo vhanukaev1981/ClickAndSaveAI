@@ -34,6 +34,16 @@ class SynchronizedHomeContractTest {
     }
 
     @Test
+    fun authoritativeSummaryRendersNullableMetricsAsUnknownInsteadOfNullOrZero() {
+        val source = File("src/main/java/com/example/ui/screens/DashboardScreen.kt").readText()
+
+        assertTrue(source.contains("context.observedRecurringMonthlySpend?.let(::money) ?: \"לא ידוע\""))
+        assertTrue(source.contains("context.recurringServiceCount?.toString() ?: \"לא ידוע\""))
+        assertFalse(source.contains("money(context.observedRecurringMonthlySpend)"))
+        assertFalse(source.contains("value = context.recurringServiceCount.toString()"))
+    }
+
+    @Test
     fun homeUsesTheCorrectFiveDestinationNavigationIndices() {
         val source = File("src/main/java/com/example/ui/screens/DashboardScreen.kt").readText()
 

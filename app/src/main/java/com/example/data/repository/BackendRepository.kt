@@ -79,8 +79,8 @@ data class FinancialCategorySummary(
 )
 
 data class FinancialHomeContext(
-    val observedRecurringMonthlySpend: Double,
-    val recurringServiceCount: Int,
+    val observedRecurringMonthlySpend: Double?,
+    val recurringServiceCount: Int?,
     val isCompleteHouseholdSpend: Boolean,
     val sourceCoverage: List<String>,
     val recurringServices: List<FinancialRecurringService>,
@@ -271,8 +271,8 @@ class BackendRepository(
                 )
             }
         val context = FinancialHomeContext(
-            observedRecurringMonthlySpend = (contextMap["observedRecurringMonthlySpend"] as? Number)?.toDouble() ?: 0.0,
-            recurringServiceCount = (contextMap["recurringServiceCount"] as? Number)?.toInt() ?: 0,
+            observedRecurringMonthlySpend = (contextMap["observedRecurringMonthlySpend"] as? Number)?.toDouble(),
+            recurringServiceCount = (contextMap["recurringServiceCount"] as? Number)?.toInt(),
             isCompleteHouseholdSpend = contextMap["isCompleteHouseholdSpend"] as? Boolean ?: false,
             sourceCoverage = (contextMap["sourceCoverage"] as? List<*>)?.map { it.toString() }.orEmpty(),
             recurringServices = recurringServices,
