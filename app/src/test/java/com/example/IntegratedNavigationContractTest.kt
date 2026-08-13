@@ -36,6 +36,15 @@ class IntegratedNavigationContractTest {
     }
 
     @Test
+    fun selectedPrimaryDestinationIsOwnedOnceAndRestoredThroughSavedState() {
+        val viewModel = File("src/main/java/com/example/ui/MainViewModel.kt").readText()
+        assertTrue(viewModel.contains("SavedStateHandle"))
+        assertTrue(viewModel.contains("getStateFlow(SELECTED_TAB_KEY, 0)"))
+        assertTrue(viewModel.contains("savedStateHandle[SELECTED_TAB_KEY]"))
+        assertFalse(viewModel.contains("val selectedTab = MutableStateFlow(0)"))
+    }
+
+    @Test
     fun activityScreenConsumesAuthoritativeLedgerAndDoesNotInferHistoryFromCurrentUiState() {
         val screen = File("src/main/java/com/example/ui/screens/ActivityScreen.kt")
         assertTrue(screen.exists())
