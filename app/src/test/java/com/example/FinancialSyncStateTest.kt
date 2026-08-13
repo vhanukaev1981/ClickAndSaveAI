@@ -5,6 +5,10 @@ import com.example.data.repository.FinancialHomeContext
 import com.example.data.repository.FinancialHomeResult
 import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.GmailScanResult
+import com.example.data.repository.financialHomeOrNull
+import com.example.data.repository.latestScanOrNull
+import com.example.data.repository.observedRecurringMonthlySpendOrNull
+import com.example.data.repository.recurringServiceCountOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
