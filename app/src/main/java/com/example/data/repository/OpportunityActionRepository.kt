@@ -9,8 +9,8 @@ data class OpportunityActionResult(
     val duplicate: Boolean,
     val opportunityId: String,
     val offerId: String,
-    val potentialMonthlySaving: Double,
-    val potentialAnnualSaving: Double
+    val potentialMonthlySaving: Double?,
+    val potentialAnnualSaving: Double?
 )
 
 class OpportunityActionRepository(
@@ -61,8 +61,8 @@ class OpportunityActionRepository(
             duplicate = response["duplicate"] as? Boolean ?: false,
             opportunityId = response["opportunityId"] as? String ?: opportunityId,
             offerId = response["offerId"] as? String ?: expectedOfferId,
-            potentialMonthlySaving = (response["potentialMonthlySaving"] as? Number)?.toDouble() ?: 0.0,
-            potentialAnnualSaving = (response["potentialAnnualSaving"] as? Number)?.toDouble() ?: 0.0
+            potentialMonthlySaving = (response["potentialMonthlySaving"] as? Number)?.toDouble(),
+            potentialAnnualSaving = (response["potentialAnnualSaving"] as? Number)?.toDouble()
         )
     }
 
