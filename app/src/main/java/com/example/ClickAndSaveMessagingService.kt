@@ -1,11 +1,9 @@
 package com.example
 
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.firebase.auth.FirebaseAuth
@@ -13,9 +11,6 @@ import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-
-private const val PUSH_CHANNEL_ID = "savings_opportunities"
-private const val PUSH_CHANNEL_NAME = "הזדמנויות חיסכון"
 
 object PushRegistration {
     fun registerCurrentToken() {
@@ -46,49 +41,66 @@ class ClickAndSaveMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
-        val title = message.notification?.title
-            ?: message.data["title"]
-            ?: "מצאנו הזדמנות לחיסכון"
-        val body = message.notification?.body
-            ?: message.data["body"]
-            ?: "פתח את ClickAndSaveAI כדי לראות כמה אפשר לחסוך."
-        showNotification(title, body)
+        val pushType = message.data[PUSH_TYPE_EXTRA]
+        val exactEntity = pushType == PUSH_TYPE_NEW_INVOICE ||
+            pushType == PUSH_TYPE_VERIFIED_SAVINGS_OPPORTUNITY
+        if (exactEntity && !hasExactTarget(message)) {
+            Log.w("PushNavigation", "Entity push ignored because its exact target is missing")
+            return
+        }
+
+        val title = when (pushType) {
+            PUSH_TYPE_NEW_INVOICE -> "חיוב חדש זוהה"
+            PUSH_TYPE_VERIFIED_SAVINGS_OPPORTUNITY -> "נמצאה הזדמנות חיסכון"
+            else -> "עדכון חדש ב-ClickAndSaveAI"
+        }
+        val body = when (pushType) {
+            PUSH_TYPE_NEW_INVOICE -> "פתח את ClickAndSaveAI לצפייה מאובטחת בפרטי החיוב."
+            PUSH_TYPE_VERIFIED_SAVINGS_OPPORTUNITY -> "פתח את ClickAndSaveAI לצפייה מאובטחת בהזדמנות."
+            else -> "פתח את האפליקציה לצפייה מאובטחת בפרטים."
+        }
+        showNotification(title, body, message)
     }
 
-    private fun showNotification(title: String, body: String) {
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            notificationManager.createNotificationChannel(
-                NotificationChannel(
-                    PUSH_CHANNEL_ID,
-                    PUSH_CHANNEL_NAME,
-                    NotificationManager.IMPORTANCE_DEFAULT
-                ).apply {
-                    description = "התראות על חשבוניות והזדמנויות חיסכון חדשות"
-                }
-            )
+    private fun hasExactTarget(message: RemoteMessage): Boolean {
+        return when (message.data[PUSH_TYPE_EXTRA]) {
+            PUSH_TYPE_NEW_INVOICE -> !message.data["sourceMessageId"].isNullOrBlank()
+            PUSH_TYPE_VERIFIED_SAVINGS_OPPORTUNITY ->
+                !message.data[PUSH_OPPORTUNITY_ID_EXTRA].isNullOrBlank() &&
+                    !message.data[PUSH_OFFER_ID_EXTRA].isNullOrBlank()
+            else -> true
         }
+    }
 
-        val openAppIntent = Intent(this, MainActivity::class.java).apply {
+    private fun showNotification(title: String, body: String, message: RemoteMessage) {
+        FinancialNotificationChannels.ensureCreated(this)
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val openIntent = Intent(this, PushEntryActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra("openSavingsOpportunity", true)
+            message.data.forEach { (key, value) -> putExtra(key, value) }
         }
+        val requestCode = listOf(
+            message.data[PUSH_TYPE_EXTRA].orEmpty(),
+            message.data["sourceMessageId"].orEmpty(),
+            message.data[PUSH_OPPORTUNITY_ID_EXTRA].orEmpty(),
+            message.data[PUSH_OFFER_ID_EXTRA].orEmpty()
+        ).joinToString("\u0000").hashCode() and 0x3fffffff
         val pendingIntent = PendingIntent.getActivity(
             this,
-            0,
-            openAppIntent,
+            1_000 + requestCode,
+            openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, PUSH_CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, FINANCIAL_PUSH_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
-
-        notificationManager.notify((System.currentTimeMillis() and 0x7fffffff).toInt(), notification)
+        notificationManager.notify(1_000 + requestCode, notification)
     }
 }
