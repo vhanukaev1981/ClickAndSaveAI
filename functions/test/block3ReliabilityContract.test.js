@@ -5,55 +5,62 @@ const path = require("node:path");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-function readBackend(relativePath) {
-  return fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
+function src(file) {
+  return fs.readFileSync(path.join(__dirname, "..", "src", file), "utf8");
+}
+function android(file) {
+  return fs.readFileSync(path.join(__dirname, "..", "..", "app", "src", "main", file), "utf8");
 }
 
-function readAndroid(relativePath) {
-  return fs.readFileSync(path.join(__dirname, "..", "..", "app", relativePath), "utf8");
-}
-
-test("expired Gmail History never advances the processed checkpoint before guarded recovery", () => {
-  const source = readBackend("src/gmailWatchFunctions.js");
-  const expiredBranch = source.split("if (history.expired) {")[1]?.split("return;")[0] || "";
-  assert.match(expiredBranch, /historyRecoveryRequired:\s*true/);
-  assert.doesNotMatch(expiredBranch, /watchHistoryId:\s*notificationHistoryId/);
+test("Gmail stays read-only and uses checkpoint-preserving guarded recovery", () => {
+  const watch = src("gmailWatchFunctions.js");
+  const recon = src("gmailIncrementalReconciliation.js");
+  const guard = src("gmailReliabilityGuard.js");
+  assert.match(watch, /gmail\.readonly/);
+  assert.doesNotMatch(watch, /gmail\.modify|gmail\.send|gmail\.compose/);
+  assert.match(recon, /incrementalLeaseOwner/);
+  assert.match(recon, /HISTORY_ID_EXPIRED/);
+  assert.match(recon, /state\.checkpoint/);
+  assert.match(guard, /AMBIGUOUS_MAILBOX_OWNER/);
+  assert.match(guard, /RECONNECT_REQUIRED/);
 });
 
-test("serialized checkpoint-aware Gmail reconciliation is installed", () => {
-  const reconciliationPath = path.join(__dirname, "..", "src", "gmailIncrementalReconciliation.js");
-  assert.equal(fs.existsSync(reconciliationPath), true);
-  const source = fs.existsSync(reconciliationPath) ? fs.readFileSync(reconciliationPath, "utf8") : "";
-  assert.match(source, /incrementalLeaseOwner/);
-  assert.match(source, /historyRecoveryRequired/);
-  assert.match(source, /gmailIncrementalReconciliation/);
+test("incremental scan returns authoritative server snapshot and recovery is bounded", () => {
+  const reliable = src("gmailReliableScanFunctions.js");
+  assert.match(reliable, /authoritativeInvoiceSnapshot/);
+  assert.match(reliable, /mode === "INCREMENTAL"/);
+  assert.match(reliable, /RECOVERY_REQUIRED/);
+  assert.match(reliable, /recoveryBaselineHistoryId/);
+  assert.match(reliable, /stableScan\.scanGmailInvoices/);
 });
 
-test("push token ownership is server-authoritative across authenticated accounts", () => {
-  const source = readBackend("src/pushFunctions.js");
-  assert.match(source, /pushTokenOwners/);
-  assert.match(source, /runTransaction/);
-  assert.match(source, /ownerUid/);
+test("authoritative notifications have exact stable identities and no financial content", () => {
+  const invoicePush = src("gmailInvoiceNotificationFunctions.js");
+  const opportunityPush = src("opportunityNotificationFunctions.js");
+  assert.match(invoicePush, /bill-detected:\$\{sourceMessageId\}/);
+  assert.match(invoicePush, /sourceMessageId/);
+  assert.match(invoicePush, /authenticatedAccountExists/);
+  assert.match(opportunityPush, /opportunityId/);
+  assert.match(opportunityPush, /offerId/);
+  assert.match(opportunityPush, /authenticatedAccountExists/);
+  assert.doesNotMatch(opportunityPush, /toFixed\(/);
 });
 
-test("a single-invoice push carries the exact authoritative Gmail source identity", () => {
-  const source = readBackend("src/gmailWatchFunctions.js");
-  const pushSection = source.split("await sendPushToUser(uid")[1] || "";
-  assert.match(pushSection, /sourceMessageId:\s*first\.sourceMessageId/);
+test("Android uses exact isolated notification targets with explicit stale handling", () => {
+  const target = android("java/com/example/PushTargetActivity.kt");
+  const entry = android("java/com/example/PushEntryActivity.kt");
+  assert.match(target, /sourceMessageId/);
+  assert.match(target, /matchedOffer\?\.offerId == offerId/);
+  assert.match(target, /לא נפתח חיוב אחר/);
+  assert.match(target, /לא נפתחה הזדמנות אחרת/);
+  assert.match(entry, /PushTargetActivity/);
+  assert.doesNotMatch(entry, /ProvidersScreen|InvoicesScreen/);
 });
 
-test("Android notification navigation is entity-aware", () => {
-  const policyPath = path.join(__dirname, "..", "..", "app", "src", "main", "java", "com", "example", "PushNavigationPolicy.kt");
-  assert.equal(fs.existsSync(policyPath), true);
-  const policy = fs.existsSync(policyPath) ? fs.readFileSync(policyPath, "utf8") : "";
-  assert.match(policy, /targetId/);
-  assert.match(policy, /opportunityId/);
-  assert.match(policy, /sourceMessageId/);
-});
-
-test("stale exact targets have explicit no-fallback handling", () => {
-  const invoices = readAndroid("src/main/java/com/example/ui/screens/InvoicesScreen.kt");
-  const providers = readAndroid("src/main/java/com/example/ui/screens/ProvidersScreen.kt");
-  assert.match(invoices, /focusSourceMessageId/);
-  assert.match(providers, /focusOpportunityId/);
+test("sign-out revokes the backend registration and local FCM token", () => {
+  const auth = android("java/com/example/data/repository/AuthRepository.kt");
+  const lifecycle = android("java/com/example/PushTokenLifecycle.kt");
+  assert.match(auth, /revokeCurrentDeviceBeforeSignOut/);
+  assert.match(lifecycle, /unregisterPushToken/);
+  assert.match(lifecycle, /deleteToken\(\)/);
 });
