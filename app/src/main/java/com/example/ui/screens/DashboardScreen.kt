@@ -44,6 +44,7 @@ import com.example.data.repository.FinancialHomeResult
 import com.example.data.repository.FinancialOpportunity
 import com.example.data.repository.FinancialRefreshReason
 import com.example.data.repository.FinancialSyncState
+import com.example.data.repository.latestScanOrNull
 import com.example.ui.MainViewModel
 import com.example.ui.theme.TechBluePrimary
 
@@ -57,9 +58,8 @@ fun DashboardScreen(
 ) {
     val financialSyncState by viewModel.financialSyncState.collectAsState()
     val financialHome by viewModel.authoritativeFinancialHome.collectAsState()
-    val invoices by viewModel.invoices.collectAsState()
+    val latestScan = financialSyncState.latestScanOrNull
     val session by viewModel.userSession.collectAsState()
-    val isConnected by viewModel.isGmailConnected.collectAsState()
     val isSyncing by viewModel.isSyncingGmail.collectAsState()
     var showGmailConsent by remember { mutableStateOf(false) }
 
@@ -198,42 +198,45 @@ fun DashboardScreen(
             }
         }
 
-        if (invoices.isNotEmpty()) {
-            item {
-                Text(
-                    "חשבונות שזוהו לאחרונה",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            items(invoices.take(3), key = { it.id }) { invoice ->
-                Card(shape = RoundedCornerShape(18.dp)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(15.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = TechBluePrimary)
-                        Spacer(modifier = Modifier.size(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(invoice.providerName, fontWeight = FontWeight.Bold)
-                            Text(
-                                invoice.category,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+        val recentInvoices = latestScan?.invoices
+        if (recentInvoices != null) {
+            if (recentInvoices.isNotEmpty()) {
+                item {
+                    Text(
+                        "חשבונות שזוהו לאחרונה",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                items(recentInvoices.take(3), key = { it.sourceMessageId }) { invoice ->
+                    Card(shape = RoundedCornerShape(18.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(15.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = TechBluePrimary)
+                            Spacer(modifier = Modifier.size(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(invoice.providerName, fontWeight = FontWeight.Bold)
+                                Text(
+                                    invoice.category,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(money(invoice.monthlyCost), fontWeight = FontWeight.Bold)
                         }
-                        Text(money(invoice.monthlyCost), fontWeight = FontWeight.Bold)
                     }
                 }
-            }
-        } else if (financialSyncState is FinancialSyncState.Ready && isConnected) {
-            item {
-                HomeStatusCard(
-                    title = "אין כרגע חשבונות מזוהים להצגה",
-                    body = "זהו מצב ריק לאחר סנכרון שהושלם, לא הנחה שנוצרה ממסד מקומי ריק."
-                )
+            } else {
+                item {
+                    HomeStatusCard(
+                        title = "אין כרגע חשבונות מזוהים להצגה",
+                        body = "זהו מצב ריק מהסריקה הסמכותית האחרונה, לא ערך שנוצר כברירת מחדל."
+                    )
+                }
             }
         }
     }
@@ -299,13 +302,13 @@ private fun AuthoritativeSummaryCard(home: FinancialHomeResult) {
                 MetricCard(
                     modifier = Modifier.weight(1f),
                     title = "חיוב חודשי חוזר שזוהה",
-                    value = money(context.observedRecurringMonthlySpend),
+                    value = context.observedRecurringMonthlySpend?.let(::money) ?: "לא ידוע",
                     supporting = if (context.isCompleteHouseholdSpend) "כיסוי שסומן כמלא" else "כיסוי חלקי מהמקורות המחוברים"
                 )
                 MetricCard(
                     modifier = Modifier.weight(1f),
                     title = "שירותים חוזרים",
-                    value = context.recurringServiceCount.toString(),
+                    value = context.recurringServiceCount?.toString() ?: "לא ידוע",
                     supporting = "לפי ההקשר הסמכותי"
                 )
             }
