@@ -4,6 +4,7 @@ const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const stableScan = require("./gmailScanV5Functions");
+const gmailWatch = require("./gmailWatchFunctions");
 const { ACTIVE_GMAIL_PARSER_VERSION } = require("./gmailParserVersion");
 const { normalizeHistoryId, syncMode } = require("./gmailHistoryPolicy");
 
@@ -11,6 +12,7 @@ const db = getFirestore();
 const googleOAuthClientSecret = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
 const oauthTokenEncryptionKey = defineSecret("OAUTH_TOKEN_ENCRYPTION_KEY");
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const MAX_AUTHORITATIVE_INVOICES = 500;
 
 function requireAuth(request) {
   const uid = request.auth?.uid;
@@ -18,18 +20,18 @@ function requireAuth(request) {
   return uid;
 }
 
-function stableScanRunner() {
-  const handler = stableScan.scanGmailInvoices;
+function handlerRunner(handler, name) {
   const runner = typeof handler?.run === "function" ? handler.run.bind(handler) : handler;
-  if (typeof runner !== "function") {
-    throw new Error("Stable Gmail scan handler is unavailable.");
-  }
+  if (typeof runner !== "function") throw new Error(`${name} handler is unavailable.`);
   return runner;
 }
 
-function incrementalNoScanResult(mode, connection) {
+async function authoritativeInvoiceSnapshot(uid, mode, connection) {
+  const snapshot = await db.collection("users").doc(uid).collection("gmailInvoices")
+    .limit(MAX_AUTHORITATIVE_INVOICES)
+    .get();
   return {
-    invoices: [],
+    invoices: snapshot.docs.map((doc) => doc.data()),
     scannedMessages: 0,
     importedCount: 0,
     removedSourceMessageIds: [],
@@ -40,8 +42,36 @@ function incrementalNoScanResult(mode, connection) {
     agentRefreshed: false,
     initialBackfillCompleted: connection.initialBackfillCompleted === true,
     historyRecoveryRequired: connection.historyRecoveryRequired === true,
+    authoritativeSnapshotTruncated: snapshot.size >= MAX_AUTHORITATIVE_INVOICES,
     syncMode: mode,
   };
+}
+
+async function establishInitialBaseline(request, connectionRef, before) {
+  const existing = normalizeHistoryId(before.watchHistoryId);
+  if (existing) return existing;
+  const result = await handlerRunner(gmailWatch.startGmailWatch, "Gmail watch")(request);
+  return normalizeHistoryId(result?.historyId);
+}
+
+async function establishRecoveryBaseline(request, connectionRef, before) {
+  const processedCheckpoint = normalizeHistoryId(before.watchHistoryId);
+  const result = await handlerRunner(gmailWatch.startGmailWatch, "Gmail watch")(request);
+  const recoveryBaseline = normalizeHistoryId(result?.historyId);
+  if (!recoveryBaseline) {
+    throw new HttpsError("unavailable", "A fresh Gmail History recovery baseline is unavailable.");
+  }
+
+  // users.watch returns a future recovery baseline. It is not a processed checkpoint yet.
+  // Restore the last processed checkpoint until the bounded recovery backfill succeeds.
+  const update = {
+    recoveryBaselineHistoryId: recoveryBaseline,
+    historyRecoveryRequired: true,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  if (processedCheckpoint) update.watchHistoryId = processedCheckpoint;
+  await connectionRef.set(update, { merge: true });
+  return recoveryBaseline;
 }
 
 exports.scanGmailInvoices = onCall(
@@ -61,30 +91,53 @@ exports.scanGmailInvoices = onCall(
     const before = beforeSnapshot.data() || {};
     const mode = syncMode(before, ACTIVE_GMAIL_PARSER_VERSION);
 
-    if (mode === "INCREMENTAL" || mode === "RECOVERY_REQUIRED") {
-      return incrementalNoScanResult(mode, before);
+    if (mode === "INCREMENTAL") {
+      return authoritativeInvoiceSnapshot(uid, mode, before);
     }
 
-    const result = await stableScanRunner()(request);
+    let baseline = normalizeHistoryId(before.watchHistoryId);
+    if (mode === "INITIAL_BACKFILL") {
+      baseline = await establishInitialBaseline(request, connectionRef, before);
+    } else if (mode === "RECOVERY_REQUIRED") {
+      baseline = await establishRecoveryBaseline(request, connectionRef, before);
+    }
+
+    const result = await handlerRunner(stableScan.scanGmailInvoices, "Stable Gmail scan")(request);
     const afterSnapshot = await connectionRef.get();
     const after = afterSnapshot.data() || before;
-    const checkpoint = normalizeHistoryId(after.watchHistoryId || before.watchHistoryId);
-
     const update = {
       parserVersion: ACTIVE_GMAIL_PARSER_VERSION,
+      lastSuccessfulProcessingAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     };
 
     if (mode === "INITIAL_BACKFILL") {
       update.initialBackfillCompleted = true;
       update.initialBackfillCompletedAt = FieldValue.serverTimestamp();
-      if (checkpoint) {
-        update.initialBackfillHistoryBaseline = checkpoint;
+      if (baseline) {
+        update.initialBackfillHistoryBaseline = baseline;
+        update.watchHistoryId = baseline;
         update.historyRecoveryRequired = false;
         update.historyRecoveryReason = FieldValue.delete();
       } else {
         update.historyRecoveryRequired = true;
         update.historyRecoveryReason = "MISSING_HISTORY_BASELINE";
+      }
+    } else if (mode === "RECOVERY_REQUIRED") {
+      if (!baseline) {
+        throw new HttpsError("unavailable", "Gmail History recovery baseline is unavailable.");
+      }
+      update.watchHistoryId = baseline;
+      update.initialBackfillCompleted = true;
+      update.historyRecoveryRequired = false;
+      update.historyRecoveryReason = FieldValue.delete();
+      update.recoveryBaselineHistoryId = FieldValue.delete();
+      update.lastHistoryRecoveryAt = FieldValue.serverTimestamp();
+    } else if (mode === "PARSER_UPGRADE_BACKFILL") {
+      update.initialBackfillCompleted = true;
+      if (normalizeHistoryId(after.watchHistoryId || baseline)) {
+        update.historyRecoveryRequired = false;
+        update.historyRecoveryReason = FieldValue.delete();
       }
     }
 
@@ -92,16 +145,14 @@ exports.scanGmailInvoices = onCall(
 
     return {
       ...result,
-      initialBackfillCompleted: mode === "INITIAL_BACKFILL"
-        ? true
-        : before.initialBackfillCompleted === true,
-      historyRecoveryRequired: mode === "INITIAL_BACKFILL" && !checkpoint,
+      initialBackfillCompleted: true,
+      historyRecoveryRequired: update.historyRecoveryRequired === true,
       syncMode: mode,
     };
   }
 );
 
 Object.defineProperties(module.exports, {
-  _incrementalNoScanResult: { value: incrementalNoScanResult, enumerable: false },
-  _stableScanRunner: { value: stableScanRunner, enumerable: false },
+  _authoritativeInvoiceSnapshot: { value: authoritativeInvoiceSnapshot, enumerable: false },
+  _handlerRunner: { value: handlerRunner, enumerable: false },
 });
