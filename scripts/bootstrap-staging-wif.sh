@@ -39,6 +39,7 @@ PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(project
 
 DEPLOY_SA_EMAIL="${DEPLOY_SA_ID}@${PROJECT_ID}.iam.gserviceaccount.com"
 RUNTIME_SA_EMAIL="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+APPSPOT_SA_EMAIL="${PROJECT_ID}@appspot.gserviceaccount.com"
 
 log "Enabling APIs required for keyless federation and deployment"
 gcloud services enable \
@@ -137,6 +138,13 @@ done
 
 log "Granting Service Account User on the Cloud Run functions runtime service account"
 gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA_EMAIL" \
+  --project="$PROJECT_ID" \
+  --member="serviceAccount:${DEPLOY_SA_EMAIL}" \
+  --role="roles/iam.serviceAccountUser" \
+  --condition=None >/dev/null
+
+log "Granting Service Account User on the App Engine/Firebase Functions service account"
+gcloud iam service-accounts add-iam-policy-binding "$APPSPOT_SA_EMAIL" \
   --project="$PROJECT_ID" \
   --member="serviceAccount:${DEPLOY_SA_EMAIL}" \
   --role="roles/iam.serviceAccountUser" \
