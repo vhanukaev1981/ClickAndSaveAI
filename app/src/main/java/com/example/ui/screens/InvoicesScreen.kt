@@ -7,30 +7,23 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -41,31 +34,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.data.local.InvoiceItem
+import com.example.data.repository.FinancialSyncState
 import com.example.ui.MainViewModel
 import com.example.ui.theme.TechBluePrimary
 
 @Composable
 fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
     val invoices by viewModel.invoices.collectAsState()
-    val totalMonthlyCost by viewModel.totalMonthlyCost.collectAsState()
-    val verifiedSavings by viewModel.totalMonthlySavingsPotential.collectAsState()
+    val financialSyncState by viewModel.financialSyncState.collectAsState()
+    val financialHome by viewModel.authoritativeFinancialHome.collectAsState()
     var selectedCategory by remember { mutableStateOf("הכל") }
-    var showAddDialog by remember { mutableStateOf(false) }
     val categories = listOf("הכל", "חשמל", "סלולר", "אינטרנט", "תקשורת", "ביטוח", "טלוויזיה")
     val filteredInvoices = if (selectedCategory == "הכל") invoices else invoices.filter { it.category == selectedCategory }
-
-    if (showAddDialog) {
-        ManualInvoiceDialog(
-            onDismiss = { showAddDialog = false },
-            onAdd = { provider, category, cost ->
-                viewModel.addManualInvoice(provider, category, cost, "", 0.0, 0.0)
-                showAddDialog = false
-            }
-        )
-    }
+    val observedMonthlySpend = financialHome?.context?.observedRecurringMonthlySpend
 
     LazyColumn(
         modifier = Modifier
@@ -98,43 +81,27 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                     modifier = Modifier.padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "₪${String.format("%.2f", totalMonthlyCost)}",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "הוצאה חודשית מזוהה",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Button(onClick = { showAddDialog = true }) {
-                            Icon(Icons.Default.Add, contentDescription = null)
-                            Spacer(Modifier.size(4.dp))
-                            Text("הוסף חשבון")
-                        }
-                    }
-
-                    if (verifiedSavings > 0.0) {
-                        Text(
-                            "חיסכון חודשי מאומת: ₪${String.format("%.2f", verifiedSavings)}",
-                            color = TechBluePrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    } else {
-                        Text(
-                            "המערכת בודקת כל שירות מול הצעות מתאימות. חיסכון יוצג רק אחרי אימות.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        formatAuthoritativeMoney(observedMonthlySpend),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "הוצאה חודשית מזוהה",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        financialTruthStatus(financialSyncState),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "חיסכון יוצג רק אחרי אימות של הצעה מתאימה.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TechBluePrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }
@@ -165,7 +132,13 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                         Spacer(Modifier.size(10.dp))
                         Text(
                             if (selectedCategory == "הכל") {
-                                "עדיין לא זוהו חשבונות. לאחר החיבור הראשוני מסמכים רלוונטיים ייקלטו אוטומטית, ואפשר גם להוסיף חשבון ידנית."
+                                when (financialSyncState) {
+                                    FinancialSyncState.CheckingConnection,
+                                    FinancialSyncState.Recovering -> "המידע עדיין נטען. לא יוצג אפס במקום מידע שעדיין אינו ידוע."
+                                    is FinancialSyncState.Failed -> "הסנכרון לא הושלם. לא הומצאו נתונים חלופיים."
+                                    is FinancialSyncState.Partial -> "המידע חלקי כרגע. מוצגים רק נתונים שכבר אומתו."
+                                    else -> "עדיין לא זוהו חשבונות מהמקור המחובר."
+                                }
                             } else {
                                 "אין כרגע חשבונות בקטגוריה $selectedCategory."
                             }
@@ -204,6 +177,16 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
 
     @Suppress("UNUSED_VARIABLE")
     val receiptScanKeptForApiCompatibility = onOpenReceiptScan
+}
+
+private fun financialTruthStatus(state: FinancialSyncState): String = when (state) {
+    FinancialSyncState.Unauthenticated -> "נדרשת התחברות כדי לטעון מידע סמכותי."
+    FinancialSyncState.CheckingConnection -> "בודקים את מקור המידע."
+    FinancialSyncState.Disconnected -> "המקור הפיננסי אינו מחובר."
+    FinancialSyncState.Recovering -> "המידע הסמכותי עדיין נטען."
+    is FinancialSyncState.Partial -> "המידע חלקי; ערכים חסרים נשארים לא ידועים."
+    is FinancialSyncState.Failed -> "הסנכרון נכשל; ערכים חסרים נשארים לא ידועים."
+    is FinancialSyncState.Ready -> "הנתונים מבוססים על הסנכרון הסמכותי האחרון."
 }
 
 @Composable
@@ -251,56 +234,4 @@ private fun customerStatus(invoice: InvoiceItem): String {
         raw.contains("UNVERIFIED") || raw.contains("NOT_FOUND") || raw.contains("GMAIL_READONLY") -> "החשבון זוהה ונמצא בבדיקה"
         else -> "נבדק אוטומטית להזדמנויות חיסכון"
     }
-}
-
-@Composable
-private fun ManualInvoiceDialog(onDismiss: () -> Unit, onAdd: (String, String, Double) -> Unit) {
-    var provider by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("חשמל") }
-    var amount by remember { mutableStateOf("") }
-    val categories = listOf("חשמל", "סלולר", "אינטרנט", "תקשורת", "ביטוח", "טלוויזיה")
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("הוספת חשבון") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "אפשר להוסיף חיוב שלא הגיע דרך מקור מחובר. גם כאן חיסכון יוצג רק אם תימצא הצעה מתאימה ומאומתת.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                OutlinedTextField(
-                    provider,
-                    { provider = it },
-                    label = { Text("ספק") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(categories) { item ->
-                        FilterChip(
-                            selected = category == item,
-                            onClick = { category = item },
-                            label = { Text(item) }
-                        )
-                    }
-                }
-                OutlinedTextField(
-                    amount,
-                    { amount = it },
-                    label = { Text("סכום חודשי") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onAdd(provider, category, amount.toDoubleOrNull() ?: 0.0) },
-                enabled = provider.isNotBlank() && (amount.toDoubleOrNull() ?: 0.0) > 0.0
-            ) {
-                Text("שמור")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("ביטול") } }
-    )
 }
