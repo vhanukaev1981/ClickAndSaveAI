@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.graphics.Bitmap
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.example.ai.DealAnalysisResult
 import com.example.ai.GeminiShoppingService
@@ -16,10 +17,13 @@ import com.example.data.local.WatchlistItem
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.AuthState
 import com.example.data.repository.BackendRepository
+import com.example.data.repository.FinancialActivityRepository
+import com.example.data.repository.FinancialActivityResult
 import com.example.data.repository.FinancialHomeResult
 import com.example.data.repository.FinancialRefreshReason
 import com.example.data.repository.FinancialSessionRecovery
 import com.example.data.repository.FinancialSyncState
+import com.example.data.repository.GmailConnectionResult
 import com.example.data.repository.GmailRepository
 import com.example.data.repository.GmailScanResult
 import com.example.data.repository.GmailSyncState
@@ -27,7 +31,9 @@ import com.example.data.repository.ProviderLeadRequest
 import com.example.data.repository.ProviderLeadResult
 import com.example.data.repository.ShoppingRepository
 import com.example.data.repository.UserSession
+import com.example.data.repository.activityOrNull
 import com.example.data.repository.financialHomeOrNull
+import com.example.data.repository.gmailConnectionOrNull
 import com.example.data.repository.latestScanOrNull
 import com.example.data.repository.observedRecurringMonthlySpendOrNull
 import com.example.data.repository.recurringServiceCountOrNull
@@ -78,10 +84,14 @@ sealed class ProviderLeadUiState {
     data class Error(val message: String) : ProviderLeadUiState()
 }
 
-class MainViewModel(application: Application) : AndroidViewModel(application) {
+class MainViewModel(
+    application: Application,
+    private val savedStateHandle: SavedStateHandle
+) : AndroidViewModel(application) {
     private val db = AppDatabase.getDatabase(application)
     private val shoppingRepository = ShoppingRepository(db)
     private val backendRepository = BackendRepository()
+    private val financialActivityRepository = FinancialActivityRepository()
     private val geminiService = GeminiShoppingService(backendRepository)
 
     val authRepository = AuthRepository(application)
@@ -103,6 +113,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val latestRecoveredGmailScan: StateFlow<GmailScanResult?> = financialSyncState
         .map { it.latestScanOrNull }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val authoritativeGmailConnection: StateFlow<GmailConnectionResult?> = financialSyncState
+        .map { it.gmailConnectionOrNull }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val authoritativeFinancialActivity: StateFlow<FinancialActivityResult?> = financialSyncState
+        .map { it.activityOrNull }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val observedRecurringMonthlySpend: StateFlow<Double?> = financialSyncState
@@ -246,11 +264,98 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        financialSessionRecovery.refresh(
-            previous = _financialSyncState.value
-        ) { state ->
-            _financialSyncState.value = state
+        val previous = _financialSyncState.value
+        val recovered = financialSessionRecovery.refresh(previous = previous) { state ->
+            when (state) {
+                FinancialSyncState.CheckingConnection,
+                FinancialSyncState.Recovering -> _financialSyncState.value = state
+                else -> Unit
+            }
         }
+        _financialSyncState.value = attachAuthoritativeProductEvidence(recovered, previous)
+    }
+
+    private suspend fun attachAuthoritativeProductEvidence(
+        recovered: FinancialSyncState,
+        previous: FinancialSyncState
+    ): FinancialSyncState {
+        if (
+            recovered is FinancialSyncState.Unauthenticated ||
+            recovered is FinancialSyncState.Disconnected ||
+            recovered is FinancialSyncState.CheckingConnection ||
+            recovered is FinancialSyncState.Recovering
+        ) return recovered
+
+        val connection = runCatching { backendRepository.getGmailConnectionStatus() }
+            .getOrElse { error ->
+                return when (recovered) {
+                    is FinancialSyncState.Ready -> FinancialSyncState.Partial(
+                        latestScan = recovered.latestScan,
+                        financialHome = recovered.financialHome,
+                        reason = safeProductReason(error),
+                        gmailConnection = null,
+                        activity = previous.activityOrNull
+                    )
+                    is FinancialSyncState.Partial -> recovered.copy(
+                        reason = safeProductReason(error),
+                        gmailConnection = null,
+                        activity = recovered.activity ?: previous.activityOrNull
+                    )
+                    else -> recovered
+                }
+            }
+
+        if (!connection.connected) return FinancialSyncState.Disconnected
+
+        val activity = runCatching { financialActivityRepository.getFinancialActivity() }
+            .getOrElse { error ->
+                return when (recovered) {
+                    is FinancialSyncState.Ready -> FinancialSyncState.Partial(
+                        latestScan = recovered.latestScan,
+                        financialHome = recovered.financialHome,
+                        reason = safeProductReason(error),
+                        gmailConnection = connection,
+                        activity = previous.activityOrNull
+                    )
+                    is FinancialSyncState.Partial -> recovered.copy(
+                        reason = safeProductReason(error),
+                        gmailConnection = connection,
+                        activity = recovered.activity ?: previous.activityOrNull
+                    )
+                    is FinancialSyncState.Failed -> FinancialSyncState.Partial(
+                        latestScan = null,
+                        financialHome = null,
+                        reason = recovered.reason,
+                        gmailConnection = connection,
+                        activity = previous.activityOrNull
+                    )
+                    else -> recovered
+                }
+            }
+
+        return when (recovered) {
+            is FinancialSyncState.Ready -> recovered.copy(
+                gmailConnection = connection,
+                activity = activity
+            )
+            is FinancialSyncState.Partial -> recovered.copy(
+                gmailConnection = connection,
+                activity = activity
+            )
+            is FinancialSyncState.Failed -> FinancialSyncState.Partial(
+                latestScan = null,
+                financialHome = null,
+                reason = recovered.reason,
+                gmailConnection = connection,
+                activity = activity
+            )
+            else -> recovered
+        }
+    }
+
+    private fun safeProductReason(error: Throwable): String {
+        return error.localizedMessage?.takeIf(String::isNotBlank)
+            ?: "חלק מנתוני המוצר הסמכותיים אינם זמינים כרגע."
     }
 
     fun completeGmailAuthorization(serverAuthCode: String) {
@@ -288,11 +393,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun signOut() {
         viewModelScope.launch {
             _financialSyncState.value = FinancialSyncState.Unauthenticated
+            savedStateHandle[SELECTED_TAB_KEY] = 0
             authRepository.signOut()
         }
     }
 
-    val selectedTab = MutableStateFlow(0)
+    val selectedTab: StateFlow<Int> = savedStateHandle.getStateFlow(SELECTED_TAB_KEY, 0)
     val searchQuery = MutableStateFlow("")
     val selectedCategory = MutableStateFlow("All")
 
@@ -410,7 +516,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isReceiptScanning = MutableStateFlow(false)
 
     fun setTab(index: Int) {
-        selectedTab.value = index.coerceIn(0, 4)
+        savedStateHandle[SELECTED_TAB_KEY] = index.coerceIn(0, 4)
     }
 
     fun setSearchQuery(query: String) {
@@ -532,5 +638,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearReceiptResult() {
         receiptScanResult.value = null
+    }
+
+    companion object {
+        private const val SELECTED_TAB_KEY = "selected_primary_tab"
     }
 }
