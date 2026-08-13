@@ -71,6 +71,15 @@ jobs:
             exit 1
           fi
 
+      - name: Require deployer act-as on Firebase functions service account
+        shell: bash
+        run: |
+          set -euo pipefail
+          script='scripts/bootstrap-staging-wif.sh'
+          grep -Fq 'APPSPOT_SA_EMAIL="${PROJECT_ID}@appspot.gserviceaccount.com"' "$script"
+          grep -Fq 'gcloud iam service-accounts add-iam-policy-binding "$APPSPOT_SA_EMAIL"' "$script"
+          grep -Fq 'Granting Service Account User on the App Engine/Firebase Functions service account' "$script"
+
       - name: Require one-command GitHub staging variable configuration
         shell: bash
         run: |
