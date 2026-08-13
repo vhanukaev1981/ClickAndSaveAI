@@ -159,4 +159,4 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-# Retrigger Gate A after staging environment variables were configured on 2026-08-13.
+# Retrigger Gate A after App Engine service-account ActAs IAM binding was applied on 2026-08-13.
