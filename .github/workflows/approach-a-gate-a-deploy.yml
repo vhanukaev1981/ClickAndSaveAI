@@ -132,6 +132,24 @@ jobs:
       - name: Install pinned Firebase CLI
         run: npm install --global firebase-tools@15.1.0
 
+      - name: Materialize non-secret staging function parameters
+        shell: bash
+        run: |
+          set -euo pipefail
+          PARAMS_SOURCE='functions/.env.example'
+          PARAMS_TARGET='functions/.env.clickandsaveai-staging'
+          [[ -f "$PARAMS_SOURCE" ]] || {
+            echo 'Missing committed staging parameter source functions/.env.example.' >&2
+            exit 1
+          }
+          CLIENT_ID="$(sed -n 's/^GOOGLE_OAUTH_CLIENT_ID=//p' "$PARAMS_SOURCE" | head -n 1)"
+          if [[ "$CLIENT_ID" != 716864421960-*.apps.googleusercontent.com ]]; then
+            echo 'Committed GOOGLE_OAUTH_CLIENT_ID does not belong to clickandsaveai-staging.' >&2
+            exit 1
+          fi
+          install -m 600 "$PARAMS_SOURCE" "$PARAMS_TARGET"
+          echo 'Materialized non-secret staging Firebase Functions parameters.'
+
       - name: Deploy exact Core candidate to staging
         shell: bash
         run: |
@@ -159,4 +177,4 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-# Retrigger Gate A after App Engine service-account ActAs IAM binding was applied on 2026-08-13.
+# Gate A retries only after a verified external blocker is resolved; source stays pinned to the exact Core SHA above.
