@@ -4,6 +4,7 @@ const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const stableScan = require("./gmailScanV5Functions");
+const stableScanHandler = stableScan.scanGmailInvoices;
 const gmailWatch = require("./gmailWatchFunctions");
 const { ACTIVE_GMAIL_PARSER_VERSION } = require("./gmailParserVersion");
 const { normalizeHistoryId, syncMode } = require("./gmailHistoryPolicy");
@@ -62,8 +63,6 @@ async function establishRecoveryBaseline(request, connectionRef, before) {
     throw new HttpsError("unavailable", "A fresh Gmail History recovery baseline is unavailable.");
   }
 
-  // users.watch returns a future recovery baseline. It is not a processed checkpoint yet.
-  // Restore the last processed checkpoint until the bounded recovery backfill succeeds.
   const update = {
     recoveryBaselineHistoryId: recoveryBaseline,
     historyRecoveryRequired: true,
@@ -102,7 +101,7 @@ exports.scanGmailInvoices = onCall(
       baseline = await establishRecoveryBaseline(request, connectionRef, before);
     }
 
-    const result = await handlerRunner(stableScan.scanGmailInvoices, "Stable Gmail scan")(request);
+    const result = await handlerRunner(stableScanHandler, "Stable Gmail scan")(request);
     const afterSnapshot = await connectionRef.get();
     const after = afterSnapshot.data() || before;
     const update = {
@@ -155,4 +154,5 @@ exports.scanGmailInvoices = onCall(
 Object.defineProperties(module.exports, {
   _authoritativeInvoiceSnapshot: { value: authoritativeInvoiceSnapshot, enumerable: false },
   _handlerRunner: { value: handlerRunner, enumerable: false },
+  _stableScanHandler: { value: stableScanHandler, enumerable: false },
 });
