@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.example.data.repository.FinancialRefreshReason
 import com.example.ui.MainViewModel
 import com.example.ui.components.BottomNavBar
 import com.example.ui.screens.DashboardScreen
@@ -219,7 +220,7 @@ fun MainAppStructure(
     LaunchedEffect(session.uid) {
         if (session.isAuthenticated) {
             PushRegistration.registerCurrentToken()
-            viewModel.gmailRepository.refreshConnectionStatusAndUpgradeIfNeeded()
+            viewModel.refreshFinancialSession(FinancialRefreshReason.STARTUP)
         }
     }
 
