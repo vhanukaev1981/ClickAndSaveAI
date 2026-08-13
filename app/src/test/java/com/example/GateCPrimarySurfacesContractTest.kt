@@ -7,23 +7,59 @@ import org.junit.Test
 
 class GateCPrimarySurfacesContractTest {
     @Test
-    fun billsConsumesUnifiedRecoveryStateWithoutLocalFinancialFallbacksOrManualProductionEntry() {
-        val source = File("src/main/java/com/example/ui/screens/InvoicesScreen.kt").readText()
-        assertTrue(source.contains("viewModel.financialSyncState.collectAsState()"))
-        assertFalse(source.contains("viewModel.totalMonthlyCost.collectAsState()"))
-        assertFalse(source.contains("viewModel.totalMonthlySavingsPotential.collectAsState()"))
-        assertFalse(source.contains("ManualInvoiceDialog("))
-        assertFalse(source.contains("viewModel.addManualInvoice("))
+    fun homeUsesAuthoritativeScanAndNeverLeaksLocalInvoiceCache() {
+        val source = File("src/main/java/com/example/ui/screens/DashboardScreen.kt").readText()
+        assertTrue(source.contains("financialSyncState"))
+        assertTrue(source.contains("latestScanOrNull") || source.contains("latestRecoveredGmailScan"))
+        assertFalse(source.contains("viewModel.invoices.collectAsState()"))
+        assertFalse(source.contains("viewModel.isGmailConnected.collectAsState()"))
     }
 
     @Test
-    fun savingsConsumesUnifiedAuthoritativeSessionInsteadOfFetchingFinancialHomeIndependently() {
+    fun billsConsumesAuthoritativeRecoveredBillsWithoutManualOrRoomFallbacks() {
+        val source = File("src/main/java/com/example/ui/screens/InvoicesScreen.kt").readText()
+        assertTrue(source.contains("viewModel.financialSyncState.collectAsState()"))
+        assertTrue(source.contains("latestScanOrNull") || source.contains("latestRecoveredGmailScan"))
+        assertFalse(source.contains("viewModel.invoices.collectAsState()"))
+        assertFalse(source.contains("InvoiceItem"))
+        assertFalse(source.contains("viewModel.deleteInvoice("))
+        assertFalse(source.contains("ManualInvoiceDialog("))
+        assertFalse(source.contains("viewModel.addManualInvoice("))
+        assertFalse(source.contains("viewModel.totalMonthlyCost.collectAsState()"))
+        assertFalse(source.contains("viewModel.totalMonthlySavingsPotential.collectAsState()"))
+    }
+
+    @Test
+    fun savingsConsumesUnifiedAuthoritativeSessionAndCallsSavingsPotentialNotConfirmed() {
         val source = File("src/main/java/com/example/ui/screens/ProvidersScreen.kt").readText()
         assertTrue(source.contains("viewModel.financialSyncState.collectAsState()"))
         assertTrue(source.contains("viewModel.authoritativeFinancialHome.collectAsState()"))
         assertFalse(source.contains("BackendRepository"))
         assertFalse(source.contains("backendRepository.getFinancialHome()"))
         assertFalse(source.contains("LaunchedEffect("))
+        assertTrue(source.contains("חיסכון פוטנציאלי"))
+        assertFalse(source.contains("חיסכון מאומת"))
+        assertTrue(source.contains("סטטוס אימות ההצעה לא ידוע"))
+    }
+
+    @Test
+    fun savingsUnknownMonetaryValueCannotCreateAMonetarySavingsCta() {
+        val source = File("src/main/java/com/example/ui/screens/ProvidersScreen.kt").readText()
+        assertFalse(source.contains("potentialAnnualSaving ?: 0.0"))
+        assertFalse(source.contains("potentialMonthlySaving ?: 0.0"))
+        assertTrue(source.contains("monthlySaving != null"))
+    }
+
+    @Test
+    fun meUsesAuthoritativeSyncContractForGmailAndDoesNotPresentLocalDefaultsAsServerTruth() {
+        val source = File("src/main/java/com/example/ui/screens/ProfileScreen.kt").readText()
+        assertTrue(source.contains("viewModel.financialSyncState.collectAsState()"))
+        assertTrue(source.contains("viewModel.authState.collectAsState()"))
+        assertFalse(source.contains("viewModel.isGmailConnected.collectAsState()"))
+        assertFalse(source.contains("viewModel.monthlySavingsGoal.collectAsState()"))
+        assertFalse(source.contains("viewModel.minSavingsThreshold.collectAsState()"))
+        assertTrue(source.contains("מצב Gmail לא ידוע"))
+        assertTrue(source.contains("קריאה בלבד"))
     }
 
     @Test
@@ -38,11 +74,5 @@ class GateCPrimarySurfacesContractTest {
         assertTrue(action.contains("val potentialAnnualSaving: Double?"))
         assertFalse(action.contains("potentialMonthlySaving = (response[\"potentialMonthlySaving\"] as? Number)?.toDouble() ?: 0.0"))
         assertFalse(action.contains("potentialAnnualSaving = (response[\"potentialAnnualSaving\"] as? Number)?.toDouble() ?: 0.0"))
-    }
-
-    @Test
-    fun savingsNeverTurnsUnknownAnnualSavingIntoKnownZero() {
-        val source = File("src/main/java/com/example/ui/screens/ProvidersScreen.kt").readText()
-        assertFalse(source.contains("potentialAnnualSaving ?: 0.0"))
     }
 }
