@@ -210,7 +210,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                                 contactEmail = email
                             )
                         }.onSuccess { result ->
-                            actionMessage = "יצרנו בקשה מאומתת ל-${opportunity.matchedOffer?.providerName.orEmpty()}. החיסכון שנבדק: ${money(result.potentialMonthlySaving)} בחודש."
+                            actionMessage = "יצרנו בקשה מאומתת ל-${opportunity.matchedOffer?.providerName.orEmpty()}. החיסכון שנבדק: ${formatVerifiedSavings(result.potentialMonthlySaving)} בחודש."
                             error = ""
                             refreshKey += 1
                         }.onFailure { throwable ->
@@ -269,7 +269,7 @@ private fun OpportunityCard(
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    "חיסכון מאומת: ${money(monthlySaving ?: 0.0)} בחודש • ${money(opportunity.potentialAnnualSaving ?: 0.0)} בשנה",
+                    "חיסכון מאומת: ${formatVerifiedSavings(monthlySaving)} בחודש • ${formatVerifiedSavings(opportunity.potentialAnnualSaving)} בשנה",
                     color = TechBluePrimary,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -305,7 +305,7 @@ private fun OpportunityCard(
                             )
                         }
                         Button(onClick = onAccept, modifier = Modifier.fillMaxWidth()) {
-                            Text("אני רוצה לחסוך ${money(monthlySaving ?: 0.0)} בחודש")
+                            Text("אני רוצה לחסוך ${formatVerifiedSavings(monthlySaving)} בחודש")
                         }
                     }
                     else -> {
