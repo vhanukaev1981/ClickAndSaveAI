@@ -47,12 +47,13 @@ class FinancialRecoveryWiringGuardTest {
     }
 
     @Test
-    fun signOutReturnsFinancialSessionToUnauthenticatedState() {
+    fun signOutKeepsServerGmailConnectionAndReturnsFinancialSessionToUnauthenticatedState() {
         val viewModel = File("src/main/java/com/example/ui/MainViewModel.kt").readText()
         val signOutBlock = viewModel
             .substringAfter("fun signOut()")
             .substringBefore("val selectedTab")
 
         assertTrue(signOutBlock.contains("FinancialSyncState.Unauthenticated"))
+        assertFalse(signOutBlock.contains("gmailRepository.disconnectGmail()"))
     }
 }
