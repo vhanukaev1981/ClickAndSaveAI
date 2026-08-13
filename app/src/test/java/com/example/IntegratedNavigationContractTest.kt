@@ -36,13 +36,15 @@ class IntegratedNavigationContractTest {
     }
 
     @Test
-    fun activityScreenConsumesTheSynchronizedFinancialSessionAndDoesNotFabricateHistory() {
+    fun activityScreenConsumesAuthoritativeLedgerAndDoesNotInferHistoryFromCurrentUiState() {
         val screen = File("src/main/java/com/example/ui/screens/ActivityScreen.kt")
         assertTrue(screen.exists())
         val source = if (screen.exists()) screen.readText() else ""
 
-        assertTrue(source.contains("FinancialSyncState"))
-        assertTrue(source.contains("financialSyncState"))
+        assertTrue(source.contains("FinancialActivityEvent"))
+        assertTrue(source.contains("activityOrNull") || source.contains("authoritativeFinancialActivity"))
+        assertFalse(source.contains("title = \"הסנכרון הושלם\""))
+        assertFalse(source.contains("state.latestScan.invoices.isNotEmpty()"))
         assertFalse(source.contains("lead", ignoreCase = true))
         assertFalse(source.contains("CRM", ignoreCase = true))
         assertFalse(source.contains("הופעל השירות"))
