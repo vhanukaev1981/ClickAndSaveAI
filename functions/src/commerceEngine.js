@@ -173,6 +173,9 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
       matchedOffer: null,
       potentialMonthlySaving: null,
       potentialAnnualSaving: null,
+      offerVerificationState: "UNKNOWN",
+      offerFreshnessState: "UNKNOWN",
+      userEligibilityState: "UNKNOWN",
       truthfulness: {
         ...(opportunity.truthfulness || {}),
         savingsClaimAvailable: false,
@@ -213,6 +216,9 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
     },
     potentialMonthlySaving: best.monthlySaving,
     potentialAnnualSaving: best.annualSaving,
+    offerVerificationState: best.verificationState,
+    offerFreshnessState: best.freshnessState,
+    userEligibilityState: best.eligibilityState,
     truthfulness: {
       ...(opportunity.truthfulness || {}),
       savingsClaimAvailable: true,
