@@ -7,6 +7,7 @@ const {
   REALTIME_MODE,
   importTriggerMode,
   shouldRunAgentForImport,
+  shouldRunAgentForImportEvent,
 } = require("../src/agentTriggerPolicy");
 
 test("backfill batch writes are coalesced instead of waking the agent per message", () => {
@@ -19,7 +20,14 @@ test("real-time Gmail writes still wake the financial agent immediately", () => 
   assert.equal(shouldRunAgentForImport({ agentTriggerMode: REALTIME_MODE }), true);
 });
 
-test("legacy and delete-trigger data default to running the agent for safe reconciliation", () => {
+test("legacy and ordinary delete-trigger data still run the agent for safe reconciliation", () => {
   assert.equal(shouldRunAgentForImport({}), true);
   assert.equal(shouldRunAgentForImport(null), true);
+  assert.equal(shouldRunAgentForImportEvent({}, null), true);
+});
+
+test("privacy deletion update and delete events never recreate derived financial state", () => {
+  const privacyMarked = { privacyDeletionRequested: true };
+  assert.equal(shouldRunAgentForImportEvent({}, privacyMarked), false);
+  assert.equal(shouldRunAgentForImportEvent(privacyMarked, null), false);
 });

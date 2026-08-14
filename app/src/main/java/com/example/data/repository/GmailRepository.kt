@@ -185,9 +185,8 @@ class GmailRepository(
 
     suspend fun disconnectGmail(): Result<Unit> {
         return runCatching {
-            runCatching { backendRepository.stopGmailWatch() }
-                .onFailure { error -> Log.w("GmailRepository", "Stopping Gmail watch failed", error) }
-            backendRepository.disconnectGmail()
+            val result = backendRepository.disconnectGmailAuthoritatively()
+            check(result.ingestionStopped) { "Server did not confirm Gmail ingestion was stopped." }
             _isConnected.value = false
             _connectedEmail.value = ""
             _lastScanTime.value = "מנותק"

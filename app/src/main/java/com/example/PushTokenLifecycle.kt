@@ -58,4 +58,17 @@ object PushTokenLifecycle {
         val failure = firstFailure
         return if (failure != null) Result.failure(failure) else Result.success(Unit)
     }
+
+    suspend fun deleteLocalTokenAfterAccountDeletion(): Result<Unit> {
+        return runCatching {
+            withTimeout(FCM_OPERATION_TIMEOUT_MS) {
+                FirebaseMessaging.getInstance().deleteToken().await()
+            }
+            Unit
+        }.onFailure { error ->
+            // The server-side account subtree has already been removed, so this token has no
+            // remaining Click & Save registration. This cleanup prevents local token reuse only.
+            Log.w(TAG, "Local FCM token cleanup after account deletion failed", error)
+        }
+    }
 }

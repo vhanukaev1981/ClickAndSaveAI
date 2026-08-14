@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -24,9 +25,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -36,7 +41,12 @@ import com.example.data.repository.AuthState
 import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.gmailConnectionOrNull
 import com.example.ui.MainViewModel
+import com.example.ui.PrivacyOperationUiState
 import com.example.ui.theme.TechBluePrimary
+
+private const val CONFIRM_DISCONNECT_GMAIL = "DISCONNECT_GMAIL"
+private const val CONFIRM_DELETE_IMPORTED_DATA = "DELETE_IMPORTED_FINANCIAL_DATA"
+private const val CONFIRM_DELETE_ACCOUNT = "DELETE_ACCOUNT"
 
 @Composable
 fun ProfileScreen(
@@ -46,6 +56,12 @@ fun ProfileScreen(
 ) {
     val authState by viewModel.authState.collectAsState()
     val financialSyncState by viewModel.financialSyncState.collectAsState()
+    val privacyOperationState by viewModel.privacyOperationState.collectAsState()
+    var pendingConfirmation by remember { mutableStateOf<String?>(null) }
+
+    val onDisconnectGmail = viewModel::disconnectGmail
+    val onDeleteImportedData = viewModel::deleteImportedFinancialData
+    val onDeleteAccount = viewModel::deleteAccount
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("profile_screen"),
@@ -56,20 +72,71 @@ fun ProfileScreen(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("אני", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(
-                    "זהות החשבון, מצב Gmail ופרטיות מוצגים כמקורות נפרדים.",
+                    "זהות החשבון, מצב Gmail ופעולות פרטיות נשמרים כמחזורי חיים נפרדים.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        item { AccountCard(authState = authState, onGoogleSignIn = onGoogleSignIn, onSignOut = viewModel::signOut) }
-        item { GmailAuthorityCard(financialSyncState) }
-        item { PrivacyAuthorityCard(financialSyncState) }
+        item {
+            AccountCard(
+                authState = authState,
+                onGoogleSignIn = onGoogleSignIn,
+                onSignOut = viewModel::signOut
+            )
+        }
+        item {
+            GmailAuthorityCard(
+                financialSyncState = financialSyncState,
+                authState = authState,
+                onRequestGmailAuthorization = onRequestGmailAuthorization
+            )
+        }
+        item {
+            PrivacyAuthorityCard(
+                authState = authState,
+                financialSyncState = financialSyncState,
+                privacyOperationState = privacyOperationState,
+                onDisconnectGmail = { pendingConfirmation = CONFIRM_DISCONNECT_GMAIL },
+                onDeleteImportedData = { pendingConfirmation = CONFIRM_DELETE_IMPORTED_DATA },
+                onDeleteAccount = { pendingConfirmation = CONFIRM_DELETE_ACCOUNT }
+            )
+        }
     }
 
-    @Suppress("UNUSED_VARIABLE")
-    val gmailAuthorizationKeptForNavigationCompatibility = onRequestGmailAuthorization
+    when (pendingConfirmation) {
+        CONFIRM_DISCONNECT_GMAIL -> PrivacyConfirmationDialog(
+            title = "ניתוק Gmail",
+            text = "הפעולה תפסיק ייבוא עתידי מ-Gmail ותבצע ניקוי watch והרשאת Google בשרת. היא לא מוחקת את הנתונים שכבר יובאו, לא מוציאה אותך מהחשבון ולא מוחקת את החשבון.",
+            confirmLabel = "נתק Gmail",
+            onConfirm = {
+                pendingConfirmation = null
+                onDisconnectGmail()
+            },
+            onDismiss = { pendingConfirmation = null }
+        )
+        CONFIRM_DELETE_IMPORTED_DATA -> PrivacyConfirmationDialog(
+            title = "מחיקת נתונים מיובאים",
+            text = "הפעולה תמחק את הנתונים הפיננסיים שיובאו מ-Gmail ואת הנתונים הנגזרים מהם. החשבון יישאר קיים ו-Gmail יישאר מחובר, ולכן סריקה עתידית יכולה ליצור נתונים חדשים.",
+            confirmLabel = "מחק נתונים מיובאים",
+            onConfirm = {
+                pendingConfirmation = null
+                onDeleteImportedData()
+            },
+            onDismiss = { pendingConfirmation = null }
+        )
+        CONFIRM_DELETE_ACCOUNT -> PrivacyConfirmationDialog(
+            title = "מחיקת חשבון",
+            text = "הפעולה תמחק את חשבון Click & Save AI ואת הנתונים שבבעלות החשבון, תסיר רישומי Push ותבצע את ניקוי Gmail הנדרש. אם ניקוי Google לא ניתן לאימות, המחיקה תיעצר ותישאר ניתנת לניסיון חוזר במקום לדווח הצלחה חלקית.",
+            confirmLabel = "מחק חשבון",
+            onConfirm = {
+                pendingConfirmation = null
+                onDeleteAccount()
+            },
+            onDismiss = { pendingConfirmation = null }
+        )
+    }
 }
 
 @Composable
@@ -111,7 +178,7 @@ private fun AccountCard(
                         Text("יציאה מהחשבון")
                     }
                     Text(
-                        "יציאה מהחשבון אינה מוצגת כניתוק Gmail או כמחיקת חשבון.",
+                        "יציאה מסיימת את ה-session המקומי ומנקה את רישום ה-Push של המכשיר. היא אינה מוצגת כניתוק Gmail או כמחיקת חשבון.",
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
@@ -121,7 +188,11 @@ private fun AccountCard(
 }
 
 @Composable
-private fun GmailAuthorityCard(financialSyncState: FinancialSyncState) {
+private fun GmailAuthorityCard(
+    financialSyncState: FinancialSyncState,
+    authState: AuthState,
+    onRequestGmailAuthorization: () -> Unit
+) {
     val connection = financialSyncState.gmailConnectionOrNull
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -156,8 +227,16 @@ private fun GmailAuthorityCard(financialSyncState: FinancialSyncState) {
                     }
                 }
             }
+            if (authState is AuthState.Authenticated && connection?.connected != true) {
+                OutlinedButton(
+                    onClick = onRequestGmailAuthorization,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("חבר Gmail")
+                }
+            }
             Text(
-                "ניתוק Gmail הוא פעולה נפרדת מיציאה מהחשבון. ביצוע ניתוק מלא אינו חלק ממסך זה כרגע.",
+                "ניתוק Gmail הוא פעולה נפרדת מיציאה, ממחיקת נתונים וממחיקת החשבון.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -166,7 +245,17 @@ private fun GmailAuthorityCard(financialSyncState: FinancialSyncState) {
 }
 
 @Composable
-private fun PrivacyAuthorityCard(financialSyncState: FinancialSyncState) {
+private fun PrivacyAuthorityCard(
+    authState: AuthState,
+    financialSyncState: FinancialSyncState,
+    privacyOperationState: PrivacyOperationUiState,
+    onDisconnectGmail: () -> Unit,
+    onDeleteImportedData: () -> Unit,
+    onDeleteAccount: () -> Unit
+) {
+    val authenticated = authState is AuthState.Authenticated
+    val working = privacyOperationState is PrivacyOperationUiState.Working
+
     Card(shape = RoundedCornerShape(20.dp)) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -174,21 +263,107 @@ private fun PrivacyAuthorityCard(financialSyncState: FinancialSyncState) {
                 Spacer(modifier = Modifier.size(8.dp))
                 Text("פרטיות ושליטה", fontWeight = FontWeight.Bold)
             }
+
             val connection = financialSyncState.gmailConnectionOrNull
             Text(
                 when {
-                    connection?.connected == true -> "מצב הסכמה זמין מהשרת; Gmail מוגבל לקריאה בלבד."
-                    financialSyncState == FinancialSyncState.Disconnected -> "אין כרגע חיבור Gmail פעיל לפי השרת."
-                    else -> "מצב ההסכמה המלא אינו ידוע כרגע."
+                    connection?.connected == true -> "Gmail מחובר לקריאה בלבד לפי מצב השרת."
+                    financialSyncState == FinancialSyncState.Disconnected -> "אין כרגע ייבוא Gmail פעיל לפי מצב האפליקציה."
+                    else -> "מצב Gmail המלא אינו ידוע כרגע."
                 }
             )
-            Text("מצב התראות: לא ידוע", style = MaterialTheme.typography.bodySmall)
-            Text("ניהול מחיקה מלא: אינו זמין במסך זה עדיין", style = MaterialTheme.typography.bodySmall)
+
+            when (privacyOperationState) {
+                PrivacyOperationUiState.Idle -> Unit
+                is PrivacyOperationUiState.Working -> Text(
+                    "הפעולה מתבצעת בשרת. אין לסגור אותה כהצלחה לפני אישור השרת.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                is PrivacyOperationUiState.Success -> Text(
+                    privacyOperationState.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                is PrivacyOperationUiState.Error -> Text(
+                    privacyOperationState.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            if (authenticated) {
+                OutlinedButton(
+                    onClick = onDisconnectGmail,
+                    enabled = !working,
+                    modifier = Modifier.fillMaxWidth().testTag("disconnect_gmail")
+                ) {
+                    Text("נתק Gmail")
+                }
+                Text(
+                    "מפסיק ייבוא עתידי ומנקה הרשאת Gmail; אינו מוחק נתונים שכבר יובאו.",
+                    style = MaterialTheme.typography.labelSmall
+                )
+
+                OutlinedButton(
+                    onClick = onDeleteImportedData,
+                    enabled = !working,
+                    modifier = Modifier.fillMaxWidth().testTag("delete_imported_data")
+                ) {
+                    Text("מחק נתונים מיובאים")
+                }
+                Text(
+                    "מוחק נתונים מיובאים ונגזרים בלבד; החשבון ו-Gmail נשמרים.",
+                    style = MaterialTheme.typography.labelSmall
+                )
+
+                Button(
+                    onClick = onDeleteAccount,
+                    enabled = !working,
+                    modifier = Modifier.fillMaxWidth().testTag("delete_account")
+                ) {
+                    Text("מחק חשבון")
+                }
+                Text(
+                    "מחיקת חשבון היא מחזור חיים נפרד ומחייבת ניקוי שרתי לפני סיום ה-session המקומי.",
+                    style = MaterialTheme.typography.labelSmall
+                )
+            } else {
+                Text(
+                    "יש להתחבר לחשבון כדי לבצע פעולות פרטיות סמכותיות.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
             Text(
-                "Gmail מנותק אינו שווה לחשבון שנמחק.",
+                "Gmail מנותק אינו שווה לנתונים שנמחקו, ונתונים שנמחקו אינם שווים לחשבון שנמחק.",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold
             )
         }
     }
+}
+
+@Composable
+private fun PrivacyConfirmationDialog(
+    title: String,
+    text: String,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontWeight = FontWeight.Bold) },
+        text = { Text(text) },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Text(confirmLabel)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("ביטול")
+            }
+        }
+    )
 }

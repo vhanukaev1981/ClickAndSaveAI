@@ -58,6 +58,10 @@ const gmailReliableScanFunctions = require("./gmailReliableScanFunctions");
 const gmailReliabilityGuard = require("./gmailReliabilityGuard");
 const gmailInvoiceNotificationFunctions = require("./gmailInvoiceNotificationFunctions");
 const pushAccountCleanup = require("./pushAccountCleanup");
+const guardedUserWriteFunctions = require("./guardedUserWriteFunctions");
+const gmailConnectFunctions = require("./gmailConnectFunctions");
+const gmailDisconnectFunctions = require("./gmailDisconnectFunctions");
+const privacyLifecycleFunctions = require("./privacyLifecycleFunctions");
 
 // Preserve the historical public-module identity contract while routing public scans through
 // Block 3 reliability semantics. gmailReliableScanFunctions captured the original stable v6
@@ -88,4 +92,11 @@ module.exports = {
   ...gmailReliabilityGuard,
   ...gmailInvoiceNotificationFunctions,
   ...pushAccountCleanup,
+  // Legacy top-level user writes must not recreate records from stale auth after account deletion.
+  ...guardedUserWriteFunctions,
+  // Block 5 overrides only endpoints that need distinct connection/privacy lifecycles. Financial
+  // Home keeps the authoritative Block 3 function object and enforces active-account state inside it.
+  ...gmailConnectFunctions,
+  ...gmailDisconnectFunctions,
+  ...privacyLifecycleFunctions,
 };
