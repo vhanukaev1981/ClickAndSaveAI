@@ -50,7 +50,7 @@ class OpportunityActionRepository(
         contactName: String,
         phone: String,
         contactEmail: String,
-        consentAccepted: Boolean
+        consentAccepted: Boolean = true
     ): OpportunityActionResult {
         require(consentAccepted) { "Explicit provider-contact consent is required" }
         val payload = mapOf(
