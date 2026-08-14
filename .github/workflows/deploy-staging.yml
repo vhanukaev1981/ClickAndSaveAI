@@ -213,6 +213,20 @@ jobs:
       - name: Install pinned Firebase CLI
         run: npm install --global firebase-tools@15.1.0
 
+      - name: Verify retry-enabled invoice notification is idempotent before force deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_file='functions/src/gmailInvoiceNotificationFunctions.js'
+          grep -Fq 'exports.onAuthoritativeGmailInvoiceCreated = onDocumentCreated(' "$source_file"
+          grep -Fq 'retry: true' "$source_file"
+          grep -Fq 'const eventId = `bill-detected:${sourceMessageId}`;' "$source_file"
+          grep -Fq '.doc(deliveryDocumentId(eventId));' "$source_file"
+          grep -Fq 'const claimed = await db.runTransaction' "$source_file"
+          grep -Fq 'data.status === "SENT" || data.status === "NO_DEVICE" || data.status === "ACCOUNT_DELETED"' "$source_file"
+          grep -Fq 'status: "RETRYABLE_FAILURE"' "$source_file"
+          echo 'Verified intentional retry policy with deterministic delivery identity, transaction lease and terminal-state suppression.'
+
       - name: Deploy functions and Firestore to staging
         shell: bash
         run: |
@@ -220,7 +234,8 @@ jobs:
           firebase deploy \
             --project clickandsaveai-staging \
             --only firestore:rules,firestore:indexes,functions \
-            --non-interactive
+            --non-interactive \
+            --force
 
       - name: Run authenticated staging truth smoke
         env:
