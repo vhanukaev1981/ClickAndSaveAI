@@ -33,6 +33,7 @@ jobs:
       SOURCE_SHA: ${{ inputs.source_sha }}
       PRODUCTION_FIREBASE_PROJECT_ID: ${{ vars.PRODUCTION_FIREBASE_PROJECT_ID }}
       PRODUCTION_GOOGLE_WEB_CLIENT_ID: ${{ vars.PRODUCTION_GOOGLE_WEB_CLIENT_ID }}
+      PRODUCTION_APP_SIGNING_CERT_SHA1: ${{ vars.PRODUCTION_APP_SIGNING_CERT_SHA1 }}
       PRODUCTION_APP_SIGNING_CERT_SHA256: ${{ vars.PRODUCTION_APP_SIGNING_CERT_SHA256 }}
       PRODUCTION_UPLOAD_KEY_ALIAS: ${{ vars.PRODUCTION_UPLOAD_KEY_ALIAS }}
       PRODUCTION_GOOGLE_SERVICES_JSON_B64: ${{ secrets.PRODUCTION_GOOGLE_SERVICES_JSON_B64 }}
@@ -48,7 +49,7 @@ jobs:
           [[ '${{ inputs.confirm_environment }}' == 'CLICKANDSAVEAI_PRODUCTION' ]] || { echo 'Production confirmation phrase mismatch.' >&2; exit 1; }
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'source_sha must be an exact lowercase 40-character commit SHA.' >&2; exit 1; }
           missing=()
-          for name in PRODUCTION_FIREBASE_PROJECT_ID PRODUCTION_GOOGLE_WEB_CLIENT_ID PRODUCTION_APP_SIGNING_CERT_SHA256 PRODUCTION_UPLOAD_KEY_ALIAS PRODUCTION_GOOGLE_SERVICES_JSON_B64 PRODUCTION_UPLOAD_KEYSTORE_B64 PRODUCTION_UPLOAD_STORE_PASSWORD PRODUCTION_UPLOAD_KEY_PASSWORD; do
+          for name in PRODUCTION_FIREBASE_PROJECT_ID PRODUCTION_GOOGLE_WEB_CLIENT_ID PRODUCTION_APP_SIGNING_CERT_SHA1 PRODUCTION_APP_SIGNING_CERT_SHA256 PRODUCTION_UPLOAD_KEY_ALIAS PRODUCTION_GOOGLE_SERVICES_JSON_B64 PRODUCTION_UPLOAD_KEYSTORE_B64 PRODUCTION_UPLOAD_STORE_PASSWORD PRODUCTION_UPLOAD_KEY_PASSWORD; do
             [[ -n "${!name:-}" ]] || missing+=("$name")
           done
           if (( ${#missing[@]} > 0 )); then
@@ -167,6 +168,8 @@ jobs:
           AAB_CERT_SHA256="$(printf '%s\n' "$AAB_CERT_OUTPUT" | sed -n 's/^[[:space:]]*SHA256: //p' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
           [[ "$AAB_CERT_SHA256" == "$UPLOAD_CERT_SHA256" ]] || { echo 'APK and AAB upload signing identities differ.' >&2; exit 1; }
 
+          PLAY_CERT_SHA1="$(printf '%s' "$PRODUCTION_APP_SIGNING_CERT_SHA1" | tr '[:lower:]' '[:upper:]' | tr -d ':')"
+          [[ "$PLAY_CERT_SHA1" =~ ^[0-9A-F]{40}$ ]] || { echo 'PRODUCTION_APP_SIGNING_CERT_SHA1 must be a SHA-1 certificate fingerprint.' >&2; exit 1; }
           PLAY_CERT_SHA256="$(printf '%s' "$PRODUCTION_APP_SIGNING_CERT_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
           [[ "$PLAY_CERT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo 'PRODUCTION_APP_SIGNING_CERT_SHA256 must be a SHA-256 certificate fingerprint.' >&2; exit 1; }
           [[ "$UPLOAD_CERT_SHA256" != "$PLAY_CERT_SHA256" ]] || { echo 'Upload key must be distinct from the Google Play app signing key.' >&2; exit 1; }
@@ -192,6 +195,7 @@ jobs:
           aab_file=$(basename "$AAB")
           aab_sha256=$AAB_SHA256
           upload_signing_cert_sha256=$UPLOAD_CERT_SHA256
+          play_app_signing_cert_sha1=$PLAY_CERT_SHA1
           play_app_signing_cert_sha256=$PLAY_CERT_SHA256
           release_approved=false
           firebase_deployed=false
