@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
+import { runBlock6HandoffAcceptance } from "./staging-block6-handoff-acceptance.mjs";
 
 const STAGING_PROJECT_ID = "clickandsaveai-staging";
 const FUNCTIONS_REGION = "europe-west1";
@@ -242,15 +243,24 @@ export async function runStagingCoreSmoke({
   const scanResponse = await callStagingCallable("scanGmailInvoices", callableOptions);
   const financialHomeResponse = await callStagingCallable("getFinancialHome", callableOptions);
   const activityResponse = await callStagingCallable("getFinancialActivity", callableOptions);
-
-  return sanitizeSmokeSummary({
-    projectId: STAGING_PROJECT_ID,
+  const handoffAcceptance = await runBlock6HandoffAcceptance({
     sourceSha,
-    gmailResponse,
-    scanResponse,
-    financialHomeResponse,
-    activityResponse,
+    env,
+    fetchImpl,
+    mintTokens: mintSmokeTokensWithAdmin,
   });
+
+  return {
+    ...sanitizeSmokeSummary({
+      projectId: STAGING_PROJECT_ID,
+      sourceSha,
+      gmailResponse,
+      scanResponse,
+      financialHomeResponse,
+      activityResponse,
+    }),
+    handoffAcceptance,
+  };
 }
 
 async function main() {
