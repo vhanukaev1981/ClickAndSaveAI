@@ -57,6 +57,7 @@ const gmailIncrementalReconciliation = require("./gmailIncrementalReconciliation
 const gmailReliableScanFunctions = require("./gmailReliableScanFunctions");
 const gmailReliabilityGuard = require("./gmailReliabilityGuard");
 const gmailInvoiceNotificationFunctions = require("./gmailInvoiceNotificationFunctions");
+const pushAccountCleanup = require("./pushAccountCleanup");
 
 // Preserve the historical public-module identity contract while routing public scans through
 // Block 3 reliability semantics. gmailReliableScanFunctions captured the original stable v6
@@ -86,4 +87,5 @@ module.exports = {
   // checkpoint recovery and truthful reconnect semantics.
   ...gmailReliabilityGuard,
   ...gmailInvoiceNotificationFunctions,
+  ...pushAccountCleanup,
 };
