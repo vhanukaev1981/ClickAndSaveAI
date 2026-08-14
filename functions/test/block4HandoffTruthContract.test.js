@@ -5,9 +5,11 @@ const assert = require("node:assert/strict");
 
 const {
   createHandoffTruth,
+  normalizeHandoffTruth,
   applyDeliveryEvidence,
   applyProviderContactEvidence,
   applyCompletionEvidence,
+  applyRejectionEvidence,
   applySavingRealizationEvidence,
 } = require("../src/handoffTruth");
 
@@ -27,6 +29,27 @@ test("consent and request creation do not imply submission, delivery, provider c
   assert.equal(truth.savingRealizationState, "UNKNOWN");
   assert.equal(truth.realizedMonthlySaving, null);
   assert.equal(truth.realizedAnnualSaving, null);
+});
+
+test("inconsistent legacy truth fails closed instead of inventing consent or downstream states", () => {
+  const truth = normalizeHandoffTruth({
+    consentState: "NOT_CONSENTED",
+    requestState: "REQUEST_CREATED",
+    submissionState: "SUBMITTED",
+    deliveryState: "DELIVERY_CONFIRMED",
+    providerContactState: "CONTACTED",
+    completionState: "DEAL_COMPLETED",
+    savingRealizationState: "REALIZED",
+    realizedMonthlySaving: 30,
+    realizedAnnualSaving: 360,
+  });
+  assert.equal(truth.requestState, "NOT_CREATED");
+  assert.equal(truth.submissionState, "NOT_SUBMITTED");
+  assert.equal(truth.deliveryState, "NOT_CONFIRMED");
+  assert.equal(truth.providerContactState, "UNKNOWN");
+  assert.equal(truth.completionState, "NOT_COMPLETED");
+  assert.equal(truth.savingRealizationState, "UNKNOWN");
+  assert.equal(truth.realizedMonthlySaving, null);
 });
 
 test("a delivery attempt may fail before submission without claiming provider receipt", () => {
@@ -76,6 +99,35 @@ test("delivery confirmation requires authoritative receipt evidence and still do
   assert.equal(truth.providerContactState, "UNKNOWN");
 });
 
+test("authoritative submission and delivery evidence cannot be regressed", () => {
+  const submitted = applyDeliveryEvidence(initialTruth(), {
+    attemptId: "attempt-regression-1",
+    transport: "PARTNER_API",
+    submissionAccepted: true,
+    deliveryConfirmed: false,
+  });
+  assert.throws(() => applyDeliveryEvidence(submitted, {
+    attemptId: "attempt-regression-2",
+    transport: "PARTNER_API",
+    submissionAccepted: false,
+    deliveryConfirmed: false,
+  }), /regressed/i);
+
+  const delivered = applyDeliveryEvidence(initialTruth(), {
+    attemptId: "attempt-regression-3",
+    transport: "PARTNER_API",
+    submissionAccepted: true,
+    deliveryConfirmed: true,
+    externalReceiptReference: "provider-receipt-regression",
+  });
+  assert.throws(() => applyDeliveryEvidence(delivered, {
+    attemptId: "attempt-regression-4",
+    transport: "PARTNER_API",
+    submissionAccepted: true,
+    deliveryConfirmed: false,
+  }), /regressed/i);
+});
+
 test("provider contact requires delivery confirmation and evidence", () => {
   assert.throws(() => applyProviderContactEvidence(initialTruth(), {
     contacted: true,
@@ -118,6 +170,9 @@ test("deal completion requires provider contact evidence and does not imply savi
   assert.equal(completed.completionState, "DEAL_COMPLETED");
   assert.equal(completed.savingRealizationState, "UNKNOWN");
   assert.equal(completed.realizedMonthlySaving, null);
+  assert.throws(() => applyRejectionEvidence(completed, {
+    externalReference: "late-rejection",
+  }), /cannot be regressed/i);
 });
 
 test("known zero saving is distinct from unknown saving and only follows completed deal evidence", () => {
@@ -145,6 +200,13 @@ test("known zero saving is distinct from unknown saving and only follows complet
   assert.equal(realized.savingRealizationState, "REALIZED");
   assert.equal(realized.realizedMonthlySaving, 30);
   assert.equal(realized.realizedAnnualSaving, 360);
+
+  const completedAgain = applyCompletionEvidence(realized, {
+    dealCompleted: true,
+    externalReference: "activation-999",
+  });
+  assert.equal(completedAgain.savingRealizationState, "REALIZED");
+  assert.equal(completedAgain.realizedMonthlySaving, 30);
 
   const knownZero = applySavingRealizationEvidence(completed, {
     currentComparableMonthlyCost: 129,
