@@ -1,5 +1,6 @@
 package com.example
 
+// Block 3 P0 contract: sign-out is fail-closed until push revocation succeeds.
 import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
