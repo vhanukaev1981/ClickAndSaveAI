@@ -42,23 +42,23 @@ function createHandoffTruth({ consentAccepted = false, requestCreated = false } 
 
 function normalizeHandoffTruth(record) {
   const source = record && typeof record === "object" ? record : {};
-  const fallback = createHandoffTruth({
-    consentAccepted: source.consentAccepted === true,
-    requestCreated: source.requestState === "REQUEST_CREATED" || source.handoffRequestState === "REQUEST_CREATED",
-  });
+  const consentFallback = source.consentAccepted === true ? "CONSENTED" : "NOT_CONSENTED";
+  const consentState = enumOr(source.consentState, CONSENT_STATES, consentFallback);
+  const requestedState = enumOr(
+    source.requestState || source.handoffRequestState,
+    REQUEST_STATES,
+    "NOT_CREATED"
+  );
+  const requestState = consentState === "CONSENTED" ? requestedState : "NOT_CREATED";
   const normalized = {
-    consentState: enumOr(source.consentState, CONSENT_STATES, fallback.consentState),
-    requestState: enumOr(source.requestState || source.handoffRequestState, REQUEST_STATES, fallback.requestState),
-    deliveryAttemptState: enumOr(source.deliveryAttemptState, DELIVERY_ATTEMPT_STATES, fallback.deliveryAttemptState),
-    submissionState: enumOr(source.submissionState, SUBMISSION_STATES, fallback.submissionState),
-    deliveryState: enumOr(source.deliveryState, DELIVERY_STATES, fallback.deliveryState),
-    providerContactState: enumOr(source.providerContactState, PROVIDER_CONTACT_STATES, fallback.providerContactState),
-    completionState: enumOr(source.completionState, COMPLETION_STATES, fallback.completionState),
-    savingRealizationState: enumOr(
-      source.savingRealizationState,
-      SAVING_REALIZATION_STATES,
-      fallback.savingRealizationState
-    ),
+    consentState,
+    requestState,
+    deliveryAttemptState: enumOr(source.deliveryAttemptState, DELIVERY_ATTEMPT_STATES, "NOT_ATTEMPTED"),
+    submissionState: enumOr(source.submissionState, SUBMISSION_STATES, "NOT_SUBMITTED"),
+    deliveryState: enumOr(source.deliveryState, DELIVERY_STATES, "NOT_CONFIRMED"),
+    providerContactState: enumOr(source.providerContactState, PROVIDER_CONTACT_STATES, "UNKNOWN"),
+    completionState: enumOr(source.completionState, COMPLETION_STATES, "NOT_COMPLETED"),
+    savingRealizationState: enumOr(source.savingRealizationState, SAVING_REALIZATION_STATES, "UNKNOWN"),
     realizedMonthlySaving: source.realizedMonthlySaving === null || source.realizedMonthlySaving === undefined
       ? null
       : Number(source.realizedMonthlySaving),
@@ -68,6 +68,38 @@ function normalizeHandoffTruth(record) {
   };
   if (!Number.isFinite(normalized.realizedMonthlySaving)) normalized.realizedMonthlySaving = null;
   if (!Number.isFinite(normalized.realizedAnnualSaving)) normalized.realizedAnnualSaving = null;
+
+  // Fail closed on inconsistent legacy records. Later truth cannot exist without its prerequisite.
+  if (normalized.requestState !== "REQUEST_CREATED") {
+    normalized.deliveryAttemptState = "NOT_ATTEMPTED";
+    normalized.submissionState = "NOT_SUBMITTED";
+    normalized.deliveryState = "NOT_CONFIRMED";
+    normalized.providerContactState = "UNKNOWN";
+    normalized.completionState = "NOT_COMPLETED";
+    normalized.savingRealizationState = "UNKNOWN";
+    normalized.realizedMonthlySaving = null;
+    normalized.realizedAnnualSaving = null;
+  }
+  if (normalized.deliveryState !== "DELIVERY_CONFIRMED") {
+    normalized.providerContactState = "UNKNOWN";
+    if (normalized.completionState === "DEAL_COMPLETED") normalized.completionState = "NOT_COMPLETED";
+    if (normalized.completionState !== "DEAL_COMPLETED") {
+      normalized.savingRealizationState = "UNKNOWN";
+      normalized.realizedMonthlySaving = null;
+      normalized.realizedAnnualSaving = null;
+    }
+  }
+  if (normalized.providerContactState !== "CONTACTED" && normalized.completionState === "DEAL_COMPLETED") {
+    normalized.completionState = "NOT_COMPLETED";
+    normalized.savingRealizationState = "UNKNOWN";
+    normalized.realizedMonthlySaving = null;
+    normalized.realizedAnnualSaving = null;
+  }
+  if (normalized.completionState !== "DEAL_COMPLETED") {
+    normalized.savingRealizationState = "UNKNOWN";
+    normalized.realizedMonthlySaving = null;
+    normalized.realizedAnnualSaving = null;
+  }
   return normalized;
 }
 
@@ -98,6 +130,12 @@ function applyDeliveryEvidence(state, evidence) {
   }
   if (evidence.deliveryConfirmed === true && evidence.submissionAccepted !== true) {
     throw new TypeError("delivery cannot be confirmed when submission was not accepted");
+  }
+  if (current.submissionState === "SUBMITTED" && evidence.submissionAccepted !== true) {
+    throw new TypeError("authoritative submission evidence cannot be regressed");
+  }
+  if (current.deliveryState === "DELIVERY_CONFIRMED" && evidence.deliveryConfirmed !== true) {
+    throw new TypeError("authoritative delivery confirmation cannot be regressed");
   }
   const externalReceiptReference = text(evidence.externalReceiptReference, 200);
   if (evidence.deliveryConfirmed === true && !externalReceiptReference) {
@@ -154,14 +192,14 @@ function applyCompletionEvidence(state, evidence) {
     ...current,
     completionState: "DEAL_COMPLETED",
     completionEvidenceReference: externalReference,
-    savingRealizationState: "UNKNOWN",
-    realizedMonthlySaving: null,
-    realizedAnnualSaving: null,
   };
 }
 
 function applyRejectionEvidence(state, evidence) {
   const current = normalizeHandoffTruth(state);
+  if (current.completionState === "DEAL_COMPLETED") {
+    throw new TypeError("authoritative deal completion cannot be regressed to rejection");
+  }
   const externalReference = text(evidence?.externalReference, 200);
   if (!externalReference) {
     throw new TypeError("deal rejection requires authoritative evidence reference");
