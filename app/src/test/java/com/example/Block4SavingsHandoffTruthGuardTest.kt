@@ -52,4 +52,18 @@ class Block4SavingsHandoffTruthGuardTest {
         assertTrue(screen.contains("savingRealizationState == \"REALIZED\""))
         assertTrue(screen.contains("זה אינו חיסכון ממומש"))
     }
+
+    @Test
+    fun dashboardAlsoRequiresVerifiedFreshEligibleTruthBeforeCallingOfferVerified() {
+        val dashboard = File("src/main/java/com/example/ui/screens/DashboardScreen.kt").readText()
+
+        assertTrue(dashboard.contains("opportunity.offerVerificationState == \"VERIFIED\""))
+        assertTrue(dashboard.contains("opportunity.offerFreshnessState == \"FRESH\""))
+        assertTrue(dashboard.contains("opportunity.userEligibilityState == \"ELIGIBLE\""))
+        assertTrue(dashboard.contains("matched.verificationState == \"VERIFIED\""))
+        assertTrue(dashboard.contains("matched.freshnessState == \"FRESH\""))
+        assertTrue(dashboard.contains("matched.eligibilityState == \"ELIGIBLE\""))
+        assertTrue(dashboard.contains("חיסכון פוטנציאלי לפי ההצעה"))
+        assertTrue(dashboard.contains("לא חיסכון ממומש"))
+    }
 }
