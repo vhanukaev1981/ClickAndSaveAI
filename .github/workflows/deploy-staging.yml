@@ -142,6 +142,39 @@ jobs:
           rm -f "$CONFIG_PATH"
           echo 'Derived staging Firebase smoke config without logging its values.'
 
+      - name: Report safe GitHub OIDC claims
+        shell: bash
+        run: |
+          set -euo pipefail
+          OIDC_RESPONSE="$(curl -fsSL \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=clickandsaveai-wif-diagnostic")"
+          OIDC_TOKEN="$(printf '%s' "$OIDC_RESPONSE" | jq -r '.value // empty')"
+          if [[ -z "$OIDC_TOKEN" ]]; then
+            echo 'GitHub did not return an OIDC diagnostic token.' >&2
+            exit 1
+          fi
+          export OIDC_TOKEN
+          node <<'NODE'
+          const token = process.env.OIDC_TOKEN || '';
+          const parts = token.split('.');
+          if (parts.length !== 3) throw new Error('Unexpected GitHub OIDC token format.');
+          const claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+          const safe = {
+            repository: claims.repository || '',
+            repository_id: claims.repository_id || '',
+            repository_owner_id: claims.repository_owner_id || '',
+            environment: claims.environment || '',
+            ref: claims.ref || '',
+            job_workflow_ref: claims.job_workflow_ref || '',
+            workflow_ref: claims.workflow_ref || '',
+            event_name: claims.event_name || '',
+            sub: claims.sub || '',
+          };
+          console.log(`SAFE_OIDC_CLAIMS=${JSON.stringify(safe)}`);
+          NODE
+          unset OIDC_TOKEN
+
       - id: auth
         name: Authenticate to Google Cloud with GitHub OIDC
         uses: google-github-actions/auth@v3
