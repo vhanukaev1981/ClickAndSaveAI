@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">Click &amp; Save AI</string>
-    <!-- Release builds must provide their own production Web OAuth client ID before launch. -->
+    <!-- Release audit builds remain empty; production candidates override this from protected CI input. -->
     <string name="google_web_client_id" translatable="false"></string>
 </resources>
