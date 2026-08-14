@@ -180,6 +180,22 @@ function truthFields(truth) {
   };
 }
 
+function classifyDeliveryAttemptReplay(lead, input) {
+  const storedAttemptId = String(lead?.lastDeliveryAttemptId || "").trim();
+  if (!storedAttemptId || storedAttemptId !== input.attemptId) return "NEW";
+
+  const expectedSubmissionState = input.submissionAccepted ? "SUBMITTED" : "NOT_SUBMITTED";
+  const expectedDeliveryState = input.deliveryConfirmed
+    ? "DELIVERY_CONFIRMED"
+    : (input.submissionAccepted ? "NOT_CONFIRMED" : "DELIVERY_FAILED");
+  const same = String(lead?.lastDeliveryTransport || "").trim() === input.transport &&
+    String(lead?.submissionState || "").trim().toUpperCase() === expectedSubmissionState &&
+    String(lead?.deliveryState || "").trim().toUpperCase() === expectedDeliveryState &&
+    String(lead?.externalReceiptReference || "").trim() === input.externalReceiptReference &&
+    String(lead?.deliveryFailureCode || "").trim() === input.failureCode;
+  return same ? "IDEMPOTENT" : "CONFLICT";
+}
+
 exports.recordProviderDeliveryEvidence = onCall(
   { enforceAppCheck: true },
   async (request) => {
@@ -209,6 +225,18 @@ exports.recordProviderDeliveryEvidence = onCall(
         throw new HttpsError("failed-precondition", "Delivery evidence is only accepted for attributable savings requests.");
       }
       const currentTruth = normalizeHandoffTruth(lead);
+      const replay = classifyDeliveryAttemptReplay(lead, input);
+      if (replay === "CONFLICT") {
+        throw new HttpsError(
+          "failed-precondition",
+          "The delivery attempt ID already exists with different authoritative evidence."
+        );
+      }
+      if (replay === "IDEMPOTENT") {
+        result = { leadId: input.leadId, idempotent: true, ...truthFields(currentTruth) };
+        return;
+      }
+
       let nextTruth;
       try {
         nextTruth = applyDeliveryEvidence(currentTruth, input);
@@ -249,12 +277,13 @@ exports.recordProviderDeliveryEvidence = onCall(
 
       if (refs.commerceRef) transaction.set(refs.commerceRef, { ...fields, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       if (refs.opportunityRef) transaction.set(refs.opportunityRef, { ...fields, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      result = { leadId: input.leadId, ...fields };
+      result = { leadId: input.leadId, idempotent: false, ...fields };
     });
 
     logger.info("Provider delivery evidence recorded", {
       operatorUid,
       leadId: input.leadId,
+      idempotent: result?.idempotent === true,
       submissionState: result.submissionState,
       deliveryState: result.deliveryState,
     });
@@ -450,5 +479,6 @@ exports._validateCommerceOutcomeInput = validateCommerceOutcomeInput;
 exports._validateDeliveryEvidenceInput = validateDeliveryEvidenceInput;
 exports._validateSavingRealizationInput = validateSavingRealizationInput;
 exports._assertTransition = assertTransition;
+exports._classifyDeliveryAttemptReplay = classifyDeliveryAttemptReplay;
 exports._opportunityStatusForLeadStatus = opportunityStatusForLeadStatus;
 exports._truthFields = truthFields;
