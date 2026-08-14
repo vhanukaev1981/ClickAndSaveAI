@@ -4,9 +4,9 @@ const { getAuth } = require("firebase-admin/auth");
 const { FieldPath, FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { defineSecret } = require("firebase-functions/params");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
-const logger = require("firebase-functions/logger");
 const { assertActiveAccount, lifecycleRef } = require("./accountAuthorization");
 const { _disconnectGmailForUid: disconnectGmailForUid } = require("./gmailDisconnectFunctions");
+const { emitOperationalEvent } = require("./operationalTelemetry");
 
 const db = getFirestore();
 const googleOAuthClientSecret = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
@@ -111,19 +111,43 @@ exports.deleteImportedFinancialData = onCall(
   { enforceAppCheck: true },
   async (request) => {
     const uid = requireAuth(request);
-    requireConfirmation(request, DELETE_IMPORTED_CONFIRMATION);
-    await assertActiveAccount(uid);
-    const topLevelDeleted = await deleteImportedFinancialState(uid);
-    logger.info("Imported financial data deletion completed", { uid });
-    return {
-      deleted: true,
-      operation: DELETE_IMPORTED_CONFIRMATION,
-      accountPreserved: true,
-      gmailConnectionPreserved: true,
-      providerHandoffRecordsPreserved: true,
-      futureGmailIngestionMayCreateNewData: true,
-      topLevelDeleted,
-    };
+    try {
+      requireConfirmation(request, DELETE_IMPORTED_CONFIRMATION);
+      await assertActiveAccount(uid);
+      const topLevelDeleted = await deleteImportedFinancialState(uid);
+      emitOperationalEvent({
+        event: "privacy.imported_data.delete",
+        subsystem: "privacy",
+        outcome: "success",
+        severity: "INFO",
+        code: "IMPORTED_DATA_DELETION_COMPLETED",
+        uid,
+        details: { operation: DELETE_IMPORTED_CONFIRMATION, topLevelDeleted },
+      });
+      return {
+        deleted: true,
+        operation: DELETE_IMPORTED_CONFIRMATION,
+        accountPreserved: true,
+        gmailConnectionPreserved: true,
+        providerHandoffRecordsPreserved: true,
+        futureGmailIngestionMayCreateNewData: true,
+        topLevelDeleted,
+      };
+    } catch (error) {
+      emitOperationalEvent({
+        event: "privacy.imported_data.delete",
+        subsystem: "privacy",
+        outcome: "failure",
+        severity: "ERROR",
+        code: "IMPORTED_DATA_DELETION_FAILED",
+        uid,
+        details: {
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorCode: error?.code || "UNKNOWN",
+        },
+      });
+      throw error;
+    }
   }
 );
 
@@ -134,61 +158,115 @@ exports.deleteAccount = onCall(
   },
   async (request) => {
     const uid = requireAuth(request);
-    requireConfirmation(request, DELETE_ACCOUNT_CONFIRMATION);
-    const lifecycle = lifecycleRef(uid);
+    try {
+      requireConfirmation(request, DELETE_ACCOUNT_CONFIRMATION);
+      const lifecycle = lifecycleRef(uid);
 
-    await lifecycle.set({
-      state: "DELETING",
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-
-    const gmailCleanup = await disconnectGmailForUid(uid);
-    if (!gmailCleanup.externalCleanupConfirmed) {
       await lifecycle.set({
-        state: "DELETE_RETRY_REQUIRED",
-        retryReason: "GMAIL_PROVIDER_CLEANUP",
-        gmailCleanup,
+        state: "DELETING",
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
-      throw new HttpsError(
-        "unavailable",
-        "Account deletion is paused until Gmail provider cleanup can be confirmed. Retry deletion."
-      );
-    }
 
-    // Provider authorization is now safe to discard. Re-enter DELETING before any account data
-    // is removed so active-account gates cannot recreate protected state during the destructive phase.
-    await lifecycle.set({
-      state: "DELETING",
-      retryReason: FieldValue.delete(),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+      const gmailCleanup = await disconnectGmailForUid(uid);
+      if (!gmailCleanup.externalCleanupConfirmed) {
+        await lifecycle.set({
+          state: "DELETE_RETRY_REQUIRED",
+          retryReason: "GMAIL_PROVIDER_CLEANUP",
+          gmailCleanup,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        emitOperationalEvent({
+          event: "privacy.account.delete",
+          subsystem: "privacy",
+          outcome: "retry_required",
+          severity: "CRITICAL",
+          code: "ACCOUNT_DELETE_RETRY_REQUIRED",
+          uid,
+          details: {
+            retryReason: "GMAIL_PROVIDER_CLEANUP",
+            externalCleanupConfirmed: false,
+          },
+        });
+        throw new HttpsError(
+          "unavailable",
+          "Account deletion is paused until Gmail provider cleanup can be confirmed. Retry deletion."
+        );
+      }
 
-    const topLevelDeleted = {};
-    for (const collectionName of ACCOUNT_TOP_LEVEL_UID_COLLECTIONS) {
-      topLevelDeleted[collectionName] = await deleteQueryByUid(collectionName, uid);
-    }
+      // Provider authorization is now safe to discard. Re-enter DELETING before any account data
+      // is removed so active-account gates cannot recreate protected state during the destructive phase.
+      await lifecycle.set({
+        state: "DELETING",
+        retryReason: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
 
-    await db.recursiveDelete(db.collection("users").doc(uid));
-    const authAlreadyMissing = await deleteAuthUserIdempotently(uid);
+      const topLevelDeleted = {};
+      for (const collectionName of ACCOUNT_TOP_LEVEL_UID_COLLECTIONS) {
+        topLevelDeleted[collectionName] = await deleteQueryByUid(collectionName, uid);
+      }
 
-    let lifecycleMarkerDeleted = true;
-    try {
-      await lifecycle.delete();
+      await db.recursiveDelete(db.collection("users").doc(uid));
+      const authAlreadyMissing = await deleteAuthUserIdempotently(uid);
+
+      let lifecycleMarkerDeleted = true;
+      try {
+        await lifecycle.delete();
+      } catch (error) {
+        lifecycleMarkerDeleted = false;
+        emitOperationalEvent({
+          event: "privacy.account.delete",
+          subsystem: "privacy",
+          outcome: "partial",
+          severity: "WARNING",
+          code: "ACCOUNT_DELETE_LIFECYCLE_MARKER_CLEANUP_FAILED",
+          uid,
+          details: { errorName: error instanceof Error ? error.name : typeof error },
+        });
+      }
+
+      emitOperationalEvent({
+        event: "privacy.account.delete",
+        subsystem: "privacy",
+        outcome: lifecycleMarkerDeleted ? "success" : "partial",
+        severity: lifecycleMarkerDeleted ? "INFO" : "WARNING",
+        code: lifecycleMarkerDeleted ? "ACCOUNT_DELETION_COMPLETED" : "ACCOUNT_DELETION_COMPLETED_WITH_MARKER_RETRY",
+        uid,
+        details: {
+          authAlreadyMissing,
+          externalCleanupConfirmed: gmailCleanup.externalCleanupConfirmed,
+          lifecycleMarkerDeleted,
+          topLevelDeleted,
+        },
+      });
+
+      return {
+        accountDeleted: true,
+        authAlreadyMissing,
+        gmailCleanup,
+        topLevelDeleted,
+        userTreeDeleted: true,
+        pushRegistrationsDeleted: true,
+        lifecycleMarkerDeleted,
+      };
     } catch (error) {
-      lifecycleMarkerDeleted = false;
-      logger.warn("Lifecycle marker cleanup failed after Auth deletion", { uid });
+      const retryRequired = error instanceof HttpsError && error.code === "unavailable";
+      if (!retryRequired) {
+        emitOperationalEvent({
+          event: "privacy.account.delete",
+          subsystem: "privacy",
+          outcome: "failure",
+          severity: "CRITICAL",
+          code: "ACCOUNT_DELETION_FAILED",
+          uid,
+          details: {
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorCode: error?.code || "UNKNOWN",
+          },
+        });
+      }
+      throw error;
     }
-
-    return {
-      accountDeleted: true,
-      authAlreadyMissing,
-      gmailCleanup,
-      topLevelDeleted,
-      userTreeDeleted: true,
-      pushRegistrationsDeleted: true,
-      lifecycleMarkerDeleted,
-    };
   }
 );
 
