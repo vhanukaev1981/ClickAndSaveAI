@@ -14,7 +14,7 @@ The canonical machine-readable classification is `operations/retention/retention
 
 `ANONYMIZE` means operational usefulness may remain after direct identity is removed or replaced by a pseudonymous/non-user-identifying representation. Block 2 operational logs use pseudonymous actor references and exclude secrets/direct email identity.
 
-`RETAIN` means the record family may need preservation for operational, financial, dispute, audit, or release traceability. Exact retention duration and lawful basis are owner/legal decisions unless already governed elsewhere.
+`RETAIN` means a non-user-content operational record family may need preservation for audit or release traceability. Exact retention duration and lawful basis are owner/legal decisions unless already governed elsewhere.
 
 ## Canonical Classifications
 
@@ -23,22 +23,24 @@ The canonical machine-readable classification is `operations/retention/retention
 - Gmail imported data — `DELETE` on imported-data deletion or account deletion.
 - Derived financial state — `DELETE` with the imported data it derives from and must not be recreated by deletion-triggered processing.
 - Push registration tokens — `DELETE` on token/session revocation or account deletion.
-- Provider/commerce records — `RETAIN`, with duration/exceptions requiring owner/legal policy.
+- Provider/commerce records — `DELETE` on confirmed account deletion, matching the existing account-deletion lifecycle for provider leads, dispatch queue entries, commerce matches and commerce events.
 - Operational logs/metrics — `ANONYMIZE`, with exact retention window requiring owner security/privacy policy.
 - Release/recovery evidence — `RETAIN`, without user content or secret values; exact duration requires owner policy.
+
+A future legal retention exception for provider/commerce evidence must be implemented as a separately designed, privacy-reviewed audit record. It must not silently override the current user-scoped account-deletion behavior.
 
 ## Fail-Closed Rules
 
 1. Unclassified data does not receive an invented retention period; escalate it.
 2. A deletion request is not complete while required external provider cleanup is unconfirmed.
-3. A retention exception must not silently expand product data collection.
+3. A retention exception must not silently expand product data collection or preserve records currently deleted by the account lifecycle.
 4. Operational logs must not contain OAuth tokens, authorization codes, secret values, request bodies, raw email addresses, passwords, private keys, or encryption material.
 5. Release/recovery evidence must identify immutable source/artifact/configuration identities, not user content.
 
 ## Owner Actions Still Required
 
 - approve lawful retention periods and any jurisdiction-specific exceptions;
-- approve deletion/anonymization behavior for financial or dispute records;
+- approve any future non-user-content audit record required for financial/dispute obligations;
 - configure actual production log/metric retention;
 - verify production deletion evidence and provider cleanup behavior;
 - maintain records of legal/privacy review.
