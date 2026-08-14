@@ -90,6 +90,11 @@ function normalizeOffer(offer, nowMs = Date.now()) {
     consumerPriceIncludesVat: pricingEvidence.consumerPriceIncludesVat,
     requiredRecurringFees: pricingEvidence.requiredRecurringFees,
     requiredRecurringFeesDescription: pricingEvidence.requiredRecurringFeesDescription,
+    verificationState: "VERIFIED",
+    freshnessState: "FRESH",
+    officialSourceUrl: normalizeText(offer.officialSourceUrl),
+    officialSourceName: normalizeText(offer.officialSourceName),
+    verificationMethod: normalizeText(offer.verificationMethod) || "OFFICIAL_SOURCE_OPERATOR_ATTESTATION",
     verifiedAt: new Date(verifiedAtMs).toISOString(),
     validUntil: new Date(validUntilMs).toISOString(),
     userFitScore: Number.isFinite(userFitScore)
@@ -138,6 +143,7 @@ function matchVerifiedOffers(opportunity, offers, options = {}) {
     const headlineMonthlySaving = roundMoney(currentMonthlyCost - offer.monthlyPrice);
     matches.push({
       ...offer,
+      eligibilityState: "ELIGIBLE",
       currentFirstYearCost,
       headlineMonthlySaving,
       monthlySaving,
@@ -150,7 +156,6 @@ function matchVerifiedOffers(opportunity, offers, options = {}) {
     });
   }
 
-  // User value is the ranking rule. Commission is deliberately excluded from this comparator.
   matches.sort((a, b) => {
     if (a.annualSaving !== b.annualSaving) return b.annualSaving - a.annualSaving;
     if (a.userFitScore !== b.userFitScore) return b.userFitScore - a.userFitScore;
@@ -195,6 +200,12 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
       consumerPriceIncludesVat: best.consumerPriceIncludesVat,
       requiredRecurringFees: best.requiredRecurringFees,
       requiredRecurringFeesDescription: best.requiredRecurringFeesDescription,
+      verificationState: best.verificationState,
+      freshnessState: best.freshnessState,
+      eligibilityState: best.eligibilityState,
+      verificationMethod: best.verificationMethod,
+      officialSourceUrl: best.officialSourceUrl,
+      officialSourceName: best.officialSourceName,
       verifiedAt: best.verifiedAt,
       validUntil: best.validUntil,
       userFitScore: best.userFitScore,
@@ -205,7 +216,7 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
     truthfulness: {
       ...(opportunity.truthfulness || {}),
       savingsClaimAvailable: true,
-      reason: "Savings are calculated from verified VAT-inclusive first-year cost, including declared mandatory recurring and one-time fees, after availability eligibility.",
+      reason: "Potential savings are calculated from a verified, fresh and eligible VAT-inclusive first-year offer, including declared mandatory recurring and one-time fees. They are not realized savings.",
     },
   };
 }
