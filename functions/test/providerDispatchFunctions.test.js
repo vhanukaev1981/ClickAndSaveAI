@@ -21,6 +21,9 @@ function lead(overrides = {}) {
     offerId: "offer-1",
     opportunityId: "opp-1",
     consentVersion: "opportunity-action-v1",
+    consentAccepted: true,
+    consentState: "CONSENTED",
+    requestState: "REQUEST_CREATED",
     source: "AI_PROACTIVE_OPPORTUNITY",
     status: "NEW",
     ...overrides,
@@ -40,15 +43,28 @@ function commerce(overrides = {}) {
   };
 }
 
-test("trackable AI lead becomes a minimal provider dispatch queue record", () => {
+test("trackable consented AI request becomes a minimal provider dispatch queue record", () => {
   const result = buildDispatchQueueRecord("lead-1", lead(), commerce());
   assert.ok(result);
   assert.equal(result.status, "PENDING");
+  assert.equal(result.consentState, "CONSENTED");
+  assert.equal(result.requestState, "REQUEST_CREATED");
+  assert.equal(result.deliveryAttemptState, "NOT_ATTEMPTED");
+  assert.equal(result.submissionState, "NOT_SUBMITTED");
+  assert.equal(result.deliveryState, "NOT_CONFIRMED");
   assert.equal(result.commerceMatchId, "user-1_opp-1");
   assert.equal(result.payload.offerId, "offer-1");
   assert.equal(result.payload.contactEmail, "test@example.com");
   assert.equal(Object.hasOwn(result.payload, "currentMonthlyCost"), false);
   assert.equal(Object.hasOwn(result.payload, "commissionValue"), false);
+});
+
+test("request without explicit consent truth is never queued", () => {
+  assert.equal(buildDispatchQueueRecord(
+    "lead-1",
+    lead({ consentAccepted: false, consentState: "NOT_CONSENTED", requestState: "NOT_CREATED" }),
+    commerce()
+  ), null);
 });
 
 test("non-partner or zero-commission lead is never queued for dispatch", () => {
