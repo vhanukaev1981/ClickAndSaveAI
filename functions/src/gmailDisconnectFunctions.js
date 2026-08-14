@@ -7,6 +7,7 @@ const logger = require("firebase-functions/logger");
 const { assertActiveAccount } = require("./accountAuthorization");
 const { providerCleanupConfirmed } = require("./gmailDisconnectPolicy");
 const { decryptToken } = require("./tokenCrypto");
+const { emitOperationalEvent } = require("./operationalTelemetry");
 
 const db = getFirestore();
 const googleOAuthClientId = defineString("GOOGLE_OAUTH_CLIENT_ID");
@@ -39,6 +40,15 @@ async function disconnectGmailForUid(uid) {
   const ref = db.collection("gmailConnections").doc(uid);
   const snapshot = await ref.get();
   if (!snapshot.exists) {
+    emitOperationalEvent({
+      event: "gmail.oauth.disconnect",
+      subsystem: "gmail",
+      outcome: "no_op",
+      severity: "INFO",
+      code: "GMAIL_OAUTH_ALREADY_DISCONNECTED",
+      uid,
+      details: { externalCleanupConfirmed: true },
+    });
     return {
       connected: false,
       idempotent: true,
@@ -133,6 +143,16 @@ async function disconnectGmailForUid(uid) {
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
   }
+
+  emitOperationalEvent({
+    event: "gmail.oauth.disconnect",
+    subsystem: "gmail",
+    outcome: externalCleanupConfirmed ? "success" : "retry_required",
+    severity: externalCleanupConfirmed ? "INFO" : "ERROR",
+    code: externalCleanupConfirmed ? "GMAIL_OAUTH_DISCONNECTED" : "GMAIL_OAUTH_CLEANUP_RETRY_REQUIRED",
+    uid,
+    details: { watchStopStatus, oauthRevocationStatus, externalCleanupConfirmed },
+  });
 
   return {
     connected: false,
