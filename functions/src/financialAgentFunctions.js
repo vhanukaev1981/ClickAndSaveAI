@@ -27,7 +27,7 @@ const MAX_WRITES_PER_BATCH = 400;
 const MAX_HOME_ITEMS = 20;
 const MAX_USERS_PER_SWEEP = 250;
 const SWEEP_CONCURRENCY = 5;
-const ENGINE_VERSION = 5;
+const ENGINE_VERSION = 6;
 
 function requireAuth(request) {
   const uid = request.auth?.uid;
@@ -198,8 +198,15 @@ async function persistFinancialState(uid, invoices, providerOffers = []) {
           monthlyPrice: enriched.matchedOffer.monthlyPrice,
           effectiveMonthlyPrice: enriched.matchedOffer.effectiveMonthlyPrice,
           firstYearCost: enriched.matchedOffer.firstYearCost,
+          currentCostEvidenceState: enriched.currentCostEvidenceState || "UNKNOWN",
+          offerVerificationState: enriched.offerVerificationState || "UNKNOWN",
+          offerFreshnessState: enriched.offerFreshnessState || "UNKNOWN",
+          userEligibilityState: enriched.userEligibilityState || "UNKNOWN",
           potentialMonthlySaving: enriched.potentialMonthlySaving,
           potentialAnnualSaving: enriched.potentialAnnualSaving,
+          realizedMonthlySaving: null,
+          realizedAnnualSaving: null,
+          savingRealizationState: "UNKNOWN",
           agreementActive: commission?.agreementActive === true,
           commissionType: commission?.commissionType || "NONE",
           commissionValue: commission?.commissionValue ?? null,
@@ -271,12 +278,26 @@ function homeOpportunity(item) {
     providerName: String(item.providerName || ""),
     category: String(item.category || ""),
     serviceType: String(item.serviceType || ""),
-    currentMonthlyCost: Number(item.currentMonthlyCost || 0),
-    previousMonthlyCost: Number(item.previousMonthlyCost || 0),
-    monthlyIncrease: Number(item.monthlyIncrease || 0),
-    percentIncrease: Number(item.percentIncrease || 0),
+    currentMonthlyCost: nullableFiniteNumber(item.currentMonthlyCost),
+    previousMonthlyCost: nullableFiniteNumber(item.previousMonthlyCost),
+    monthlyIncrease: nullableFiniteNumber(item.monthlyIncrease),
+    percentIncrease: nullableFiniteNumber(item.percentIncrease),
     potentialMonthlySaving: nullableFiniteNumber(item.potentialMonthlySaving),
     potentialAnnualSaving: nullableFiniteNumber(item.potentialAnnualSaving),
+    realizedMonthlySaving: nullableFiniteNumber(item.realizedMonthlySaving),
+    realizedAnnualSaving: nullableFiniteNumber(item.realizedAnnualSaving),
+    currentCostEvidenceState: String(item.currentCostEvidenceState || "UNKNOWN"),
+    offerVerificationState: String(item.offerVerificationState || "UNKNOWN"),
+    offerFreshnessState: String(item.offerFreshnessState || "UNKNOWN"),
+    userEligibilityState: String(item.userEligibilityState || "UNKNOWN"),
+    consentState: String(item.consentState || "NOT_CONSENTED"),
+    requestState: String(item.requestState || "NOT_CREATED"),
+    deliveryAttemptState: String(item.deliveryAttemptState || "NOT_ATTEMPTED"),
+    submissionState: String(item.submissionState || "NOT_SUBMITTED"),
+    deliveryState: String(item.deliveryState || "NOT_CONFIRMED"),
+    providerContactState: String(item.providerContactState || "UNKNOWN"),
+    completionState: String(item.completionState || "NOT_COMPLETED"),
+    savingRealizationState: String(item.savingRealizationState || "UNKNOWN"),
     recommendationAction: String(item.recommendationAction || ""),
     matchedOffer: item.matchedOffer ? {
       offerId: String(item.matchedOffer.offerId || ""),
@@ -290,9 +311,15 @@ function homeOpportunity(item) {
       oneTimeFees: nullableFiniteNumber(item.matchedOffer.oneTimeFees),
       firstYearCost: nullableFiniteNumber(item.matchedOffer.firstYearCost),
       serviceType: String(item.matchedOffer.serviceType || ""),
+      verificationState: String(item.matchedOffer.verificationState || "UNKNOWN"),
+      freshnessState: String(item.matchedOffer.freshnessState || "UNKNOWN"),
+      eligibilityState: String(item.matchedOffer.eligibilityState || "UNKNOWN"),
+      verificationMethod: String(item.matchedOffer.verificationMethod || ""),
+      officialSourceUrl: String(item.matchedOffer.officialSourceUrl || ""),
+      officialSourceName: String(item.matchedOffer.officialSourceName || ""),
       verifiedAt: String(item.matchedOffer.verifiedAt || ""),
       validUntil: String(item.matchedOffer.validUntil || ""),
-      userFitScore: Number(item.matchedOffer.userFitScore || 0),
+      userFitScore: nullableFiniteNumber(item.matchedOffer.userFitScore),
     } : null,
   };
 }
@@ -303,10 +330,10 @@ function homeInsight(item) {
     type: String(item.type || ""),
     providerName: String(item.providerName || ""),
     category: String(item.category || ""),
-    currentMonthlyCost: Number(item.currentMonthlyCost || 0),
-    previousMonthlyCost: Number(item.previousMonthlyCost || 0),
-    monthlyIncrease: Number(item.monthlyIncrease || 0),
-    percentIncrease: Number(item.percentIncrease || 0),
+    currentMonthlyCost: nullableFiniteNumber(item.currentMonthlyCost),
+    previousMonthlyCost: nullableFiniteNumber(item.previousMonthlyCost),
+    monthlyIncrease: nullableFiniteNumber(item.monthlyIncrease),
+    percentIncrease: nullableFiniteNumber(item.percentIncrease),
     severity: String(item.severity || "INFO"),
   };
 }
@@ -418,8 +445,8 @@ exports.getFinancialHome = onCall(
       context: {
         sourceCoverage: Array.isArray(context.sourceCoverage) ? context.sourceCoverage.map(String) : [],
         isCompleteHouseholdSpend: context.isCompleteHouseholdSpend === true,
-        observedRecurringMonthlySpend: Number(context.observedRecurringMonthlySpend || 0),
-        recurringServiceCount: Number(context.recurringServiceCount || 0),
+        observedRecurringMonthlySpend: nullableFiniteNumber(context.observedRecurringMonthlySpend),
+        recurringServiceCount: nullableFiniteNumber(context.recurringServiceCount),
         recurringServices: Array.isArray(context.recurringServices)
           ? context.recurringServices.slice(0, MAX_HOME_ITEMS)
           : [],
