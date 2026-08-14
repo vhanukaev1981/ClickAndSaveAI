@@ -8,6 +8,7 @@ const stableScanHandler = stableScan.scanGmailInvoices;
 const gmailWatch = require("./gmailWatchFunctions");
 const { ACTIVE_GMAIL_PARSER_VERSION } = require("./gmailParserVersion");
 const { normalizeHistoryId, syncMode } = require("./gmailHistoryPolicy");
+const { emitOperationalEvent } = require("./operationalTelemetry");
 
 const db = getFirestore();
 const googleOAuthClientSecret = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
@@ -83,78 +84,127 @@ exports.scanGmailInvoices = onCall(
   },
   async (request) => {
     const uid = requireAuth(request);
-    const connectionRef = db.collection("gmailConnections").doc(uid);
-    const beforeSnapshot = await connectionRef.get();
-    if (!beforeSnapshot.exists) {
-      throw new HttpsError("failed-precondition", "Gmail is not connected.");
-    }
-    const before = beforeSnapshot.data() || {};
-    if (DISCONNECT_STATES.has(String(before.disconnectState || ""))) {
-      throw new HttpsError(
-        "failed-precondition",
-        "Gmail ingestion is disabled while provider disconnect cleanup is pending."
-      );
-    }
-    const mode = syncMode(before, ACTIVE_GMAIL_PARSER_VERSION);
+    try {
+      const connectionRef = db.collection("gmailConnections").doc(uid);
+      const beforeSnapshot = await connectionRef.get();
+      if (!beforeSnapshot.exists) {
+        throw new HttpsError("failed-precondition", "Gmail is not connected.");
+      }
+      const before = beforeSnapshot.data() || {};
+      if (DISCONNECT_STATES.has(String(before.disconnectState || ""))) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Gmail ingestion is disabled while provider disconnect cleanup is pending."
+        );
+      }
+      const mode = syncMode(before, ACTIVE_GMAIL_PARSER_VERSION);
 
-    if (mode === "INCREMENTAL") {
-      return authoritativeInvoiceSnapshot(uid, mode, before);
-    }
+      if (mode === "INCREMENTAL") {
+        const snapshot = await authoritativeInvoiceSnapshot(uid, mode, before);
+        emitOperationalEvent({
+          event: "gmail.reconciliation.scan",
+          subsystem: "gmail",
+          outcome: snapshot.authoritativeSnapshotTruncated ? "degraded" : "success",
+          severity: snapshot.authoritativeSnapshotTruncated ? "WARNING" : "INFO",
+          code: snapshot.authoritativeSnapshotTruncated
+            ? "GMAIL_RECONCILIATION_SNAPSHOT_TRUNCATED"
+            : "GMAIL_RECONCILIATION_CURRENT",
+          uid,
+          details: {
+            syncMode: mode,
+            authoritativeSnapshotTruncated: snapshot.authoritativeSnapshotTruncated,
+            historyRecoveryRequired: snapshot.historyRecoveryRequired,
+          },
+        });
+        return snapshot;
+      }
 
-    let baseline = normalizeHistoryId(before.watchHistoryId);
-    if (mode === "INITIAL_BACKFILL") {
-      baseline = await establishInitialBaseline(request, connectionRef, before);
-    } else if (mode === "RECOVERY_REQUIRED") {
-      baseline = await establishRecoveryBaseline(request, connectionRef, before);
-    }
+      let baseline = normalizeHistoryId(before.watchHistoryId);
+      if (mode === "INITIAL_BACKFILL") {
+        baseline = await establishInitialBaseline(request, connectionRef, before);
+      } else if (mode === "RECOVERY_REQUIRED") {
+        baseline = await establishRecoveryBaseline(request, connectionRef, before);
+      }
 
-    const result = await handlerRunner(stableScanHandler, "Stable Gmail scan")(request);
-    const afterSnapshot = await connectionRef.get();
-    const after = afterSnapshot.data() || before;
-    const update = {
-      parserVersion: ACTIVE_GMAIL_PARSER_VERSION,
-      lastSuccessfulProcessingAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    };
+      const result = await handlerRunner(stableScanHandler, "Stable Gmail scan")(request);
+      const afterSnapshot = await connectionRef.get();
+      const after = afterSnapshot.data() || before;
+      const update = {
+        parserVersion: ACTIVE_GMAIL_PARSER_VERSION,
+        lastSuccessfulProcessingAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      };
 
-    if (mode === "INITIAL_BACKFILL") {
-      update.initialBackfillCompleted = true;
-      update.initialBackfillCompletedAt = FieldValue.serverTimestamp();
-      if (baseline) {
-        update.initialBackfillHistoryBaseline = baseline;
+      if (mode === "INITIAL_BACKFILL") {
+        update.initialBackfillCompleted = true;
+        update.initialBackfillCompletedAt = FieldValue.serverTimestamp();
+        if (baseline) {
+          update.initialBackfillHistoryBaseline = baseline;
+          update.watchHistoryId = baseline;
+          update.historyRecoveryRequired = false;
+          update.historyRecoveryReason = FieldValue.delete();
+        } else {
+          update.historyRecoveryRequired = true;
+          update.historyRecoveryReason = "MISSING_HISTORY_BASELINE";
+        }
+      } else if (mode === "RECOVERY_REQUIRED") {
+        if (!baseline) {
+          throw new HttpsError("unavailable", "Gmail History recovery baseline is unavailable.");
+        }
         update.watchHistoryId = baseline;
+        update.initialBackfillCompleted = true;
         update.historyRecoveryRequired = false;
         update.historyRecoveryReason = FieldValue.delete();
-      } else {
-        update.historyRecoveryRequired = true;
-        update.historyRecoveryReason = "MISSING_HISTORY_BASELINE";
+        update.recoveryBaselineHistoryId = FieldValue.delete();
+        update.lastHistoryRecoveryAt = FieldValue.serverTimestamp();
+      } else if (mode === "PARSER_UPGRADE_BACKFILL") {
+        update.initialBackfillCompleted = true;
+        if (normalizeHistoryId(after.watchHistoryId || baseline)) {
+          update.historyRecoveryRequired = false;
+          update.historyRecoveryReason = FieldValue.delete();
+        }
       }
-    } else if (mode === "RECOVERY_REQUIRED") {
-      if (!baseline) {
-        throw new HttpsError("unavailable", "Gmail History recovery baseline is unavailable.");
-      }
-      update.watchHistoryId = baseline;
-      update.initialBackfillCompleted = true;
-      update.historyRecoveryRequired = false;
-      update.historyRecoveryReason = FieldValue.delete();
-      update.recoveryBaselineHistoryId = FieldValue.delete();
-      update.lastHistoryRecoveryAt = FieldValue.serverTimestamp();
-    } else if (mode === "PARSER_UPGRADE_BACKFILL") {
-      update.initialBackfillCompleted = true;
-      if (normalizeHistoryId(after.watchHistoryId || baseline)) {
-        update.historyRecoveryRequired = false;
-        update.historyRecoveryReason = FieldValue.delete();
-      }
+
+      await connectionRef.set(update, { merge: true });
+
+      const historyRecoveryRequired = update.historyRecoveryRequired === true;
+      emitOperationalEvent({
+        event: "gmail.reconciliation.scan",
+        subsystem: "gmail",
+        outcome: historyRecoveryRequired ? "degraded" : "success",
+        severity: historyRecoveryRequired ? "WARNING" : "INFO",
+        code: historyRecoveryRequired
+          ? "GMAIL_RECONCILIATION_RECOVERY_REQUIRED"
+          : "GMAIL_RECONCILIATION_COMPLETED",
+        uid,
+        details: {
+          syncMode: mode,
+          historyRecoveryRequired,
+          parserVersion: ACTIVE_GMAIL_PARSER_VERSION,
+        },
+      });
+
+      return {
+        ...result,
+        initialBackfillCompleted: true,
+        historyRecoveryRequired,
+        syncMode: mode,
+      };
+    } catch (error) {
+      emitOperationalEvent({
+        event: "gmail.reconciliation.scan",
+        subsystem: "gmail",
+        outcome: "failure",
+        severity: "ERROR",
+        code: "GMAIL_RECONCILIATION_FAILED",
+        uid,
+        details: {
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorCode: error?.code || "UNKNOWN",
+        },
+      });
+      throw error;
     }
-
-    await connectionRef.set(update, { merge: true });
-
-    return {
-      ...result,
-      initialBackfillCompleted: true,
-      historyRecoveryRequired: update.historyRecoveryRequired === true,
-      syncMode: mode,
-    };
   }
 );
 

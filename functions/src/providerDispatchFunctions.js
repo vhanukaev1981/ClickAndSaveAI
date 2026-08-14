@@ -2,10 +2,10 @@
 
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
-const logger = require("firebase-functions/logger");
 const { buildProviderDispatchPayload } = require("./providerDispatch");
 const { isTrackableCommercialOffer } = require("./commercialPolicy");
 const { normalizeHandoffTruth } = require("./handoffTruth");
+const { emitOperationalEvent } = require("./operationalTelemetry");
 
 const db = getFirestore();
 
@@ -80,32 +80,50 @@ exports.onAttributedProviderLeadCreated = onDocumentWritten(
     const queueRef = db.collection("providerDispatchQueue").doc(leadId);
     let queued = false;
 
-    await db.runTransaction(async (transaction) => {
-      const [commerceSnapshot, existingQueue] = await Promise.all([
-        transaction.get(commerceRef),
-        transaction.get(queueRef),
-      ]);
-      if (existingQueue.exists || !commerceSnapshot.exists) return;
+    try {
+      await db.runTransaction(async (transaction) => {
+        const [commerceSnapshot, existingQueue] = await Promise.all([
+          transaction.get(commerceRef),
+          transaction.get(queueRef),
+        ]);
+        if (existingQueue.exists || !commerceSnapshot.exists) return;
 
-      const record = buildDispatchQueueRecord(leadId, lead, commerceSnapshot.data() || {});
-      if (!record) return;
+        const record = buildDispatchQueueRecord(leadId, lead, commerceSnapshot.data() || {});
+        if (!record) return;
 
-      transaction.create(queueRef, {
-        ...record,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-        nextAttemptAt: FieldValue.serverTimestamp(),
+        transaction.create(queueRef, {
+          ...record,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+          nextAttemptAt: FieldValue.serverTimestamp(),
+        });
+        queued = true;
       });
-      queued = true;
-    });
 
-    logger.info("Provider dispatch queue evaluation completed", {
-      leadId,
-      uid,
-      opportunityId,
-      queued,
-      deliveryState: queued ? "NOT_CONFIRMED" : "NOT_QUEUED",
-    });
+      emitOperationalEvent({
+        event: "provider.handoff.queue",
+        subsystem: "provider",
+        outcome: queued ? "queued" : "no_op",
+        severity: "INFO",
+        code: queued ? "PROVIDER_HANDOFF_QUEUED" : "PROVIDER_HANDOFF_NOT_QUEUED",
+        uid,
+        details: { queued, deliveryState: queued ? "NOT_CONFIRMED" : "NOT_QUEUED" },
+      });
+    } catch (error) {
+      emitOperationalEvent({
+        event: "provider.handoff.queue",
+        subsystem: "provider",
+        outcome: "failure",
+        severity: "ERROR",
+        code: "PROVIDER_HANDOFF_QUEUE_FAILED",
+        uid,
+        details: {
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorCode: error?.code || "UNKNOWN",
+        },
+      });
+      throw error;
+    }
   }
 );
 

@@ -1,0 +1,118 @@
+{
+  "specVersion": 1,
+  "activationState": "SPECIFIED_NOT_ACTIVE",
+  "notificationChannelsState": "OWNER_ACTION_REQUIRED",
+  "truthRule": "METRIC_SPECIFIED_IS_NOT_ALERT_ACTIVE",
+  "metrics": [
+    {
+      "id": "gmail_oauth_connect_failures",
+      "coverage": "gmail_oauth",
+      "event": "gmail.oauth.connect",
+      "outcomeFilter": "failure",
+      "metricType": "log_based_counter",
+      "windowMinutes": 15,
+      "threshold": 3,
+      "severity": "ERROR",
+      "activationState": "SPECIFIED_NOT_ACTIVE"
+    },
+    {
+      "id": "gmail_oauth_disconnect_cleanup_retry",
+      "coverage": "gmail_oauth",
+      "event": "gmail.oauth.disconnect",
+      "outcomeFilter": "retry_required",
+      "metricType": "log_based_counter",
+      "windowMinutes": 15,
+      "threshold": 1,
+      "severity": "ERROR",
+      "activationState": "SPECIFIED_NOT_ACTIVE"
+    },
+    {
+      "id": "gmail_watch_incremental_failures",
+      "coverage": "gmail_watch_reconciliation",
+      "event": "gmail.watch.incremental",
+      "outcomeFilter": "failure",
+      "metricType": "log_based_counter",
+      "windowMinutes": 10,
+      "threshold": 2,
+      "severity": "ERROR",
+      "activationState": "SPECIFIED_NOT_ACTIVE"
+    },
+    {
+      "id": "gmail_reconciliation_degraded",
+      "coverage": "gmail_watch_reconciliation",
+      "event": "gmail.reconciliation.scan",
+      "outcomeFilter": "degraded",
+      "metricType": "log_based_counter",
+      "windowMinutes": 30,
+      "threshold": 2,
+      "severity": "WARNING",
+      "activationState": "SPECIFIED_NOT_ACTIVE"
+    },
+    {
+      "id": "push_delivery_failures",
+      "coverage": "push",
+      "event": "push.delivery",
+      "outcomeFilter": "not_delivered",
+      "metricType": "log_based_counter",
+      "windowMinutes": 15,
+      "threshold": 5,
+      "severity": "WARNING",
+      "activationState": "SPECIFIED_NOT_ACTIVE"
+    },
+    {
+      "id": "provider_handoff_queue_failures",
+      "coverage": "provider_handoff",
+      "event": "provider.handoff.queue",
+      "outcomeFilter": "failure",
+      "metricType": "log_based_counter",
+      "windowMinutes": 15,
+      "threshold": 1,
+      "severity": "ERROR",
+      "activationState": "SPECIFIED_NOT_ACTIVE"
+    },
+    {
+      "id": "privacy_account_delete_retry_required",
+      "coverage": "privacy_deletion",
+      "event": "privacy.account.delete",
+      "outcomeFilter": "retry_required",
+      "metricType": "log_based_counter",
+      "windowMinutes": 15,
+      "threshold": 1,
+      "severity": "CRITICAL",
+      "activationState": "SPECIFIED_NOT_ACTIVE"
+    },
+    {
+      "id": "privacy_imported_data_delete_failures",
+      "coverage": "privacy_deletion",
+      "event": "privacy.imported_data.delete",
+      "outcomeFilter": "failure",
+      "metricType": "log_based_counter",
+      "windowMinutes": 15,
+      "threshold": 1,
+      "severity": "ERROR",
+      "activationState": "SPECIFIED_NOT_ACTIVE"
+    },
+    {
+      "id": "production_deployment_failures",
+      "coverage": "deployment_recovery",
+      "event": "deployment.workflow.failure",
+      "outcomeFilter": "failure",
+      "metricType": "control_plane_counter",
+      "windowMinutes": 30,
+      "threshold": 1,
+      "severity": "CRITICAL",
+      "activationState": "SPECIFIED_NOT_ACTIVE"
+    },
+    {
+      "id": "production_recovery_failures",
+      "coverage": "deployment_recovery",
+      "event": "recovery.workflow.failure",
+      "outcomeFilter": "failure",
+      "metricType": "control_plane_counter",
+      "windowMinutes": 30,
+      "threshold": 1,
+      "severity": "CRITICAL",
+      "activationState": "SPECIFIED_NOT_ACTIVE"
+    }
+  ]
+}
