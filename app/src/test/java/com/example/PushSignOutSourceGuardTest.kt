@@ -31,14 +31,19 @@ class PushSignOutSourceGuardTest {
     }
 
     @Test
-    fun signOutStillCompletesWhenPushRevocationFails() {
+    fun signOutIsFailClosedWhenPushRevocationFails() {
         val authRepository = File("src/main/java/com/example/data/repository/AuthRepository.kt").readText()
         val signOutSection = authRepository
             .substringAfter("suspend fun signOut()")
             .substringBefore("_userSession.value = UserSession()")
 
-        assertTrue(signOutSection.contains(".onFailure { Log.w(\"AuthRepository\", \"Push revocation incomplete during sign-out\", it) }"))
-        assertTrue(signOutSection.contains("getFirebaseAuthSafe()?.signOut()"))
+        val revokeIndex = signOutSection.indexOf("PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut()")
+        val hardGateIndex = signOutSection.indexOf("getOrThrow()")
+        val firebaseSignOutIndex = signOutSection.indexOf("getFirebaseAuthSafe()?.signOut()")
+
+        assertTrue("Revocation result must be consumed as a hard gate", hardGateIndex > revokeIndex)
+        assertTrue("Firebase Auth sign-out must occur only after revocation succeeds", firebaseSignOutIndex > hardGateIndex)
+        assertFalse(signOutSection.contains("Push revocation incomplete during sign-out"))
     }
 
     @Test
