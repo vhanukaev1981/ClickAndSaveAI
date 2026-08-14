@@ -15,7 +15,7 @@ const newRecommendation = {
 };
 
 test("accepted and fulfillment opportunities are locked against agent rewrites", () => {
-  for (const status of ["USER_ACCEPTED", "PROVIDER_PROCESSING", "ACTIVATED", "COMPLETED"]) {
+  for (const status of ["USER_ACCEPTED", "PROVIDER_PROCESSING", "ACTIVATED", "DEAL_COMPLETED", "COMPLETED"]) {
     const existing = {
       status,
       matchedOffer: { offerId: "offer-approved", providerName: "Provider A", monthlyPrice: 89 },
