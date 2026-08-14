@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Exact 40-character Stream A commit SHA to deploy after CI is green
+        description: Exact 40-character Block 5 commit SHA to deploy after CI is green
         required: true
         type: string
       confirm_project:
@@ -14,11 +14,16 @@ on:
 
 permissions:
   contents: read
+  actions: read
   id-token: write
 
 concurrency:
   group: deploy-clickandsaveai-staging
   cancel-in-progress: false
+
+env:
+  SOURCE_SHA: ${{ inputs.source_sha }}
+  BLOCK5_BASE_SHA: 7fa4b23cf927ca1dada6c61c51f48477996a5a66
 
 jobs:
   deploy:
@@ -28,10 +33,8 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Guard immutable deployment source
+      - name: Guard exact Block 5 deployment source
         shell: bash
-        env:
-          SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
           set -euo pipefail
           if [[ ! "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -39,38 +42,59 @@ jobs:
             exit 1
           fi
 
-      - name: Check out exact source SHA
+      - name: Check out exact Block 5 source SHA
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.source_sha }}
+          ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 0
 
-      - name: Verify SHA and Stream A lineage
+      - name: Verify immutable Block 5 lineage
         shell: bash
-        env:
-          SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
           set -euo pipefail
           ACTUAL_SHA="$(git rev-parse HEAD)"
           if [[ "$ACTUAL_SHA" != "$SOURCE_SHA" ]]; then
-            echo "Expected $SOURCE_SHA but checked out $ACTUAL_SHA" >&2
+            echo "Expected Block 5 SHA $SOURCE_SHA but checked out $ACTUAL_SHA." >&2
             exit 1
           fi
-          git fetch --no-tags origin agent/ai-native-financial-core
-          if ! git merge-base --is-ancestor "$SOURCE_SHA" origin/agent/ai-native-financial-core; then
-            echo 'The requested SHA is not part of Stream A (agent/ai-native-financial-core).' >&2
+          if ! git merge-base --is-ancestor "$BLOCK5_BASE_SHA" "$ACTUAL_SHA"; then
+            echo "Requested SHA is not descended from approved Block 4 SHA $BLOCK5_BASE_SHA." >&2
             exit 1
           fi
+          echo "Verified immutable Block 5 source: $ACTUAL_SHA"
+
+      - name: Require full CI success on exact source SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNS="$(gh api --method GET "/repos/$GITHUB_REPOSITORY/actions/workflows/android-ci.yml/runs?head_sha=$SOURCE_SHA&per_page=20")"
+          STATUS="$(printf '%s' "$RUNS" | jq -r '.workflow_runs[0].status // ""')"
+          CONCLUSION="$(printf '%s' "$RUNS" | jq -r '.workflow_runs[0].conclusion // ""')"
+          RUN_NUMBER="$(printf '%s' "$RUNS" | jq -r '.workflow_runs[0].run_number // ""')"
+          if [[ "$STATUS" != "completed" || "$CONCLUSION" != "success" ]]; then
+            echo "Exact source SHA $SOURCE_SHA does not have completed successful CI." >&2
+            exit 1
+          fi
+          echo "Verified CI #$RUN_NUMBER SUCCESS for exact source SHA $SOURCE_SHA."
 
       - name: Verify staging deployment configuration
         env:
           WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          STAGING_SMOKE_USER_UID: ${{ vars.STAGING_SMOKE_USER_UID }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "$WIF_PROVIDER" || -z "$DEPLOY_SERVICE_ACCOUNT" ]]; then
-            echo 'The staging environment must define GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_DEPLOY_SERVICE_ACCOUNT.' >&2
+          missing=()
+          [[ -n "$WIF_PROVIDER" ]] || missing+=(GCP_WORKLOAD_IDENTITY_PROVIDER)
+          [[ -n "$DEPLOY_SERVICE_ACCOUNT" ]] || missing+=(GCP_DEPLOY_SERVICE_ACCOUNT)
+          [[ -n "$STAGING_SMOKE_USER_UID" ]] || missing+=(STAGING_SMOKE_USER_UID)
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing staging configuration:' >&2
+            printf ' %s' "${missing[@]}" >&2
+            printf '\n' >&2
             exit 1
           fi
           node <<'NODE'
@@ -84,6 +108,47 @@ jobs:
             throw new Error('firebase.json does not define both Functions and Firestore deployment targets');
           }
           NODE
+
+      - name: Derive staging Firebase smoke config
+        env:
+          STAGING_GOOGLE_SERVICES_JSON_B64: ${{ secrets.STAGING_GOOGLE_SERVICES_JSON_B64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$STAGING_GOOGLE_SERVICES_JSON_B64" ]]; then
+            echo 'STAGING_GOOGLE_SERVICES_JSON_B64 is required for authenticated staging smoke.' >&2
+            exit 1
+          fi
+          CONFIG_PATH="$RUNNER_TEMP/google-services-staging.json"
+          printf '%s' "$STAGING_GOOGLE_SERVICES_JSON_B64" | base64 --decode > "$CONFIG_PATH"
+          chmod 600 "$CONFIG_PATH"
+          STAGING_FIREBASE_CONFIG_PATH="$CONFIG_PATH" node <<'NODE'
+          const fs = require('fs');
+          const config = JSON.parse(fs.readFileSync(process.env.STAGING_FIREBASE_CONFIG_PATH, 'utf8'));
+          if (config?.project_info?.project_id !== 'clickandsaveai-staging') {
+            throw new Error('google-services staging config targets the wrong project');
+          }
+          const client = (Array.isArray(config.client) ? config.client : []).find(
+            (item) => item?.client_info?.android_client_info?.package_name === 'com.aistudio.clickandsaveai.app'
+          );
+          const apiKey = client?.api_key?.[0]?.current_key;
+          const appId = client?.client_info?.mobilesdk_app_id;
+          if (!apiKey || !appId) {
+            throw new Error('staging google-services config is missing API key or Android app ID');
+          }
+          fs.appendFileSync(process.env.GITHUB_ENV, `STAGING_FIREBASE_API_KEY=${apiKey}\n`, { encoding: 'utf8' });
+          fs.appendFileSync(process.env.GITHUB_ENV, `STAGING_APPCHECK_APP_ID=${appId}\n`, { encoding: 'utf8' });
+          NODE
+          rm -f "$CONFIG_PATH"
+          echo 'Derived staging Firebase smoke config without logging its values.'
+
+      - id: auth
+        name: Authenticate to Google Cloud with GitHub OIDC
+        uses: google-github-actions/auth@v3
+        with:
+          create_credentials_file: 'true'
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v6
@@ -99,14 +164,6 @@ jobs:
         working-directory: functions
         run: npm test
 
-      - id: auth
-        name: Authenticate to Google Cloud with GitHub OIDC
-        uses: google-github-actions/auth@v3
-        with:
-          create_credentials_file: 'true'
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
-
       - name: Install pinned Firebase CLI
         run: npm install --global firebase-tools@15.1.0
 
@@ -118,3 +175,38 @@ jobs:
             --project clickandsaveai-staging \
             --only firestore:rules,firestore:indexes,functions \
             --non-interactive
+
+      - name: Run authenticated staging truth smoke
+        env:
+          STAGING_SMOKE_USER_UID: ${{ vars.STAGING_SMOKE_USER_UID }}
+          GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          STAGING_SMOKE_OUTPUT: ${{ runner.temp }}/staging-core-smoke.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/staging-core-smoke.mjs
+
+      - name: Upload sanitized staging smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-core-smoke-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/staging-core-smoke.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Run Block 5 destructive lifecycle E2E with ephemeral accounts
+        env:
+          GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          STAGING_BLOCK5_E2E_OUTPUT: ${{ runner.temp }}/staging-block5-e2e.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/staging-block5-e2e.mjs
+
+      - name: Upload sanitized Block 5 staging E2E evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-block5-e2e-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/staging-block5-e2e.json
+          if-no-files-found: error
+          retention-days: 14
