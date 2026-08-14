@@ -12,7 +12,7 @@ permissions:
   actions: write
 
 env:
-  DISPATCH_REVISION: e2e-iam-verified-1
+  DISPATCH_REVISION: final-eb63-1
 
 jobs:
   dispatch:
@@ -22,7 +22,7 @@ jobs:
       - name: Dispatch trusted main staging workflow
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: b49ab4ae4f7369d62330f93d62c7a7e36ec6ed1d
+          SOURCE_SHA: eb63dd4aba38e570c9dc0a502bf31c872b2fdee7
         shell: bash
         run: |
           set -euo pipefail
