@@ -339,20 +339,27 @@ private fun ProactiveOpportunityCard(opportunity: FinancialOpportunity) {
             Spacer(modifier = Modifier.size(10.dp))
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("${opportunity.providerName} • ${opportunity.category}", fontWeight = FontWeight.Bold)
-                val offer = opportunity.matchedOffer
+                val offer = opportunity.matchedOffer?.takeIf { matched ->
+                    opportunity.offerVerificationState == "VERIFIED" &&
+                        opportunity.offerFreshnessState == "FRESH" &&
+                        opportunity.userEligibilityState == "ELIGIBLE" &&
+                        matched.verificationState == "VERIFIED" &&
+                        matched.freshnessState == "FRESH" &&
+                        matched.eligibilityState == "ELIGIBLE"
+                }
                 val saving = opportunity.potentialMonthlySaving
                 if (offer != null && saving != null && saving > 0.0) {
                     val newPrice = offer.effectiveMonthlyPrice ?: offer.monthlyPrice
                     Text("המחיר הנוכחי שזוהה: ${money(opportunity.currentMonthlyCost)}")
-                    Text("הצעה מאומתת: ${money(newPrice)} לחודש")
+                    Text("הצעה מאומתת, עדכנית ומתאימה: ${money(newPrice)} לחודש")
                     Text(
-                        "חיסכון אפשרי לפי ההצעה: ${money(saving)} בחודש",
+                        "חיסכון פוטנציאלי לפי ההצעה: ${money(saving)} בחודש — לא חיסכון ממומש",
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
                     )
                 } else {
                     Text(
-                        "זוהתה אפשרות לבדיקה, אך אין עדיין סכום חיסכון מאומת להצגה.",
+                        "זוהתה אפשרות לבדיקה, אך אין עדיין סכום חיסכון מאומת, עדכני ומתאים להצגה.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -372,10 +379,7 @@ private fun HomeStatusCard(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.ErrorOutline, contentDescription = null)
                 Spacer(modifier = Modifier.size(8.dp))
@@ -398,10 +402,7 @@ private fun InitialGmailOnboardingCard(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
     ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Email, contentDescription = null, tint = TechBluePrimary)
                 Spacer(modifier = Modifier.size(9.dp))
@@ -454,9 +455,7 @@ private fun DashboardActionButton(
         shape = RoundedCornerShape(18.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(15.dp),
+            modifier = Modifier.fillMaxWidth().padding(15.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(icon, contentDescription = null, tint = TechBluePrimary)
