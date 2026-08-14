@@ -109,6 +109,19 @@ jobs:
           }
           NODE
 
+      - name: Materialize staging Functions string parameters
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f functions/.env.example
+          if ! grep -Eq '^GOOGLE_OAUTH_CLIENT_ID=[^[:space:]]+\.apps\.googleusercontent\.com$' functions/.env.example; then
+            echo 'functions/.env.example is missing a valid staging GOOGLE_OAUTH_CLIENT_ID.' >&2
+            exit 1
+          fi
+          cp functions/.env.example functions/.env.clickandsaveai-staging
+          chmod 600 functions/.env.clickandsaveai-staging
+          echo 'Materialized non-secret staging Functions parameters from the repository-approved example.'
+
       - name: Derive staging Firebase smoke config
         env:
           STAGING_GOOGLE_SERVICES_JSON_B64: ${{ secrets.STAGING_GOOGLE_SERVICES_JSON_B64 }}
