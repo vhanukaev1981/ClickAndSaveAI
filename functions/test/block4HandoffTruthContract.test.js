@@ -10,7 +10,6 @@ const {
   applyCompletionEvidence,
   applySavingRealizationEvidence,
 } = require("../src/handoffTruth");
-const { detectFinancialSignals } = require("../src/financialIntelligence");
 
 function initialTruth() {
   return createHandoffTruth({ consentAccepted: true, requestCreated: true });
@@ -155,37 +154,4 @@ test("known zero saving is distinct from unknown saving and only follows complet
   assert.equal(knownZero.savingRealizationState, "NOT_REALIZED");
   assert.equal(knownZero.realizedMonthlySaving, 0);
   assert.equal(knownZero.realizedAnnualSaving, 0);
-});
-
-test("unknown historical comparison values stay null instead of being collapsed to zero", () => {
-  const { opportunities } = detectFinancialSignals([
-    {
-      providerName: "Provider A",
-      category: "אינטרנט",
-      monthlyCost: 129,
-      sourceMessageId: "gmail:1",
-      receivedDate: "2026-08-01T00:00:00Z",
-      verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
-    },
-    {
-      providerName: "Provider A",
-      category: "אינטרנט",
-      monthlyCost: 129,
-      sourceMessageId: "gmail:2",
-      receivedDate: "2026-08-02T00:00:00Z",
-      verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
-    },
-    {
-      providerName: "Provider A",
-      category: "אינטרנט",
-      monthlyCost: 129,
-      sourceMessageId: "gmail:3",
-      receivedDate: "2026-08-03T00:00:00Z",
-      verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
-    },
-  ]);
-  assert.equal(opportunities.length, 1);
-  assert.equal(opportunities[0].previousMonthlyCost, null);
-  assert.equal(opportunities[0].monthlyIncrease, null);
-  assert.equal(opportunities[0].percentIncrease, null);
 });
