@@ -11,6 +11,7 @@ const {
   _validateDeliveryEvidenceInput: validateDeliveryEvidenceInput,
   _validateSavingRealizationInput: validateSavingRealizationInput,
   _assertTransition: assertTransition,
+  _classifyDeliveryAttemptReplay: classifyDeliveryAttemptReplay,
   _opportunityStatusForLeadStatus: opportunityStatusForLeadStatus,
 } = require("../src/commerceOperationsFunctions");
 
@@ -79,6 +80,50 @@ test("delivery evidence distinguishes submission from delivery confirmation", ()
     submissionAccepted: true,
     deliveryConfirmed: true,
   }), /receipt/i);
+});
+
+test("same delivery attempt is idempotent only when all authoritative evidence matches", () => {
+  const stored = {
+    lastDeliveryAttemptId: "attempt-1",
+    lastDeliveryTransport: "PARTNER_API",
+    submissionState: "SUBMITTED",
+    deliveryState: "DELIVERY_CONFIRMED",
+    externalReceiptReference: "receipt-1",
+    deliveryFailureCode: null,
+  };
+  const same = validateDeliveryEvidenceInput({
+    leadId: "lead-1",
+    attemptId: "attempt-1",
+    transport: "PARTNER_API",
+    submissionAccepted: true,
+    deliveryConfirmed: true,
+    externalReceiptReference: "receipt-1",
+  });
+  assert.equal(classifyDeliveryAttemptReplay(stored, same), "IDEMPOTENT");
+
+  const conflicting = { ...same, externalReceiptReference: "receipt-2" };
+  assert.equal(classifyDeliveryAttemptReplay(stored, conflicting), "CONFLICT");
+  assert.equal(classifyDeliveryAttemptReplay(stored, { ...same, attemptId: "attempt-2" }), "NEW");
+});
+
+test("failed delivery attempt replay also remains idempotent", () => {
+  const stored = {
+    lastDeliveryAttemptId: "attempt-failed",
+    lastDeliveryTransport: "PARTNER_API",
+    submissionState: "NOT_SUBMITTED",
+    deliveryState: "DELIVERY_FAILED",
+    externalReceiptReference: null,
+    deliveryFailureCode: "TIMEOUT",
+  };
+  const same = validateDeliveryEvidenceInput({
+    leadId: "lead-1",
+    attemptId: "attempt-failed",
+    transport: "PARTNER_API",
+    submissionAccepted: false,
+    deliveryConfirmed: false,
+    failureCode: "TIMEOUT",
+  });
+  assert.equal(classifyDeliveryAttemptReplay(stored, same), "IDEMPOTENT");
 });
 
 test("saving realization validation requires comparable costs and evidence", () => {
