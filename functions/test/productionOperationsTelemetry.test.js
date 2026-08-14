@@ -45,7 +45,7 @@ test("operational payload contains the canonical production operations envelope"
   assert.equal(Object.hasOwn(payload, "uid"), false);
 });
 
-test("operational details remove secret and directly identifying fields recursively", () => {
+test("operational details remove secret, request-body and directly identifying fields recursively", () => {
   const safe = _sanitizeOperationalDetails({
     status: 401,
     accessToken: "access-secret",
@@ -63,7 +63,6 @@ test("operational details remove secret and directly identifying fields recursiv
 
   assert.deepEqual(safe, {
     status: 401,
-    requestBody: { mode: "disconnect" },
     nested: { reason: "provider_cleanup" },
   });
 });
