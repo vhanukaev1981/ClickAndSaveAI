@@ -26,6 +26,7 @@ export function sanitizeSmokeSummary({
   gmailResponse = {},
   scanResponse = {},
   financialHomeResponse = {},
+  activityResponse = {},
 }) {
   if (projectId !== STAGING_PROJECT_ID) {
     throw new Error("Staging smoke may target clickandsaveai-staging only.");
@@ -37,6 +38,7 @@ export function sanitizeSmokeSummary({
   const context = financialHomeResponse?.context && typeof financialHomeResponse.context === "object"
     ? financialHomeResponse.context
     : {};
+  const activityEvents = Array.isArray(activityResponse?.events) ? activityResponse.events : [];
 
   return {
     projectId: STAGING_PROJECT_ID,
@@ -66,6 +68,12 @@ export function sanitizeSmokeSummary({
       opportunityCount: Array.isArray(financialHomeResponse?.opportunities)
         ? financialHomeResponse.opportunities.length
         : null,
+    },
+    activity: {
+      eventCount: activityEvents.length,
+      eventTypes: [...new Set(activityEvents.map((event) => String(event?.type || "")).filter(Boolean))].sort(),
+      sourceCoverage: safeArray(activityResponse?.sourceCoverage),
+      isCompleteHistory: activityResponse?.isCompleteHistory === true,
     },
   };
 }
@@ -233,6 +241,7 @@ export async function runStagingCoreSmoke({
 
   const scanResponse = await callStagingCallable("scanGmailInvoices", callableOptions);
   const financialHomeResponse = await callStagingCallable("getFinancialHome", callableOptions);
+  const activityResponse = await callStagingCallable("getFinancialActivity", callableOptions);
 
   return sanitizeSmokeSummary({
     projectId: STAGING_PROJECT_ID,
@@ -240,6 +249,7 @@ export async function runStagingCoreSmoke({
     gmailResponse,
     scanResponse,
     financialHomeResponse,
+    activityResponse,
   });
 }
 
