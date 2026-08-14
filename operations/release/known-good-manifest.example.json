@@ -1,0 +1,31 @@
+{
+  "manifestVersion": 1,
+  "evidenceState": "EXAMPLE_NOT_PRODUCTION",
+  "sourceSha": "4f674d27dfec148e10108274de23013ae73613df",
+  "surfaces": {
+    "functions": {
+      "sourceSha": "4f674d27dfec148e10108274de23013ae73613df"
+    },
+    "firestoreRules": {
+      "sourceSha": "4f674d27dfec148e10108274de23013ae73613df"
+    },
+    "firestoreIndexes": {
+      "sourceSha": "4f674d27dfec148e10108274de23013ae73613df"
+    },
+    "configuration": {
+      "bindingState": "PENDING_PRODUCTION_BINDING",
+      "configurationVersion": "PENDING_PRODUCTION_BINDING",
+      "secretValuesStored": false
+    },
+    "android": {
+      "versionCode": 1,
+      "versionName": "1.0",
+      "signingState": "OWNER_ACTION_REQUIRED",
+      "artifactDigestState": "PENDING_PRODUCTION_BINDING"
+    }
+  },
+  "schema": {
+    "compatibilityEpoch": "v1",
+    "minimumSupportedReleaseWindow": 2
+  }
+}
