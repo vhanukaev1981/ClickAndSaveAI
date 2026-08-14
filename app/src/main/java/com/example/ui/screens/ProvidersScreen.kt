@@ -42,6 +42,7 @@ import com.example.data.repository.FinancialOpportunity
 import com.example.data.repository.FinancialRefreshReason
 import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.OpportunityActionRepository
+import com.example.data.repository.OpportunityActionResult
 import com.example.ui.MainViewModel
 import com.example.ui.theme.TechBluePrimary
 import kotlinx.coroutines.launch
@@ -51,6 +52,7 @@ private val lockedOpportunityStatuses = setOf(
     "USER_ACCEPTED",
     "PROVIDER_PROCESSING",
     "ACTIVATED",
+    "DEAL_COMPLETED",
     "COMPLETED"
 )
 
@@ -157,9 +159,9 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                                 opportunity = opportunity,
                                 onAccept = {
                                     if (opportunity.actionMode == IN_APP_PROVIDER_REQUEST) {
-                                        val displayedOfferId = opportunity.matchedOffer?.offerId.orEmpty()
+                                        val displayedOfferId = authoritativeMatchedOffer(opportunity)?.offerId.orEmpty()
                                         if (displayedOfferId.isBlank()) {
-                                            error = "ההצעה השתנתה או אינה זמינה כרגע."
+                                            error = "ההצעה השתנתה, פגה או אינה מאומתת כרגע."
                                         } else {
                                             scope.launch {
                                                 runCatching {
@@ -185,7 +187,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
             }
 
             if (actionMessage.isNotBlank()) {
-                item { MessageCard(title = "הבקשה נקלטה", body = actionMessage) }
+                item { MessageCard(title = "מצב הבקשה", body = actionMessage) }
             }
             if (error.isNotBlank()) {
                 item { MessageCard(title = "לא ניתן להשלים את הבדיקה", body = error) }
@@ -201,7 +203,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                 defaultEmail = session.email,
                 onDismiss = { selectedOpportunity = null },
                 onSubmit = { name, phone, email ->
-                    val displayedOfferId = opportunity.matchedOffer?.offerId.orEmpty()
+                    val displayedOfferId = authoritativeMatchedOffer(opportunity)?.offerId.orEmpty()
                     selectedOpportunity = null
                     scope.launch {
                         runCatching {
@@ -210,19 +212,16 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                                 expectedOfferId = displayedOfferId,
                                 contactName = name,
                                 phone = phone,
-                                contactEmail = email
+                                contactEmail = email,
+                                consentAccepted = true
                             )
                         }.onSuccess { result ->
-                            actionMessage = result.potentialMonthlySaving
-                                ?.takeIf { it > 0.0 }
-                                ?.let { saving ->
-                                    "הבקשה נוצרה ב-Click&SaveAI. אין עדיין אישור שהפרטים נמסרו לספק. חיסכון פוטנציאלי לפי ההצעה: ${money(saving)} בחודש."
-                                }
-                                ?: "הבקשה נוצרה ב-Click&SaveAI. אין עדיין אישור שהפרטים נמסרו לספק. סכום החיסכון הפוטנציאלי אינו ידוע."
+                            actionMessage = actionHandoffMessage(result)
                             error = ""
                             viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY)
                         }.onFailure { throwable ->
-                            error = throwable.localizedMessage ?: "ההצעה השתנתה, אינה זמינה או שאין כרגע מסלול מעבר מאומת."
+                            error = throwable.localizedMessage
+                                ?: "ההצעה השתנתה, אינה זמינה או שאין כרגע מסלול מעבר מאומת."
                         }
                     }
                 }
@@ -238,9 +237,9 @@ private fun OpportunityCard(
     opportunity: FinancialOpportunity,
     onAccept: () -> Unit
 ) {
-    val matched = opportunity.matchedOffer
+    val matched = authoritativeMatchedOffer(opportunity)
     val monthlySaving = opportunity.potentialMonthlySaving
-    val lifecycleLocked = opportunity.status.uppercase() in lockedOpportunityStatuses
+    val lifecycleLocked = opportunityLifecycleLocked(opportunity)
     val inAppActionAvailable = opportunity.actionMode == IN_APP_PROVIDER_REQUEST
 
     Card(shape = RoundedCornerShape(20.dp)) {
@@ -277,7 +276,7 @@ private fun OpportunityCard(
                     ""
                 }
                 Text(
-                    "נמצאה הצעה של ${matched.providerName} בעלות חודשית אפקטיבית של ${money(effectiveMonthly)}.",
+                    "נמצאה הצעה מאומתת ועדכנית של ${matched.providerName} בעלות חודשית אפקטיבית של ${money(effectiveMonthly)}.",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
@@ -285,9 +284,14 @@ private fun OpportunityCard(
                     color = TechBluePrimary,
                     fontWeight = FontWeight.SemiBold
                 )
+                Text(
+                    "אימות: ${matched.verificationState} • טריות: ${matched.freshnessState} • התאמה: ${matched.eligibilityState}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 if (matched.verifiedAt.isBlank()) {
                     Text(
-                        "סטטוס אימות ההצעה לא ידוע",
+                        "מועד אימות ההצעה אינו ידוע",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -313,16 +317,21 @@ private fun OpportunityCard(
                     )
                 }
                 Text(
-                    "החיסכון הפוטנציאלי הוא הערכה לפי מחיר צרכני מלא לשנה הראשונה. ההצעה נבדקת מחדש לפני כל פעולה.",
+                    "החיסכון הפוטנציאלי הוא הערכה לפי מחיר צרכני מלא לשנה הראשונה. הוא אינו חיסכון ממומש. ההצעה נבדקת מחדש לפני כל פעולה.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                val lifecycleMessage = opportunityLifecycleMessage(opportunity.status)
+                realizedSavingMessage(opportunity)?.let { message ->
+                    Text(message, fontWeight = FontWeight.Bold)
+                }
+                val lifecycleMessage = opportunityHandoffMessage(opportunity)
                 when {
                     lifecycleLocked -> Text(lifecycleMessage, fontWeight = FontWeight.Bold)
                     inAppActionAvailable -> {
-                        if (opportunity.status.equals("PROVIDER_REJECTED", ignoreCase = true)) {
+                        if (opportunity.completionState == "DEAL_REJECTED" ||
+                            opportunity.status.equals("PROVIDER_REJECTED", ignoreCase = true)
+                        ) {
                             Text(
                                 "הבקשה הקודמת לא הושלמה. אם ההצעה עדיין בתוקף אפשר לנסות שוב.",
                                 style = MaterialTheme.typography.bodySmall,
@@ -343,32 +352,114 @@ private fun OpportunityCard(
                 }
             } else {
                 val detectionText = if (opportunity.type == "COMPARE_AFTER_PRICE_INCREASE") {
-                    "זוהתה עליית מחיר של ${String.format("%.1f", opportunity.percentIncrease)}%. Click&SaveAI מחפשת עבורך חלופה מתאימה."
+                    opportunity.percentIncrease?.let { percent ->
+                        "זוהתה עליית מחיר של ${String.format("%.1f", percent)}%. Click&SaveAI מחפשת עבורך חלופה מתאימה."
+                    } ?: "זוהה שינוי שמצדיק בדיקה, אך שיעור השינוי אינו ידוע. Click&SaveAI מחפשת עבורך חלופה מתאימה."
                 } else {
                     "זהו שירות חודשי חוזר. Click&SaveAI בודקת באופן יזום אם קיימת חלופה טובה ומתאימה יותר."
                 }
                 Text(detectionText, style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "לא נציג סכום חיסכון ולא נפנה לספק עד שתימצא הצעה שניתן לאמת ולהתאים לשירות שלך.",
+                    "לא נציג סכום חיסכון ולא נפנה לספק עד שתימצא הצעה מאומתת, עדכנית ומתאימה לשירות שלך.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (opportunity.offerVerificationState == "UNKNOWN") {
+                    Text(
+                        "סטטוס אימות ההצעה לא ידוע",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    "סטטוס אימות ההצעה לא ידוע",
+                    "אימות: ${opportunity.offerVerificationState} • טריות: ${opportunity.offerFreshnessState} • התאמה: ${opportunity.userEligibilityState}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                val lifecycleMessage = opportunityHandoffMessage(opportunity)
+                if (lifecycleMessage.isNotBlank()) {
+                    Text(lifecycleMessage, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
 }
 
-private fun opportunityLifecycleMessage(status: String): String = when (status.uppercase()) {
-    "USER_ACCEPTED" -> "הבקשה נוצרה ב-Click&SaveAI. אין עדיין אישור שהפרטים נמסרו לספק."
-    "PROVIDER_PROCESSING" -> "הבקשה נמצאת בתהליך במערכת. אין במסך זה אישור מסירה לספק."
-    "ACTIVATED" -> "סטטוס ההזדמנות עודכן. אין במסך זה אישור שהשירות הופעל בפועל על-ידי הספק."
-    "COMPLETED" -> "הבקשה מסומנת כהושלמה במערכת. אין בכך אישור שחיסכון כספי התממש בפועל."
+private fun authoritativeMatchedOffer(opportunity: FinancialOpportunity) =
+    opportunity.matchedOffer?.takeIf { offer ->
+        opportunity.offerVerificationState == "VERIFIED" &&
+            opportunity.offerFreshnessState == "FRESH" &&
+            opportunity.userEligibilityState == "ELIGIBLE" &&
+            offer.verificationState == "VERIFIED" &&
+            offer.freshnessState == "FRESH" &&
+            offer.eligibilityState == "ELIGIBLE"
+    }
+
+private fun opportunityLifecycleLocked(opportunity: FinancialOpportunity): Boolean {
+    if (opportunity.completionState == "DEAL_REJECTED" ||
+        opportunity.status.equals("PROVIDER_REJECTED", ignoreCase = true)
+    ) {
+        return false
+    }
+    return opportunity.requestState == "REQUEST_CREATED" ||
+        opportunity.deliveryAttemptState == "ATTEMPTED" ||
+        opportunity.submissionState == "SUBMITTED" ||
+        opportunity.deliveryState == "DELIVERY_CONFIRMED" ||
+        opportunity.providerContactState == "CONTACTED" ||
+        opportunity.completionState == "DEAL_COMPLETED" ||
+        opportunity.status.uppercase() in lockedOpportunityStatuses
+}
+
+private fun opportunityHandoffMessage(opportunity: FinancialOpportunity): String = when {
+    opportunity.completionState == "DEAL_COMPLETED" ->
+        "קיימת ראיה שהעסקה הושלמה. אין בכך כשלעצמו הוכחה שחיסכון כספי התממש."
+    opportunity.providerContactState == "CONTACTED" ->
+        "קיימת ראיה שהספק יצר קשר. העסקה עדיין אינה מסומנת כהושלמה."
+    opportunity.deliveryState == "DELIVERY_CONFIRMED" ->
+        "קיים אישור מסירה של הבקשה. אישור מסירה אינו אישור שהספק יצר קשר."
+    opportunity.submissionState == "SUBMITTED" ->
+        "הבקשה נשלחה למסלול המסירה, אך עדיין אין אישור שהספק קיבל אותה."
+    opportunity.deliveryAttemptState == "ATTEMPTED" && opportunity.deliveryState == "DELIVERY_FAILED" ->
+        "בוצע ניסיון מסירה שלא אושר. אין אישור שהבקשה הגיעה לספק."
+    opportunity.requestState == "REQUEST_CREATED" ->
+        "הבקשה נוצרה ב-Click&SaveAI. אין עדיין אישור שהיא נשלחה או נמסרה לספק."
     else -> ""
+}
+
+private fun realizedSavingMessage(opportunity: FinancialOpportunity): String? = when {
+    opportunity.savingRealizationState == "REALIZED" && opportunity.realizedMonthlySaving != null ->
+        "חיסכון ממומש לפי ראיה שנקלטה: ${money(opportunity.realizedMonthlySaving)} בחודש."
+    opportunity.savingRealizationState == "NOT_REALIZED" && opportunity.realizedMonthlySaving == 0.0 ->
+        "לפי הראיה שנקלטה, החיסכון הממומש הידוע הוא ₪0.00 בחודש."
+    opportunity.savingRealizationState == "UNKNOWN" && opportunity.completionState == "DEAL_COMPLETED" ->
+        "החיסכון הממומש עדיין אינו ידוע."
+    else -> null
+}
+
+private fun actionHandoffMessage(result: OpportunityActionResult): String {
+    val potential = result.potentialMonthlySaving
+        ?.takeIf { it > 0.0 }
+        ?.let { " החיסכון הפוטנציאלי לפי ההצעה הוא ${money(it)} בחודש; זה אינו חיסכון ממומש." }
+        ?: " סכום החיסכון הפוטנציאלי אינו ידוע."
+    return when {
+        result.savingRealizationState == "REALIZED" && result.realizedMonthlySaving != null ->
+            "קיימת ראיה לחיסכון ממומש של ${money(result.realizedMonthlySaving)} בחודש."
+        result.savingRealizationState == "NOT_REALIZED" && result.realizedMonthlySaving == 0.0 ->
+            "קיימת ראיה לכך שהחיסכון הממומש הידוע הוא ₪0.00 בחודש."
+        result.completionState == "DEAL_COMPLETED" ->
+            "קיימת ראיה שהעסקה הושלמה, אך החיסכון הממומש עדיין אינו ידוע.$potential"
+        result.providerContactState == "CONTACTED" ->
+            "קיימת ראיה שהספק יצר קשר, אך העסקה עדיין לא הושלמה.$potential"
+        result.deliveryState == "DELIVERY_CONFIRMED" ->
+            "קיים אישור מסירה של הבקשה. זה אינו אישור שהספק יצר קשר או שהעסקה הושלמה.$potential"
+        result.submissionState == "SUBMITTED" ->
+            "הבקשה נשלחה למסלול המסירה, אך עדיין אין אישור שהספק קיבל אותה.$potential"
+        result.deliveryAttemptState == "ATTEMPTED" && result.deliveryState == "DELIVERY_FAILED" ->
+            "ניסיון המסירה לא אושר. אין אישור שהבקשה הגיעה לספק.$potential"
+        result.requestState == "REQUEST_CREATED" ->
+            "הבקשה נוצרה ב-Click&SaveAI. אין עדיין אישור שהיא נשלחה או נמסרה לספק.$potential"
+        else -> "מצב הבקשה עדיין אינו ידוע.$potential"
+    }
 }
 
 @Composable

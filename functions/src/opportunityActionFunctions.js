@@ -11,6 +11,7 @@ const {
   commercialActionMode,
   isTrackableCommercialOffer,
 } = require("./commercialPolicy");
+const { createHandoffTruth, normalizeHandoffTruth } = require("./handoffTruth");
 const {
   requiredString,
   validateEmail,
@@ -96,6 +97,9 @@ function verifiedActionSnapshot(opportunity, currentOffer, expectedOfferId = "")
     firstYearCost: normalizedOffer.firstYearCost,
     potentialMonthlySaving: recalculatedMonthlySaving,
     potentialAnnualSaving: recalculatedAnnualSaving,
+    offerVerificationState: normalizedOffer.verificationState,
+    offerFreshnessState: normalizedOffer.freshnessState,
+    userEligibilityState: "ELIGIBLE",
     commissionType: normalizedOffer.commissionType,
     commissionValue: normalizedOffer.commissionValue,
     commercialAgreementActive: normalizedOffer.commercialAgreementActive,
@@ -124,6 +128,7 @@ exports.acceptSavingsOpportunity = onCall(
     const commerceRef = db.collection("commerceMatches").doc(`${uid}_${input.opportunityId}`);
     let duplicate = false;
     let action = null;
+    let handoffTruth = null;
 
     await db.runTransaction(async (transaction) => {
       const currentOpportunity = await transaction.get(opportunityRef);
@@ -173,9 +178,11 @@ exports.acceptSavingsOpportunity = onCall(
 
       if (existingLead.exists) {
         duplicate = true;
+        handoffTruth = normalizeHandoffTruth(existingLead.data() || {});
         return;
       }
 
+      handoffTruth = createHandoffTruth({ consentAccepted: true, requestCreated: true });
       transaction.create(leadRef, {
         uid,
         contactName: input.contactName,
@@ -193,11 +200,17 @@ exports.acceptSavingsOpportunity = onCall(
         firstYearCost: action.firstYearCost,
         potentialMonthlySaving: action.potentialMonthlySaving,
         potentialAnnualSaving: action.potentialAnnualSaving,
+        offerVerificationState: action.offerVerificationState,
+        offerFreshnessState: action.offerFreshnessState,
+        userEligibilityState: action.userEligibilityState,
         consentVersion: input.consentVersion,
         consentAccepted: true,
+        ...handoffTruth,
         source: "AI_PROACTIVE_OPPORTUNITY",
         status: "NEW",
         createdAt: FieldValue.serverTimestamp(),
+        consentedAt: FieldValue.serverTimestamp(),
+        requestCreatedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
 
@@ -205,7 +218,13 @@ exports.acceptSavingsOpportunity = onCall(
         status: "USER_ACCEPTED",
         actionLeadId: leadId,
         acceptedOfferId: action.offerId,
+        offerVerificationState: action.offerVerificationState,
+        offerFreshnessState: action.offerFreshnessState,
+        userEligibilityState: action.userEligibilityState,
+        ...handoffTruth,
         userAcceptedAt: FieldValue.serverTimestamp(),
+        consentedAt: FieldValue.serverTimestamp(),
+        requestCreatedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
 
@@ -216,27 +235,33 @@ exports.acceptSavingsOpportunity = onCall(
         providerName: action.requestedProvider,
         potentialMonthlySaving: action.potentialMonthlySaving,
         potentialAnnualSaving: action.potentialAnnualSaving,
+        offerVerificationState: action.offerVerificationState,
+        offerFreshnessState: action.offerFreshnessState,
+        userEligibilityState: action.userEligibilityState,
         agreementActive: action.commercialAgreementActive,
         commissionType: action.commissionType,
         commissionValue: action.commissionValue,
         leadId,
+        ...handoffTruth,
         attributionStatus: "LEAD_CREATED",
         leadCreatedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
     });
 
-    if (!action) {
+    if (!action || !handoffTruth) {
       throw new HttpsError("internal", "The verified opportunity action was not resolved.");
     }
 
-    logger.info("Verified savings opportunity accepted", {
+    logger.info("Verified savings opportunity request created", {
       uid,
       opportunityId: action.opportunityId,
       offerId: action.offerId,
       leadId,
       duplicate,
-      trackable: true,
+      requestState: handoffTruth.requestState,
+      submissionState: handoffTruth.submissionState,
+      deliveryState: handoffTruth.deliveryState,
     });
 
     return {
@@ -247,6 +272,16 @@ exports.acceptSavingsOpportunity = onCall(
       offerId: action.offerId,
       potentialMonthlySaving: action.potentialMonthlySaving,
       potentialAnnualSaving: action.potentialAnnualSaving,
+      consentState: handoffTruth.consentState,
+      requestState: handoffTruth.requestState,
+      deliveryAttemptState: handoffTruth.deliveryAttemptState,
+      submissionState: handoffTruth.submissionState,
+      deliveryState: handoffTruth.deliveryState,
+      providerContactState: handoffTruth.providerContactState,
+      completionState: handoffTruth.completionState,
+      savingRealizationState: handoffTruth.savingRealizationState,
+      realizedMonthlySaving: handoffTruth.realizedMonthlySaving,
+      realizedAnnualSaving: handoffTruth.realizedAnnualSaving,
     };
   }
 );

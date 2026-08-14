@@ -44,6 +44,8 @@ function providerOffer(overrides = {}) {
     verifiedAt: "2026-08-08T08:00:00Z",
     validUntil: "2026-09-08T08:00:00Z",
     officialSourceVerified: true,
+    officialSourceUrl: "https://provider.example/official-offer",
+    officialSourceName: "Provider official offer",
     availabilityStatus: "AVAILABLE",
     availabilityMode: "NATIONWIDE",
     consumerPriceIncludesVat: true,
@@ -88,6 +90,9 @@ test("verified action snapshot carries user saving and commercial attribution se
   assert.equal(snapshot.requestedProvider, "Provider A");
   assert.equal(snapshot.potentialMonthlySaving, 40);
   assert.equal(snapshot.firstYearCost, 1068);
+  assert.equal(snapshot.offerVerificationState, "VERIFIED");
+  assert.equal(snapshot.offerFreshnessState, "FRESH");
+  assert.equal(snapshot.userEligibilityState, "ELIGIBLE");
   assert.equal(snapshot.commissionType, "CPA");
   assert.equal(snapshot.commissionValue, 180);
   assert.equal(snapshot.commercialAgreementActive, true);
@@ -153,11 +158,19 @@ test("opportunity cannot be accepted when the official offer changed price or fi
   );
 });
 
-test("opportunity cannot be accepted against expired, unverified or non-VAT offer", () => {
+test("opportunity cannot be accepted against expired, unverified, sourceless or non-VAT offer", () => {
   assert.equal(
     verifiedActionSnapshot(
       opportunity(),
       providerOffer({ officialSourceVerified: false }),
+      "offer-1"
+    ),
+    null
+  );
+  assert.equal(
+    verifiedActionSnapshot(
+      opportunity(),
+      providerOffer({ officialSourceUrl: "" }),
       "offer-1"
     ),
     null

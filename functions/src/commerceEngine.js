@@ -40,6 +40,19 @@ function toMillis(value) {
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
+function normalizeHttpsSourceUrl(value) {
+  const source = normalizeText(value);
+  if (!source) return "";
+  try {
+    const parsed = new URL(source);
+    if (parsed.protocol !== "https:" || !parsed.hostname) return "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
 function normalizeOffer(offer, nowMs = Date.now()) {
   if (!offer || typeof offer !== "object") return null;
   const offerId = normalizeText(offer.offerId || offer.id);
@@ -54,6 +67,8 @@ function normalizeOffer(offer, nowMs = Date.now()) {
   const validUntilMs = toMillis(offer.validUntil);
   const availabilityMode = normalizeAvailabilityMode(offer.availabilityMode);
   const pricingEvidence = normalizeConsumerPricingEvidence(offer);
+  const officialSourceUrl = normalizeHttpsSourceUrl(offer.officialSourceUrl);
+  const officialSourceName = normalizeText(offer.officialSourceName);
 
   if (!offerId || !providerName || !category) return null;
   if (pricingModel !== SUPPORTED_PRICING_MODEL) return null;
@@ -65,6 +80,7 @@ function normalizeOffer(offer, nowMs = Date.now()) {
   if (verifiedAtMs > nowMs) return null;
   if (validUntilMs <= nowMs) return null;
   if (offer.officialSourceVerified !== true) return null;
+  if (!officialSourceUrl || !officialSourceName) return null;
   if (offer.availabilityStatus !== "AVAILABLE") return null;
   if (!availabilityMode || !pricingEvidence) return null;
 
@@ -90,6 +106,11 @@ function normalizeOffer(offer, nowMs = Date.now()) {
     consumerPriceIncludesVat: pricingEvidence.consumerPriceIncludesVat,
     requiredRecurringFees: pricingEvidence.requiredRecurringFees,
     requiredRecurringFeesDescription: pricingEvidence.requiredRecurringFeesDescription,
+    verificationState: "VERIFIED",
+    freshnessState: "FRESH",
+    officialSourceUrl,
+    officialSourceName,
+    verificationMethod: normalizeText(offer.verificationMethod) || "OFFICIAL_SOURCE_OPERATOR_ATTESTATION",
     verifiedAt: new Date(verifiedAtMs).toISOString(),
     validUntil: new Date(validUntilMs).toISOString(),
     userFitScore: Number.isFinite(userFitScore)
@@ -138,6 +159,7 @@ function matchVerifiedOffers(opportunity, offers, options = {}) {
     const headlineMonthlySaving = roundMoney(currentMonthlyCost - offer.monthlyPrice);
     matches.push({
       ...offer,
+      eligibilityState: "ELIGIBLE",
       currentFirstYearCost,
       headlineMonthlySaving,
       monthlySaving,
@@ -150,7 +172,6 @@ function matchVerifiedOffers(opportunity, offers, options = {}) {
     });
   }
 
-  // User value is the ranking rule. Commission is deliberately excluded from this comparator.
   matches.sort((a, b) => {
     if (a.annualSaving !== b.annualSaving) return b.annualSaving - a.annualSaving;
     if (a.userFitScore !== b.userFitScore) return b.userFitScore - a.userFitScore;
@@ -168,11 +189,14 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
       matchedOffer: null,
       potentialMonthlySaving: null,
       potentialAnnualSaving: null,
+      offerVerificationState: "UNKNOWN",
+      offerFreshnessState: "UNKNOWN",
+      userEligibilityState: "UNKNOWN",
       truthfulness: {
         ...(opportunity.truthfulness || {}),
         savingsClaimAvailable: false,
         reason: FIXED_MONTHLY_CATEGORIES.has(String(opportunity?.category || "").trim())
-          ? "No verified compatible current offer with trustworthy consumer pricing and availability is available."
+          ? "No verified compatible current offer with trustworthy consumer pricing, authoritative source evidence and availability is available."
           : "This category requires a category-specific pricing model before a savings amount can be claimed.",
       },
     };
@@ -195,6 +219,12 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
       consumerPriceIncludesVat: best.consumerPriceIncludesVat,
       requiredRecurringFees: best.requiredRecurringFees,
       requiredRecurringFeesDescription: best.requiredRecurringFeesDescription,
+      verificationState: best.verificationState,
+      freshnessState: best.freshnessState,
+      eligibilityState: best.eligibilityState,
+      verificationMethod: best.verificationMethod,
+      officialSourceUrl: best.officialSourceUrl,
+      officialSourceName: best.officialSourceName,
       verifiedAt: best.verifiedAt,
       validUntil: best.validUntil,
       userFitScore: best.userFitScore,
@@ -202,10 +232,13 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
     },
     potentialMonthlySaving: best.monthlySaving,
     potentialAnnualSaving: best.annualSaving,
+    offerVerificationState: best.verificationState,
+    offerFreshnessState: best.freshnessState,
+    userEligibilityState: best.eligibilityState,
     truthfulness: {
       ...(opportunity.truthfulness || {}),
       savingsClaimAvailable: true,
-      reason: "Savings are calculated from verified VAT-inclusive first-year cost, including declared mandatory recurring and one-time fees, after availability eligibility.",
+      reason: "Potential savings are calculated from a verified, fresh and eligible VAT-inclusive first-year offer with authoritative source evidence, including declared mandatory recurring and one-time fees. They are not realized savings.",
     },
   };
 }
@@ -216,6 +249,7 @@ module.exports = {
   MIN_PRICE_GUARANTEE_MONTHS,
   roundMoney,
   toMillis,
+  normalizeHttpsSourceUrl,
   normalizeOffer,
   serviceCompatible,
   matchVerifiedOffers,

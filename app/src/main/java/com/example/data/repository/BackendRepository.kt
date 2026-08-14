@@ -92,10 +92,10 @@ data class FinancialInsight(
     val type: String,
     val providerName: String,
     val category: String,
-    val currentMonthlyCost: Double,
-    val previousMonthlyCost: Double,
-    val monthlyIncrease: Double,
-    val percentIncrease: Double,
+    val currentMonthlyCost: Double?,
+    val previousMonthlyCost: Double?,
+    val monthlyIncrease: Double?,
+    val percentIncrease: Double?,
     val severity: String
 )
 
@@ -111,9 +111,15 @@ data class FinancialMatchedOffer(
     val oneTimeFees: Double?,
     val firstYearCost: Double?,
     val serviceType: String,
+    val verificationState: String,
+    val freshnessState: String,
+    val eligibilityState: String,
+    val verificationMethod: String,
+    val officialSourceUrl: String,
+    val officialSourceName: String,
     val verifiedAt: String,
     val validUntil: String,
-    val userFitScore: Double
+    val userFitScore: Double?
 )
 
 data class FinancialOpportunity(
@@ -125,11 +131,25 @@ data class FinancialOpportunity(
     val category: String,
     val serviceType: String,
     val currentMonthlyCost: Double,
-    val previousMonthlyCost: Double,
-    val monthlyIncrease: Double,
-    val percentIncrease: Double,
+    val previousMonthlyCost: Double?,
+    val monthlyIncrease: Double?,
+    val percentIncrease: Double?,
     val potentialMonthlySaving: Double?,
     val potentialAnnualSaving: Double?,
+    val realizedMonthlySaving: Double?,
+    val realizedAnnualSaving: Double?,
+    val currentCostEvidenceState: String,
+    val offerVerificationState: String,
+    val offerFreshnessState: String,
+    val userEligibilityState: String,
+    val consentState: String,
+    val requestState: String,
+    val deliveryAttemptState: String,
+    val submissionState: String,
+    val deliveryState: String,
+    val providerContactState: String,
+    val completionState: String,
+    val savingRealizationState: String,
     val recommendationAction: String,
     val matchedOffer: FinancialMatchedOffer?
 )
@@ -291,14 +311,10 @@ class BackendRepository(
                     type = map["type"] as? String ?: "",
                     providerName = map["providerName"] as? String ?: "",
                     category = map["category"] as? String ?: "",
-                    currentMonthlyCost = (map["currentMonthlyCost"] as? Number)?.toDouble()
-                        ?: return@mapNotNull null,
-                    previousMonthlyCost = (map["previousMonthlyCost"] as? Number)?.toDouble()
-                        ?: return@mapNotNull null,
-                    monthlyIncrease = (map["monthlyIncrease"] as? Number)?.toDouble()
-                        ?: return@mapNotNull null,
-                    percentIncrease = (map["percentIncrease"] as? Number)?.toDouble()
-                        ?: return@mapNotNull null,
+                    currentMonthlyCost = (map["currentMonthlyCost"] as? Number)?.toDouble(),
+                    previousMonthlyCost = (map["previousMonthlyCost"] as? Number)?.toDouble(),
+                    monthlyIncrease = (map["monthlyIncrease"] as? Number)?.toDouble(),
+                    percentIncrease = (map["percentIncrease"] as? Number)?.toDouble(),
                     severity = map["severity"] as? String ?: "INFO"
                 )
             }
@@ -317,14 +333,25 @@ class BackendRepository(
                     serviceType = map["serviceType"] as? String ?: "",
                     currentMonthlyCost = (map["currentMonthlyCost"] as? Number)?.toDouble()
                         ?: return@mapNotNull null,
-                    previousMonthlyCost = (map["previousMonthlyCost"] as? Number)?.toDouble()
-                        ?: return@mapNotNull null,
-                    monthlyIncrease = (map["monthlyIncrease"] as? Number)?.toDouble()
-                        ?: return@mapNotNull null,
-                    percentIncrease = (map["percentIncrease"] as? Number)?.toDouble()
-                        ?: return@mapNotNull null,
+                    previousMonthlyCost = (map["previousMonthlyCost"] as? Number)?.toDouble(),
+                    monthlyIncrease = (map["monthlyIncrease"] as? Number)?.toDouble(),
+                    percentIncrease = (map["percentIncrease"] as? Number)?.toDouble(),
                     potentialMonthlySaving = (map["potentialMonthlySaving"] as? Number)?.toDouble(),
                     potentialAnnualSaving = (map["potentialAnnualSaving"] as? Number)?.toDouble(),
+                    realizedMonthlySaving = (map["realizedMonthlySaving"] as? Number)?.toDouble(),
+                    realizedAnnualSaving = (map["realizedAnnualSaving"] as? Number)?.toDouble(),
+                    currentCostEvidenceState = map["currentCostEvidenceState"] as? String ?: "UNKNOWN",
+                    offerVerificationState = map["offerVerificationState"] as? String ?: "UNKNOWN",
+                    offerFreshnessState = map["offerFreshnessState"] as? String ?: "UNKNOWN",
+                    userEligibilityState = map["userEligibilityState"] as? String ?: "UNKNOWN",
+                    consentState = map["consentState"] as? String ?: "NOT_CONSENTED",
+                    requestState = map["requestState"] as? String ?: "NOT_CREATED",
+                    deliveryAttemptState = map["deliveryAttemptState"] as? String ?: "NOT_ATTEMPTED",
+                    submissionState = map["submissionState"] as? String ?: "NOT_SUBMITTED",
+                    deliveryState = map["deliveryState"] as? String ?: "NOT_CONFIRMED",
+                    providerContactState = map["providerContactState"] as? String ?: "UNKNOWN",
+                    completionState = map["completionState"] as? String ?: "NOT_COMPLETED",
+                    savingRealizationState = map["savingRealizationState"] as? String ?: "UNKNOWN",
                     recommendationAction = map["recommendationAction"] as? String ?: "",
                     matchedOffer = matchedMap?.let {
                         FinancialMatchedOffer(
@@ -339,9 +366,15 @@ class BackendRepository(
                             oneTimeFees = (it["oneTimeFees"] as? Number)?.toDouble(),
                             firstYearCost = (it["firstYearCost"] as? Number)?.toDouble(),
                             serviceType = it["serviceType"] as? String ?: "",
+                            verificationState = it["verificationState"] as? String ?: "UNKNOWN",
+                            freshnessState = it["freshnessState"] as? String ?: "UNKNOWN",
+                            eligibilityState = it["eligibilityState"] as? String ?: "UNKNOWN",
+                            verificationMethod = it["verificationMethod"] as? String ?: "",
+                            officialSourceUrl = it["officialSourceUrl"] as? String ?: "",
+                            officialSourceName = it["officialSourceName"] as? String ?: "",
                             verifiedAt = it["verifiedAt"] as? String ?: "",
                             validUntil = it["validUntil"] as? String ?: "",
-                            userFitScore = (it["userFitScore"] as? Number)?.toDouble() ?: return@let null
+                            userFitScore = (it["userFitScore"] as? Number)?.toDouble()
                         )
                     }
                 )

@@ -2,6 +2,7 @@
 
 const { getFirestore } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const { normalizeHandoffTruth } = require("./handoffTruth");
 
 const db = getFirestore();
 const MAX_OPPORTUNITIES = 30;
@@ -36,13 +37,33 @@ function userFacingOffer(offer) {
     oneTimeFees: finiteOrNull(offer.oneTimeFees),
     firstYearCost: finiteOrNull(offer.firstYearCost),
     serviceType: String(offer.serviceType || ""),
+    verificationState: String(offer.verificationState || "UNKNOWN"),
+    freshnessState: String(offer.freshnessState || "UNKNOWN"),
+    eligibilityState: String(offer.eligibilityState || "UNKNOWN"),
+    verificationMethod: String(offer.verificationMethod || ""),
+    officialSourceUrl: String(offer.officialSourceUrl || ""),
+    officialSourceName: String(offer.officialSourceName || ""),
     verifiedAt: String(offer.verifiedAt || ""),
     validUntil: String(offer.validUntil || ""),
   };
 }
 
+function safeHandoffTruth(data) {
+  const consentState = String(data?.consentState || "").toUpperCase();
+  const source = {
+    ...(data || {}),
+    consentAccepted: data?.consentAccepted === true || consentState === "CONSENTED",
+  };
+  try {
+    return normalizeHandoffTruth(source);
+  } catch {
+    return normalizeHandoffTruth({});
+  }
+}
+
 function userFacingOpportunity(id, data) {
   const matchedOffer = userFacingOffer(data?.matchedOffer);
+  const truth = safeHandoffTruth(data);
   return {
     id: String(id || ""),
     type: String(data?.type || ""),
@@ -57,6 +78,20 @@ function userFacingOpportunity(id, data) {
     percentIncrease: finiteOrNull(data?.percentIncrease),
     potentialMonthlySaving: finiteOrNull(data?.potentialMonthlySaving),
     potentialAnnualSaving: finiteOrNull(data?.potentialAnnualSaving),
+    realizedMonthlySaving: finiteOrNull(data?.realizedMonthlySaving),
+    realizedAnnualSaving: finiteOrNull(data?.realizedAnnualSaving),
+    currentCostEvidenceState: String(data?.currentCostEvidenceState || "UNKNOWN"),
+    offerVerificationState: matchedOffer?.verificationState || String(data?.offerVerificationState || "UNKNOWN"),
+    offerFreshnessState: matchedOffer?.freshnessState || String(data?.offerFreshnessState || "UNKNOWN"),
+    userEligibilityState: matchedOffer?.eligibilityState || String(data?.userEligibilityState || "UNKNOWN"),
+    consentState: truth.consentState,
+    requestState: truth.requestState,
+    deliveryAttemptState: truth.deliveryAttemptState,
+    submissionState: truth.submissionState,
+    deliveryState: truth.deliveryState,
+    providerContactState: truth.providerContactState,
+    completionState: truth.completionState,
+    savingRealizationState: truth.savingRealizationState,
     matchedOffer,
   };
 }
@@ -80,8 +115,8 @@ exports.getSavingsOpportunities = onCall(
       .map((snapshot) => userFacingOpportunity(snapshot.id, snapshot.data() || {}));
 
     opportunities.sort((a, b) => {
-      const aSaving = Number(a.potentialAnnualSaving || 0);
-      const bSaving = Number(b.potentialAnnualSaving || 0);
+      const aSaving = a.potentialAnnualSaving == null ? Number.NEGATIVE_INFINITY : a.potentialAnnualSaving;
+      const bSaving = b.potentialAnnualSaving == null ? Number.NEGATIVE_INFINITY : b.potentialAnnualSaving;
       if (aSaving !== bSaving) return bSaving - aSaving;
       return String(a.providerName).localeCompare(String(b.providerName), "he");
     });
@@ -95,3 +130,4 @@ exports.getSavingsOpportunities = onCall(
 
 exports._userFacingOffer = userFacingOffer;
 exports._userFacingOpportunity = userFacingOpportunity;
+exports._safeHandoffTruth = safeHandoffTruth;

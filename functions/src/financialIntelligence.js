@@ -135,8 +135,8 @@ function detectFinancialSignals(invoices) {
     const previous = group.length >= 2 ? group[group.length - 2] : null;
     const recurring = isRecurringGroup(group);
     let materialIncrease = false;
-    let roundedDelta = 0;
-    let roundedPercent = 0;
+    let roundedDelta = null;
+    let roundedPercent = null;
 
     if (recurring) {
       insights.push({
@@ -187,11 +187,26 @@ function detectFinancialSignals(invoices) {
       providerName: latest.providerName,
       category: latest.category,
       currentMonthlyCost: roundMoney(latest.monthlyCost),
-      previousMonthlyCost: previous ? roundMoney(previous.monthlyCost) : 0,
-      monthlyIncrease: materialIncrease ? roundedDelta : 0,
-      percentIncrease: materialIncrease ? roundedPercent : 0,
+      previousMonthlyCost: previous ? roundMoney(previous.monthlyCost) : null,
+      monthlyIncrease: previous ? roundedDelta : null,
+      percentIncrease: previous ? roundedPercent : null,
+      currentCostEvidenceState: "OBSERVED_SOURCE",
+      currentCostVerificationStatus: latest.verificationStatus,
       potentialMonthlySaving: null,
       potentialAnnualSaving: null,
+      realizedMonthlySaving: null,
+      realizedAnnualSaving: null,
+      offerVerificationState: "UNKNOWN",
+      offerFreshnessState: "UNKNOWN",
+      userEligibilityState: "UNKNOWN",
+      consentState: "NOT_CONSENTED",
+      requestState: "NOT_CREATED",
+      deliveryAttemptState: "NOT_ATTEMPTED",
+      submissionState: "NOT_SUBMITTED",
+      deliveryState: "NOT_CONFIRMED",
+      providerContactState: "UNKNOWN",
+      completionState: "NOT_COMPLETED",
+      savingRealizationState: "UNKNOWN",
       recommendationAction: "FIND_VERIFIED_ALTERNATIVES",
       evidenceSourceMessageIds: previous
         ? [previous.sourceMessageId, latest.sourceMessageId]

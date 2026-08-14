@@ -28,6 +28,8 @@ function offer(overrides) {
     verifiedAt: "2026-08-08T08:00:00Z",
     validUntil: "2026-09-08T08:00:00Z",
     officialSourceVerified: true,
+    officialSourceUrl: "https://provider.example/official-offer",
+    officialSourceName: "Provider official offer",
     availabilityStatus: "AVAILABLE",
     availabilityMode: "NATIONWIDE",
     consumerPriceIncludesVat: true,
@@ -123,9 +125,12 @@ test("non-VAT consumer prices and undisclosed mandatory fees are rejected", () =
   assert.deepEqual(matches.map((item) => item.offerId), ["valid"]);
 });
 
-test("unverified, expired, wrong-model and incompatible offers are rejected", () => {
+test("unverified, sourceless, expired, wrong-model and incompatible offers are rejected", () => {
   const matches = matchVerifiedOffers(opportunity, [
     offer({ offerId: "unverified", officialSourceVerified: false }),
+    offer({ offerId: "missing-source", officialSourceUrl: "" }),
+    offer({ offerId: "insecure-source", officialSourceUrl: "http://provider.example/offer" }),
+    offer({ offerId: "missing-source-name", officialSourceName: "" }),
     offer({ offerId: "expired", validUntil: "2026-08-01T08:00:00Z" }),
     offer({ offerId: "wrong-service", serviceType: "100Mbps" }),
     offer({ offerId: "wrong-country", country: "US" }),
@@ -197,6 +202,9 @@ test("savings claim appears only after a verified compatible first-year offer is
   assert.equal(matched.potentialAnnualSaving, 480);
   assert.equal(matched.matchedOffer.firstYearCost, 1068);
   assert.equal(matched.matchedOffer.oneTimeFees, 0);
+  assert.equal(matched.matchedOffer.verificationState, "VERIFIED");
+  assert.equal(matched.matchedOffer.freshnessState, "FRESH");
+  assert.equal(matched.matchedOffer.eligibilityState, "ELIGIBLE");
   assert.equal(matched.truthfulness.savingsClaimAvailable, true);
 });
 

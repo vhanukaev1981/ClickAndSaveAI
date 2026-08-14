@@ -5,6 +5,7 @@ const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const logger = require("firebase-functions/logger");
 const { buildProviderDispatchPayload } = require("./providerDispatch");
 const { isTrackableCommercialOffer } = require("./commercialPolicy");
+const { normalizeHandoffTruth } = require("./handoffTruth");
 
 const db = getFirestore();
 
@@ -28,6 +29,9 @@ function buildDispatchQueueRecord(leadId, lead, commerceMatch) {
     commissionValue: commerceMatch.commissionValue,
   })) return null;
 
+  const truth = normalizeHandoffTruth(lead);
+  if (truth.consentState !== "CONSENTED" || truth.requestState !== "REQUEST_CREATED") return null;
+
   const payload = buildProviderDispatchPayload({ id: leadId, ...lead });
   if (!payload) return null;
 
@@ -42,6 +46,14 @@ function buildDispatchQueueRecord(leadId, lead, commerceMatch) {
     payload,
     status: "PENDING",
     attempts: 0,
+    consentState: truth.consentState,
+    requestState: truth.requestState,
+    deliveryAttemptState: truth.deliveryAttemptState,
+    submissionState: truth.submissionState,
+    deliveryState: truth.deliveryState,
+    providerContactState: truth.providerContactState,
+    completionState: truth.completionState,
+    savingRealizationState: truth.savingRealizationState,
   };
 }
 
@@ -92,6 +104,7 @@ exports.onAttributedProviderLeadCreated = onDocumentWritten(
       uid,
       opportunityId,
       queued,
+      deliveryState: queued ? "NOT_CONFIRMED" : "NOT_QUEUED",
     });
   }
 );

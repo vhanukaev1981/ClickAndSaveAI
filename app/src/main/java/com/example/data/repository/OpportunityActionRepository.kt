@@ -10,7 +10,17 @@ data class OpportunityActionResult(
     val opportunityId: String,
     val offerId: String,
     val potentialMonthlySaving: Double?,
-    val potentialAnnualSaving: Double?
+    val potentialAnnualSaving: Double?,
+    val consentState: String,
+    val requestState: String,
+    val deliveryAttemptState: String,
+    val submissionState: String,
+    val deliveryState: String,
+    val providerContactState: String,
+    val completionState: String,
+    val savingRealizationState: String,
+    val realizedMonthlySaving: Double?,
+    val realizedAnnualSaving: Double?
 )
 
 class OpportunityActionRepository(
@@ -39,15 +49,17 @@ class OpportunityActionRepository(
         expectedOfferId: String,
         contactName: String,
         phone: String,
-        contactEmail: String
+        contactEmail: String,
+        consentAccepted: Boolean
     ): OpportunityActionResult {
+        require(consentAccepted) { "Explicit provider-contact consent is required" }
         val payload = mapOf(
             "opportunityId" to opportunityId,
             "expectedOfferId" to expectedOfferId,
             "contactName" to contactName,
             "phone" to phone,
             "contactEmail" to contactEmail,
-            "consentAccepted" to true,
+            "consentAccepted" to consentAccepted,
             "consentVersion" to "opportunity-action-v1"
         )
         val response = functions.getHttpsCallable("acceptSavingsOpportunity")
@@ -62,7 +74,17 @@ class OpportunityActionRepository(
             opportunityId = response["opportunityId"] as? String ?: opportunityId,
             offerId = response["offerId"] as? String ?: expectedOfferId,
             potentialMonthlySaving = (response["potentialMonthlySaving"] as? Number)?.toDouble(),
-            potentialAnnualSaving = (response["potentialAnnualSaving"] as? Number)?.toDouble()
+            potentialAnnualSaving = (response["potentialAnnualSaving"] as? Number)?.toDouble(),
+            consentState = response["consentState"] as? String ?: "UNKNOWN",
+            requestState = response["requestState"] as? String ?: "NOT_CREATED",
+            deliveryAttemptState = response["deliveryAttemptState"] as? String ?: "NOT_ATTEMPTED",
+            submissionState = response["submissionState"] as? String ?: "NOT_SUBMITTED",
+            deliveryState = response["deliveryState"] as? String ?: "NOT_CONFIRMED",
+            providerContactState = response["providerContactState"] as? String ?: "UNKNOWN",
+            completionState = response["completionState"] as? String ?: "NOT_COMPLETED",
+            savingRealizationState = response["savingRealizationState"] as? String ?: "UNKNOWN",
+            realizedMonthlySaving = (response["realizedMonthlySaving"] as? Number)?.toDouble(),
+            realizedAnnualSaving = (response["realizedAnnualSaving"] as? Number)?.toDouble()
         )
     }
 

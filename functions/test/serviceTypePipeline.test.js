@@ -86,6 +86,8 @@ test("canonical user service profile matches equivalent provider wording but rej
     verifiedAt: "2026-08-08T08:00:00Z",
     validUntil: "2026-09-08T08:00:00Z",
     officialSourceVerified: true,
+    officialSourceUrl: "https://provider.example/official-internet-offer",
+    officialSourceName: "Provider A official internet offer",
     availabilityStatus: "AVAILABLE",
     userFitScore: 0.9,
     commercialAgreementActive: false,
