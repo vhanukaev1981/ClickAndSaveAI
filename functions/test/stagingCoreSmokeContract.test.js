@@ -21,6 +21,7 @@ test("staging smoke summary keeps unknown financial values null rather than inve
     gmailResponse: { connected: true, consentVersion: "gmail-readonly-v1" },
     scanResponse: { invoices: [], scannedMessages: 12, importedCount: 0, parserVersion: 6, agentRefreshed: true },
     financialHomeResponse: { context: { sourceCoverage: ["GMAIL_READONLY"] }, insights: [], opportunities: [] },
+    activityResponse: { events: [], sourceCoverage: ["GMAIL_READONLY"], isCompleteHistory: false },
   });
 
   assert.equal(summary.projectId, "clickandsaveai-staging");
@@ -31,6 +32,8 @@ test("staging smoke summary keeps unknown financial values null rather than inve
   assert.equal(summary.financialHome.recurringServiceCount, null);
   assert.equal(summary.financialHome.observedRecurringMonthlySpend, null);
   assert.deepEqual(summary.financialHome.sourceCoverage, ["GMAIL_READONLY"]);
+  assert.equal(summary.activity.eventCount, 0);
+  assert.equal(summary.activity.isCompleteHistory, false);
 });
 
 test("staging smoke summary exposes only aggregate evidence and strips raw Gmail/secrets", async () => {
@@ -71,6 +74,14 @@ test("staging smoke summary exposes only aggregate evidence and strips raw Gmail
       insights: [{ id: "insight-secret" }],
       opportunities: [{ id: "opportunity-secret" }],
     },
+    activityResponse: {
+      events: [
+        { type: "BILL_DETECTED", id: "private-event-id", providerName: "Private Provider" },
+        { type: "LEAD_CREATED", id: "private-lead-id" },
+      ],
+      sourceCoverage: ["GMAIL_READONLY", "COMMERCE_LEDGER"],
+      isCompleteHistory: false,
+    },
   });
 
   assert.deepEqual(summary, {
@@ -94,6 +105,12 @@ test("staging smoke summary exposes only aggregate evidence and strips raw Gmail
       insightCount: 1,
       opportunityCount: 1,
     },
+    activity: {
+      eventCount: 2,
+      eventTypes: ["BILL_DETECTED", "LEAD_CREATED"],
+      sourceCoverage: ["GMAIL_READONLY", "COMMERCE_LEDGER"],
+      isCompleteHistory: false,
+    },
   });
 
   const serialized = JSON.stringify(summary);
@@ -108,6 +125,9 @@ test("staging smoke summary exposes only aggregate evidence and strips raw Gmail
     "insight-secret",
     "opportunity-secret",
     "internal-id",
+    "private-event-id",
+    "private-lead-id",
+    "Private Provider",
   ]) {
     assert.equal(serialized.includes(forbidden), false, `summary leaked ${forbidden}`);
   }
@@ -211,6 +231,12 @@ test("deployment runs authenticated staging truth smoke only after Firebase depl
   assert.match(workflow, /node scripts\/staging-core-smoke\.mjs/);
   assert.match(workflow, /actions\/upload-artifact@v4/);
   assert.match(workflow, /staging-core-smoke\.json/);
+});
+
+test("staging smoke calls authoritative Activity and does not rely on client-local history", async () => {
+  const source = fs.readFileSync(path.resolve(__dirname, "..", "..", "scripts", "staging-core-smoke.mjs"), "utf8");
+  assert.match(source, /callStagingCallable\("getFinancialActivity"/);
+  assert.doesNotMatch(source, /AppDatabase|Room|SharedPreferences/);
 });
 
 test("deployment derives Firebase API key and Android app ID from the already-provisioned staging google-services config", () => {

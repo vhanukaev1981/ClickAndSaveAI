@@ -33,6 +33,7 @@ pushCache.exports = originalPushExports;
 
 const gmailWatchRenewal = require("./gmailWatchRenewal");
 const financialAgentFunctions = require("./financialAgentFunctions");
+const financialActivityFunctions = require("./financialActivityFunctions");
 
 // Opportunity notifications are authoritative Firestore transitions. Sanitize display content
 // and bind an accountScope before the producer captures the delivery function.
@@ -74,6 +75,7 @@ module.exports = {
   ...gmailWatchFunctions,
   ...gmailWatchRenewal,
   ...financialAgentFunctions,
+  ...financialActivityFunctions,
   ...opportunityNotificationFunctions,
   ...opportunityActionFunctions,
   ...opportunityEngagementFunctions,
