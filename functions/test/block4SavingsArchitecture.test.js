@@ -9,7 +9,6 @@ if (getApps().length === 0) initializeApp({ projectId: "clickandsaveai-test" });
 const { enrichOpportunityWithBestOffer } = require("../src/commerceEngine");
 const { _buildDispatchQueueRecord: buildDispatchQueueRecord } = require("../src/providerDispatchFunctions");
 const { _userFacingOpportunity: userFacingOpportunity } = require("../src/savingsOpportunityFunctions");
-const { _homeOpportunity: homeOpportunity } = require("../src/financialAgentFunctions");
 const {
   _validateDeliveryEvidenceInput: validateDeliveryEvidenceInput,
   _validateSavingRealizationInput: validateSavingRealizationInput,
@@ -95,7 +94,7 @@ test("dispatch queue starts at request-created truth and never implies submissio
   assert.equal(result.deliveryState, "NOT_CONFIRMED");
 });
 
-test("user-facing opportunity exposes independent handoff truth without inventing realized savings", () => {
+test("user-facing opportunity preserves unknown values instead of collapsing them to zero", () => {
   const result = userFacingOpportunity("opp-1", {
     status: "USER_ACCEPTED",
     actionMode: "IN_APP_PROVIDER_REQUEST",
@@ -113,6 +112,9 @@ test("user-facing opportunity exposes independent handoff truth without inventin
     savingRealizationState: "UNKNOWN",
   });
 
+  assert.equal(result.previousMonthlyCost, null);
+  assert.equal(result.monthlyIncrease, null);
+  assert.equal(result.percentIncrease, null);
   assert.equal(result.consentState, "CONSENTED");
   assert.equal(result.requestState, "REQUEST_CREATED");
   assert.equal(result.submissionState, "NOT_SUBMITTED");
@@ -121,20 +123,6 @@ test("user-facing opportunity exposes independent handoff truth without inventin
   assert.equal(result.completionState, "NOT_COMPLETED");
   assert.equal(result.savingRealizationState, "UNKNOWN");
   assert.equal(result.realizedMonthlySaving, null);
-});
-
-test("home projection preserves unknown comparison values instead of coercing them to zero", () => {
-  const result = homeOpportunity({
-    id: "opp-1",
-    type: "OPTIMIZE_RECURRING_SERVICE",
-    status: "OPEN",
-    providerName: "Provider A",
-    category: "אינטרנט",
-    currentMonthlyCost: 129,
-  });
-  assert.equal(result.previousMonthlyCost, null);
-  assert.equal(result.monthlyIncrease, null);
-  assert.equal(result.percentIncrease, null);
 });
 
 test("delivery evidence requires explicit submission result and receipt proof for confirmed delivery", () => {
