@@ -138,14 +138,12 @@ class AuthRepository(private val applicationContext: Context) {
     }
 
     suspend fun signOut() {
-        // Revoke this device while Firebase Auth is still valid. A transient revocation failure
-        // must never trap the user in a signed-in session; PushTokenLifecycle also attempts to
-        // delete the local FCM token so a later login receives a fresh registration.
-        PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut()
-            .onFailure { Log.w("AuthRepository", "Push revocation incomplete during sign-out", it) }
+        // Revocation is a hard privacy gate. Firebase Auth sign-out must not complete unless the
+        // authenticated server registration and the local FCM registration were both revoked.
+        PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut().getOrThrow()
 
         runCatching { getFirebaseAuthSafe()?.signOut() }
-            .onFailure { Log.e("AuthRepository", "Sign-out failed", it) }
+            .getOrThrow()
 
         // Invoice data can originate from the signed-in Gmail account. Purge it before another
         // account can be used on the same device. Android backup is disabled, so this also keeps
