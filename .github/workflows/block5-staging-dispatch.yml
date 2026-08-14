@@ -12,7 +12,7 @@ permissions:
   actions: write
 
 env:
-  DISPATCH_REVISION: dotenv-materialized-1
+  DISPATCH_REVISION: idempotent-force-guard-1
 
 jobs:
   dispatch:
