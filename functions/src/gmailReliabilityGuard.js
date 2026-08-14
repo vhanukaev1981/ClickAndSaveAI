@@ -1,5 +1,6 @@
 "use strict";
 
+const { getAuth } = require("firebase-admin/auth");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { onMessagePublished } = require("firebase-functions/v2/pubsub");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
@@ -43,6 +44,28 @@ function isPermanentAuthorizationFailure(error) {
     /Gmail .* failed with (401|403)/.test(message);
 }
 
+async function accountExists(uid) {
+  try {
+    await getAuth().getUser(String(uid));
+    return true;
+  } catch (error) {
+    if (error?.code === "auth/user-not-found") return false;
+    throw error;
+  }
+}
+
+async function disableDeletedAccount(doc) {
+  await doc.ref.set({
+    watchEnabled: false,
+    authorizationState: "ACCOUNT_DELETED",
+    historyRecoveryRequired: false,
+    pendingHistoryId: FieldValue.delete(),
+    incrementalLeaseOwner: FieldValue.delete(),
+    incrementalLeaseUntilMs: FieldValue.delete(),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+}
+
 async function transitionToReconnect(doc, reason) {
   await doc.ref.set({
     encryptedRefreshToken: FieldValue.delete(),
@@ -72,10 +95,17 @@ async function activeConnectionsForEmail(emailAddress) {
     .where("email", "==", emailAddress)
     .limit(10)
     .get();
-  return matches.docs.filter((doc) => {
+  const active = [];
+  for (const doc of matches.docs) {
     const data = doc.data() || {};
-    return data.watchEnabled === true && Boolean(data.encryptedRefreshToken);
-  });
+    if (data.watchEnabled !== true || !data.encryptedRefreshToken) continue;
+    if (!await accountExists(doc.id)) {
+      await disableDeletedAccount(doc);
+      continue;
+    }
+    active.push(doc);
+  }
+  return active;
 }
 
 async function recoverConnection(doc) {
@@ -125,6 +155,10 @@ async function processGuardedEvent(event) {
 async function reconcileGuardedConnection(doc) {
   let current = doc;
   try {
+    if (!await accountExists(current.id)) {
+      await disableDeletedAccount(current);
+      return { status: "ACCOUNT_DELETED" };
+    }
     const mode = syncMode(current.data() || {}, ACTIVE_GMAIL_PARSER_VERSION);
     if (mode === "RECOVERY_REQUIRED") {
       await recoverConnection(current);
@@ -194,13 +228,22 @@ exports.gmailIncrementalReconciliation = onSchedule(
       .filter((group) => group.length === 1)
       .map((group) => group[0]);
 
-    const stats = { candidates: candidates.length, reconciled: 0, current: 0, skipped: 0, reconnect: 0, failed: 0 };
+    const stats = {
+      candidates: candidates.length,
+      reconciled: 0,
+      current: 0,
+      skipped: 0,
+      reconnect: 0,
+      deleted: 0,
+      failed: 0,
+    };
     await runWithConcurrency(candidates, MAX_CONCURRENCY, async (doc) => {
       try {
         const result = await reconcileGuardedConnection(doc);
         if (result.status === "RECONCILED") stats.reconciled += 1;
         else if (result.status === "CURRENT") stats.current += 1;
         else if (result.status === "RECONNECT_REQUIRED") stats.reconnect += 1;
+        else if (result.status === "ACCOUNT_DELETED") stats.deleted += 1;
         else stats.skipped += 1;
       } catch (error) {
         stats.failed += 1;
@@ -218,6 +261,7 @@ exports.gmailIncrementalReconciliation = onSchedule(
 Object.defineProperties(module.exports, {
   _decodePayload: { value: decodePayload, enumerable: false },
   _isPermanentAuthorizationFailure: { value: isPermanentAuthorizationFailure, enumerable: false },
+  _accountExists: { value: accountExists, enumerable: false },
   _processGuardedEvent: { value: processGuardedEvent, enumerable: false },
   _reconcileGuardedConnection: { value: reconcileGuardedConnection, enumerable: false },
 });
