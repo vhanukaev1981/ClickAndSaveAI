@@ -364,6 +364,13 @@ private fun OpportunityCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (opportunity.offerVerificationState == "UNKNOWN") {
+                    Text(
+                        "סטטוס אימות ההצעה לא ידוע",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
                     "אימות: ${opportunity.offerVerificationState} • טריות: ${opportunity.offerFreshnessState} • התאמה: ${opportunity.userEligibilityState}",
                     style = MaterialTheme.typography.bodySmall,
