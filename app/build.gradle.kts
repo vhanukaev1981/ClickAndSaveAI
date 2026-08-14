@@ -21,8 +21,35 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
-  val keystorePath = System.getenv("KEYSTORE_PATH")
-  val releaseKeystore = keystorePath?.let(::file)?.takeIf { it.exists() }
+  val productionReleaseCandidate = System.getenv("PRODUCTION_RELEASE_CANDIDATE")
+    ?.equals("true", ignoreCase = true) == true
+  val productionWebClientId = System.getenv("PRODUCTION_GOOGLE_WEB_CLIENT_ID")?.trim().orEmpty()
+  val stagingWebClientId = "716864421960-hnt5709tqk9qp79si8ggplf5jif1ulfu.apps.googleusercontent.com"
+
+  fun requireProductionInput(name: String): String {
+    return System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() }
+      ?: throw GradleException("Production release candidate requires $name")
+  }
+
+  val productionUploadKeystore = if (productionReleaseCandidate) {
+    val path = requireProductionInput("PRODUCTION_UPLOAD_KEYSTORE_PATH")
+    file(path).also {
+      if (!it.isFile) throw GradleException("PRODUCTION_UPLOAD_KEYSTORE_PATH does not reference a file")
+    }
+  } else null
+
+  if (productionReleaseCandidate) {
+    if (productionWebClientId.isBlank()) {
+      throw GradleException("Production release candidate requires PRODUCTION_GOOGLE_WEB_CLIENT_ID")
+    }
+    if (productionWebClientId == stagingWebClientId) {
+      throw GradleException("Production release candidate cannot use the staging Google OAuth client")
+    }
+    if (!productionWebClientId.endsWith(".apps.googleusercontent.com")) {
+      throw GradleException("PRODUCTION_GOOGLE_WEB_CLIENT_ID has an invalid format")
+    }
+  }
+
   val stagingDebugKeystorePath = System.getenv("STAGING_DEBUG_KEYSTORE_PATH")
   val stagingDebugKeystore = stagingDebugKeystorePath?.let(::file)?.takeIf { it.exists() }
   val stagingDebugKeystorePassword = System.getenv("STAGING_DEBUG_KEYSTORE_PASSWORD")
@@ -37,12 +64,12 @@ android {
       }
     }
 
-    if (releaseKeystore != null) {
-      create("release") {
-        storeFile = releaseKeystore
-        storePassword = System.getenv("STORE_PASSWORD")
-        keyAlias = "upload"
-        keyPassword = System.getenv("KEY_PASSWORD")
+    if (productionReleaseCandidate && productionUploadKeystore != null) {
+      create("productionUpload") {
+        storeFile = productionUploadKeystore
+        storePassword = requireProductionInput("PRODUCTION_UPLOAD_STORE_PASSWORD")
+        keyAlias = requireProductionInput("PRODUCTION_UPLOAD_KEY_ALIAS")
+        keyPassword = requireProductionInput("PRODUCTION_UPLOAD_KEY_PASSWORD")
       }
     }
   }
@@ -58,8 +85,9 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      if (releaseKeystore != null) {
-        signingConfig = signingConfigs.getByName("release")
+      resValue("string", "google_web_client_id", productionWebClientId)
+      if (productionReleaseCandidate) {
+        signingConfig = signingConfigs.getByName("productionUpload")
       }
     }
   }
