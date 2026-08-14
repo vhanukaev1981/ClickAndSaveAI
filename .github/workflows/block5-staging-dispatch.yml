@@ -12,7 +12,7 @@ permissions:
   actions: write
 
 env:
-  DISPATCH_REVISION: wif-repaired-1
+  DISPATCH_REVISION: dotenv-materialized-1
 
 jobs:
   dispatch:
