@@ -1,0 +1,37 @@
+name: Dispatch Block 5 Staging
+
+on:
+  push:
+    branches:
+      - ops/block5-staging-dispatch
+    paths:
+      - .github/workflows/block5-staging-dispatch.yml
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch trusted main staging workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: b49ab4ae4f7369d62330f93d62c7a7e36ec6ed1d
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n --arg sha "$SOURCE_SHA" '{
+            ref: "main",
+            inputs: {
+              source_sha: $sha,
+              confirm_project: "clickandsaveai-staging"
+            }
+          }' | gh api \
+            --method POST \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/$GITHUB_REPOSITORY/actions/workflows/deploy-staging.yml/dispatches" \
+            --input -
+          echo "Dispatched trusted main staging workflow for exact source SHA $SOURCE_SHA."
