@@ -3,6 +3,7 @@
 const { getFirestore } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { ACTIVE_GMAIL_PARSER_VERSION } = require("./gmailParserVersion");
+const { assertActiveAccount } = require("./accountAuthorization");
 const financialAgent = require("./financialAgentFunctions");
 
 const db = getFirestore();
@@ -186,6 +187,7 @@ exports.getFinancialHome = onCall(
   { enforceAppCheck: true },
   async (request) => {
     const uid = requireAuth(request);
+    await assertActiveAccount(uid);
     const userRef = db.collection("users").doc(uid);
     let contextSnapshot = await userRef.collection("financialContext").doc("current").get();
     if (!contextSnapshot.exists) {

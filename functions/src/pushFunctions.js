@@ -5,6 +5,7 @@ const { getMessaging } = require("firebase-admin/messaging");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
+const { assertActiveAccount } = require("./accountAuthorization");
 
 const db = getFirestore();
 
@@ -93,6 +94,7 @@ exports.registerPushToken = onCall(
   { enforceAppCheck: true },
   async (request) => {
     const uid = requireAuth(request);
+    await assertActiveAccount(uid);
     const token = normalizeToken(request.data?.token);
     const tokenId = tokenDocumentId(token);
 

@@ -4,16 +4,20 @@ on:
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Exact 40-character Core commit SHA to deploy after CI is green
+        description: Exact 40-character Block 5 commit SHA to deploy after CI is green
         required: true
         type: string
       confirm_project:
         description: Type clickandsaveai-staging to confirm the deployment target
         required: true
         type: string
+  push:
+    branches:
+      - agent/p0-block5-privacy-lifecycle
 
 permissions:
   contents: read
+  actions: read
   id-token: write
 
 concurrency:
@@ -21,24 +25,24 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_SHA: ${{ inputs.source_sha }}
-  CORE_BASE_SHA: ac2105098d698df06159f929f41595f91505c855
+  SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+  BLOCK5_BASE_SHA: 7fa4b23cf927ca1dada6c61c51f48477996a5a66
 
 jobs:
   deploy:
-    if: ${{ inputs.confirm_project == 'clickandsaveai-staging' }}
+    if: ${{ github.event_name == 'push' || inputs.confirm_project == 'clickandsaveai-staging' }}
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 30
 
     steps:
-      - name: Check out exact Core source SHA
+      - name: Check out exact Block 5 source SHA
         uses: actions/checkout@v6
         with:
           ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 0
 
-      - name: Verify immutable Core source
+      - name: Verify immutable Block 5 source
         shell: bash
         run: |
           set -euo pipefail
@@ -48,14 +52,40 @@ jobs:
           fi
           ACTUAL_SHA="$(git rev-parse HEAD)"
           if [[ "$ACTUAL_SHA" != "$SOURCE_SHA" ]]; then
-            echo "Expected Core SHA $SOURCE_SHA but checked out $ACTUAL_SHA." >&2
+            echo "Expected Block 5 SHA $SOURCE_SHA but checked out $ACTUAL_SHA." >&2
             exit 1
           fi
-          if ! git merge-base --is-ancestor "$CORE_BASE_SHA" "$ACTUAL_SHA"; then
-            echo "Requested SHA is not descended from approved Core base $CORE_BASE_SHA." >&2
+          if ! git merge-base --is-ancestor "$BLOCK5_BASE_SHA" "$ACTUAL_SHA"; then
+            echo "Requested SHA is not descended from approved Block 4 SHA $BLOCK5_BASE_SHA." >&2
             exit 1
           fi
-          echo "Verified immutable Core source: $ACTUAL_SHA"
+          echo "Verified immutable Block 5 source: $ACTUAL_SHA"
+
+      - name: Wait for full CI success on exact source SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 80); do
+            RUNS="$(gh api --method GET "/repos/$GITHUB_REPOSITORY/actions/workflows/android-ci.yml/runs?head_sha=$SOURCE_SHA&per_page=20")"
+            STATUS="$(printf '%s' "$RUNS" | jq -r '.workflow_runs[0].status // ""')"
+            CONCLUSION="$(printf '%s' "$RUNS" | jq -r '.workflow_runs[0].conclusion // ""')"
+            RUN_NUMBER="$(printf '%s' "$RUNS" | jq -r '.workflow_runs[0].run_number // ""')"
+            if [[ "$STATUS" == "completed" ]]; then
+              if [[ "$CONCLUSION" != "success" ]]; then
+                echo "CI #${RUN_NUMBER:-unknown} completed with conclusion '$CONCLUSION' for $SOURCE_SHA." >&2
+                exit 1
+              fi
+              echo "Verified CI #$RUN_NUMBER SUCCESS for exact source SHA $SOURCE_SHA."
+              break
+            fi
+            if [[ "$attempt" -eq 80 ]]; then
+              echo "Timed out waiting for CI success on $SOURCE_SHA." >&2
+              exit 1
+            fi
+            sleep 15
+          done
 
       - name: Verify staging deployment configuration
         env:
@@ -169,5 +199,22 @@ jobs:
         with:
           name: staging-core-smoke-${{ env.SOURCE_SHA }}
           path: ${{ runner.temp }}/staging-core-smoke.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Run Block 5 destructive lifecycle E2E with ephemeral accounts
+        env:
+          GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          STAGING_BLOCK5_E2E_OUTPUT: ${{ runner.temp }}/staging-block5-e2e.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/staging-block5-e2e.mjs
+
+      - name: Upload sanitized Block 5 staging E2E evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-block5-e2e-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/staging-block5-e2e.json
           if-no-files-found: error
           retention-days: 14

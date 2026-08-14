@@ -16,7 +16,7 @@ const {
   isOpportunityLifecycleLocked,
   shouldRefreshCommerceMatch,
 } = require("./opportunityLifecycle");
-const { shouldRunAgentForImport } = require("./agentTriggerPolicy");
+const { shouldRunAgentForImportEvent } = require("./agentTriggerPolicy");
 const { gmailMessageIdFromInvoiceSource } = require("./gmailInvoiceSources");
 
 const db = getFirestore();
@@ -376,9 +376,10 @@ exports.onGmailFinancialDataChanged = onDocumentWritten(
   async (event) => {
     const uid = String(event.params.uid || "").trim();
     if (!uid) return;
+    const beforeData = event.data?.before?.exists ? event.data.before.data() : null;
     const afterData = event.data?.after?.exists ? event.data.after.data() : null;
-    if (!shouldRunAgentForImport(afterData)) {
-      logger.info("Financial agent trigger coalesced into Gmail backfill batch", {
+    if (!shouldRunAgentForImportEvent(beforeData, afterData)) {
+      logger.info("Financial agent trigger suppressed for coalesced or privacy-deletion import event", {
         uid,
         messageId: String(event.params.messageId || ""),
       });

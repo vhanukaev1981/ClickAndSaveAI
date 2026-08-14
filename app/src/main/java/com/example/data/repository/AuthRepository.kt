@@ -137,23 +137,33 @@ class AuthRepository(private val applicationContext: Context) {
         }
     }
 
+    suspend fun purgeImportedFinancialDataLocally() {
+        AppDatabase.getDatabase(applicationContext).invoiceDao().deleteAllInvoices()
+    }
+
     suspend fun signOut() {
-        // Revocation is a hard privacy gate. Firebase Auth sign-out must not complete unless the
-        // authenticated server registration and the local FCM registration were both revoked.
+        // Sign-out is intentionally distinct from Gmail disconnect and account deletion.
+        // Revoke this device's push registration while Auth is still valid.
         PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut().getOrThrow()
 
-        runCatching { getFirebaseAuthSafe()?.signOut() }
-            .getOrThrow()
+        // Account-derived invoice data must be gone before the local authenticated session ends.
+        // Failure is a hard gate so another account cannot inherit stale financial data.
+        purgeImportedFinancialDataLocally()
 
-        // Invoice data can originate from the signed-in Gmail account. Purge it before another
-        // account can be used on the same device. Android backup is disabled, so this also keeps
-        // account-derived invoice metadata from lingering locally after sign-out.
-        runCatching {
-            AppDatabase.getDatabase(applicationContext).invoiceDao().deleteAllInvoices()
-        }.onFailure {
-            Log.e("AuthRepository", "Local invoice purge on sign-out failed", it)
-        }
+        getFirebaseAuthSafe()?.signOut()
 
+        _userSession.value = UserSession()
+        _authState.value = AuthState.Idle
+    }
+
+    suspend fun completeAccountDeletionLocalCleanup() {
+        // The server already removed every push registration under the deleted account. Local FCM
+        // deletion is therefore secondary cleanup and must not resurrect or call the deleted user.
+        PushTokenLifecycle.deleteLocalTokenAfterAccountDeletion()
+            .onFailure { Log.w("AuthRepository", "Local FCM cleanup after account deletion failed", it) }
+
+        purgeImportedFinancialDataLocally()
+        getFirebaseAuthSafe()?.signOut()
         _userSession.value = UserSession()
         _authState.value = AuthState.Idle
     }

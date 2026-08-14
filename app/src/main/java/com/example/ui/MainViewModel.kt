@@ -32,6 +32,8 @@ import com.example.data.repository.ProviderLeadResult
 import com.example.data.repository.ShoppingRepository
 import com.example.data.repository.UserSession
 import com.example.data.repository.activityOrNull
+import com.example.data.repository.deleteAccount
+import com.example.data.repository.deleteImportedFinancialData
 import com.example.data.repository.financialHomeOrNull
 import com.example.data.repository.gmailConnectionOrNull
 import com.example.data.repository.latestScanOrNull
@@ -82,6 +84,13 @@ sealed class ProviderLeadUiState {
     data object Submitting : ProviderLeadUiState()
     data class Success(val result: ProviderLeadResult) : ProviderLeadUiState()
     data class Error(val message: String) : ProviderLeadUiState()
+}
+
+sealed class PrivacyOperationUiState {
+    data object Idle : PrivacyOperationUiState()
+    data class Working(val operation: String) : PrivacyOperationUiState()
+    data class Success(val operation: String, val message: String) : PrivacyOperationUiState()
+    data class Error(val operation: String, val message: String) : PrivacyOperationUiState()
 }
 
 class MainViewModel(
@@ -149,6 +158,10 @@ class MainViewModel(
 
     private val _providerLeadState = MutableStateFlow<ProviderLeadUiState>(ProviderLeadUiState.Idle)
     val providerLeadState: StateFlow<ProviderLeadUiState> = _providerLeadState.asStateFlow()
+
+    private val _privacyOperationState =
+        MutableStateFlow<PrivacyOperationUiState>(PrivacyOperationUiState.Idle)
+    val privacyOperationState: StateFlow<PrivacyOperationUiState> = _privacyOperationState.asStateFlow()
 
     private val _aiErrorMessage = MutableStateFlow("")
     val aiErrorMessage: StateFlow<String> = _aiErrorMessage.asStateFlow()
@@ -235,7 +248,7 @@ class MainViewModel(
 
     fun prevDailyTip() {
         currentTipIndex.value = if (currentTipIndex.value == 0) dailyTips.lastIndex
-        else currentTipIndex.value - 1
+        else dailyTips.lastIndex.coerceAtMost(currentTipIndex.value - 1)
     }
 
     val showPushBanner = MutableStateFlow(false)
@@ -381,9 +394,99 @@ class MainViewModel(
 
     fun disconnectGmail() {
         viewModelScope.launch {
+            _privacyOperationState.value = PrivacyOperationUiState.Working("DISCONNECT_GMAIL")
             val disconnected = gmailRepository.disconnectGmail()
-            if (disconnected.isSuccess) _financialSyncState.value = FinancialSyncState.Disconnected
+            disconnected.onSuccess {
+                _financialSyncState.value = FinancialSyncState.Disconnected
+                _privacyOperationState.value = PrivacyOperationUiState.Success(
+                    operation = "DISCONNECT_GMAIL",
+                    message = "Gmail נותק. הנתונים שכבר יובאו לא נמחקו."
+                )
+            }.onFailure { error ->
+                _privacyOperationState.value = PrivacyOperationUiState.Error(
+                    operation = "DISCONNECT_GMAIL",
+                    message = error.localizedMessage ?: "ניתוק Gmail נכשל."
+                )
+            }
         }
+    }
+
+    fun deleteImportedFinancialData() {
+        viewModelScope.launch {
+            _privacyOperationState.value = PrivacyOperationUiState.Working("DELETE_IMPORTED_FINANCIAL_DATA")
+            runCatching {
+                val result = backendRepository.deleteImportedFinancialData()
+                check(result.deleted && result.accountPreserved && result.gmailConnectionPreserved) {
+                    "Server did not confirm the imported-data deletion boundary."
+                }
+                authRepository.purgeImportedFinancialDataLocally()
+                val connection = runCatching { backendRepository.getGmailConnectionStatus() }.getOrNull()
+                _financialSyncState.value = FinancialSyncState.Partial(
+                    latestScan = null,
+                    financialHome = null,
+                    reason = "הנתונים המיובאים והנגזרים נמחקו. Gmail נשאר מחובר ונתונים חדשים יכולים להיווצר בסריקה עתידית.",
+                    gmailConnection = connection,
+                    activity = null
+                )
+                result
+            }.onSuccess {
+                _privacyOperationState.value = PrivacyOperationUiState.Success(
+                    operation = "DELETE_IMPORTED_FINANCIAL_DATA",
+                    message = "הנתונים המיובאים נמחקו. החשבון ו-Gmail נשארו מחוברים."
+                )
+            }.onFailure { error ->
+                _privacyOperationState.value = PrivacyOperationUiState.Error(
+                    operation = "DELETE_IMPORTED_FINANCIAL_DATA",
+                    message = error.localizedMessage ?: "מחיקת הנתונים המיובאים נכשלה."
+                )
+            }
+        }
+    }
+
+    fun deleteAccount() {
+        viewModelScope.launch {
+            _privacyOperationState.value = PrivacyOperationUiState.Working("DELETE_ACCOUNT")
+            val serverResult = runCatching { backendRepository.deleteAccount() }
+            serverResult.onFailure { error ->
+                _privacyOperationState.value = PrivacyOperationUiState.Error(
+                    operation = "DELETE_ACCOUNT",
+                    message = error.localizedMessage ?: "מחיקת החשבון נכשלה לפני אישור השרת."
+                )
+                return@launch
+            }
+
+            val result = serverResult.getOrThrow()
+            if (!result.accountDeleted || !result.userTreeDeleted || !result.pushRegistrationsDeleted) {
+                _privacyOperationState.value = PrivacyOperationUiState.Error(
+                    operation = "DELETE_ACCOUNT",
+                    message = "השרת לא אישר שמחיקת החשבון הושלמה."
+                )
+                return@launch
+            }
+
+            val localCleanup = runCatching { authRepository.completeAccountDeletionLocalCleanup() }
+            _financialSyncState.value = FinancialSyncState.Unauthenticated
+            savedStateHandle[SELECTED_TAB_KEY] = 0
+            _privacyOperationState.value = if (localCleanup.isSuccess) {
+                PrivacyOperationUiState.Success(
+                    operation = "DELETE_ACCOUNT",
+                    message = if (result.externalGmailCleanupConfirmed) {
+                        "החשבון והנתונים נמחקו."
+                    } else {
+                        "החשבון והנתונים נמחקו. אימות הניקוי החיצוני מול Google לא הושלם."
+                    }
+                )
+            } else {
+                PrivacyOperationUiState.Error(
+                    operation = "DELETE_ACCOUNT_LOCAL_CLEANUP",
+                    message = "החשבון נמחק בשרת, אך ניקוי הנתונים המקומיים במכשיר לא הושלם."
+                )
+            }
+        }
+    }
+
+    fun clearPrivacyOperationState() {
+        _privacyOperationState.value = PrivacyOperationUiState.Idle
     }
 
     fun signInWithGoogle(activity: Activity, webClientId: String) {

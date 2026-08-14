@@ -14,6 +14,7 @@ const googleOAuthClientSecret = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
 const oauthTokenEncryptionKey = defineSecret("OAUTH_TOKEN_ENCRYPTION_KEY");
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const MAX_AUTHORITATIVE_INVOICES = 500;
+const DISCONNECT_STATES = new Set(["DISCONNECTING", "RETRY_REQUIRED"]);
 
 function requireAuth(request) {
   const uid = request.auth?.uid;
@@ -88,6 +89,12 @@ exports.scanGmailInvoices = onCall(
       throw new HttpsError("failed-precondition", "Gmail is not connected.");
     }
     const before = beforeSnapshot.data() || {};
+    if (DISCONNECT_STATES.has(String(before.disconnectState || ""))) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Gmail ingestion is disabled while provider disconnect cleanup is pending."
+      );
+    }
     const mode = syncMode(before, ACTIVE_GMAIL_PARSER_VERSION);
 
     if (mode === "INCREMENTAL") {
