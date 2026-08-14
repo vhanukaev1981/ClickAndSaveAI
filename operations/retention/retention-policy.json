@@ -41,10 +41,10 @@
     },
     {
       "id": "provider_commerce_records",
-      "disposition": "RETAIN",
-      "trigger": "commercial_record_created",
-      "rationale": "Authoritative provider/commerce evidence may be required for financial, dispute, audit, or accounting obligations; exact duration and any deletion exception require owner/legal policy.",
-      "policyState": "OWNER_POLICY_REQUIRED"
+      "disposition": "DELETE",
+      "trigger": "confirmed_account_deletion",
+      "rationale": "User-scoped provider leads, dispatch queue entries, commerce matches and commerce events are removed by the existing account-deletion lifecycle. Any future legal retention exception would require a separately designed non-user-content audit record and owner/legal approval.",
+      "policyState": "REPOSITORY_READY"
     },
     {
       "id": "operational_logs_metrics",
