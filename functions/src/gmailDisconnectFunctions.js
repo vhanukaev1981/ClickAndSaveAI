@@ -3,10 +3,10 @@
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { defineSecret, defineString } = require("firebase-functions/params");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
-const logger = require("firebase-functions/logger");
 const { assertActiveAccount } = require("./accountAuthorization");
 const { providerCleanupConfirmed } = require("./gmailDisconnectPolicy");
 const { decryptToken } = require("./tokenCrypto");
+const { emitOperationalEvent } = require("./operationalTelemetry");
 
 const db = getFirestore();
 const googleOAuthClientId = defineString("GOOGLE_OAUTH_CLIENT_ID");
@@ -39,6 +39,15 @@ async function disconnectGmailForUid(uid) {
   const ref = db.collection("gmailConnections").doc(uid);
   const snapshot = await ref.get();
   if (!snapshot.exists) {
+    emitOperationalEvent({
+      event: "gmail.oauth.disconnect",
+      subsystem: "gmail",
+      outcome: "no_op",
+      severity: "INFO",
+      code: "GMAIL_OAUTH_ALREADY_DISCONNECTED",
+      uid,
+      details: { externalCleanupConfirmed: true },
+    });
     return {
       connected: false,
       idempotent: true,
@@ -78,10 +87,9 @@ async function disconnectGmailForUid(uid) {
   if (encryptedRefreshToken) {
     try {
       refreshToken = decryptToken(encryptedRefreshToken, oauthTokenEncryptionKey.value());
-    } catch (error) {
+    } catch {
       watchStopStatus = "UNCONFIRMED_CREDENTIAL_ERROR";
       oauthRevocationStatus = "UNCONFIRMED_CREDENTIAL_ERROR";
-      logger.warn("Stored Google credential could not be opened during disconnect", { uid });
     }
   }
 
@@ -93,9 +101,8 @@ async function disconnectGmailForUid(uid) {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       watchStopStatus = stopResponse.ok ? "CONFIRMED" : `UNCONFIRMED_HTTP_${stopResponse.status}`;
-    } catch (error) {
+    } catch {
       watchStopStatus = "UNCONFIRMED_EXTERNAL_ERROR";
-      logger.warn("Gmail watch stop was not confirmed", { uid });
     }
 
     try {
@@ -108,9 +115,8 @@ async function disconnectGmailForUid(uid) {
         : (revokeResponse.status === 400
           ? "CONFIRMED_OR_ALREADY_INVALID"
           : `UNCONFIRMED_HTTP_${revokeResponse.status}`);
-    } catch (error) {
+    } catch {
       oauthRevocationStatus = "UNCONFIRMED_EXTERNAL_ERROR";
-      logger.warn("Google OAuth revoke was not confirmed", { uid });
     }
   }
 
@@ -133,6 +139,16 @@ async function disconnectGmailForUid(uid) {
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
   }
+
+  emitOperationalEvent({
+    event: "gmail.oauth.disconnect",
+    subsystem: "gmail",
+    outcome: externalCleanupConfirmed ? "success" : "retry_required",
+    severity: externalCleanupConfirmed ? "INFO" : "ERROR",
+    code: externalCleanupConfirmed ? "GMAIL_OAUTH_DISCONNECTED" : "GMAIL_OAUTH_CLEANUP_RETRY_REQUIRED",
+    uid,
+    details: { watchStopStatus, oauthRevocationStatus, externalCleanupConfirmed },
+  });
 
   return {
     connected: false,

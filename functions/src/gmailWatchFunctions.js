@@ -20,6 +20,7 @@ const {
   staleInvoiceSourceIds,
 } = require("./gmailInvoiceSources");
 const { _sendPushToUser: sendPushToUser } = require("./pushFunctions");
+const { emitOperationalEvent } = require("./operationalTelemetry");
 
 const db = getFirestore();
 const googleOAuthClientId = defineString("GOOGLE_OAUTH_CLIENT_ID");
@@ -256,11 +257,17 @@ async function processMessage(uid, accessToken, messageId) {
       if (invoice) pdfInvoices.push(invoice);
     } catch (error) {
       allPdfsAnalyzed = false;
-      logger.warn("Background PDF analysis failed and will be retried", {
+      emitOperationalEvent({
+        event: "gmail.watch.incremental",
+        subsystem: "gmail",
+        outcome: "degraded",
+        severity: "WARNING",
+        code: "GMAIL_INCREMENTAL_PDF_ANALYSIS_RETRY",
         uid,
-        messageId,
-        attachmentIndex: index,
-        errorName: error instanceof Error ? error.name : typeof error,
+        details: {
+          attachmentIndex: index,
+          errorName: error instanceof Error ? error.name : typeof error,
+        },
       });
     }
   }
@@ -304,59 +311,91 @@ async function processMailboxNotification(connectionDoc, notificationHistoryId) 
   if (!connection.encryptedRefreshToken || connection.watchEnabled !== true) return;
   const startHistoryId = String(connection.watchHistoryId || "");
   if (!startHistoryId) return;
-  const accessToken = await refreshAccessToken(connection.encryptedRefreshToken);
-  const history = await listHistoryMessageIds(accessToken, startHistoryId);
 
-  if (history.expired) {
+  try {
+    const accessToken = await refreshAccessToken(connection.encryptedRefreshToken);
+    const history = await listHistoryMessageIds(accessToken, startHistoryId);
+
+    if (history.expired) {
+      await connectionDoc.ref.set({
+        watchHistoryId: notificationHistoryId,
+        historyRecoveryRequired: true,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      emitOperationalEvent({
+        event: "gmail.watch.incremental",
+        subsystem: "gmail",
+        outcome: "degraded",
+        severity: "WARNING",
+        code: "GMAIL_HISTORY_RECOVERY_REQUIRED",
+        uid,
+        details: { parserVersion: GMAIL_PARSER_VERSION, historyRecoveryRequired: true },
+      });
+      return;
+    }
+
+    const newInvoices = [];
+    const removedSourceMessageIds = new Set();
+    let importedCount = 0;
+    for (const messageId of history.messageIds) {
+      const result = await processMessage(uid, accessToken, messageId);
+      importedCount += result.importedCount;
+      for (const sourceMessageId of result.removedSourceMessageIds || []) {
+        removedSourceMessageIds.add(sourceMessageId);
+      }
+      if (result.importedCount > 0) newInvoices.push(...result.invoices);
+    }
+
     await connectionDoc.ref.set({
       watchHistoryId: notificationHistoryId,
-      historyRecoveryRequired: true,
+      pendingHistoryId: FieldValue.delete(),
+      lastIncrementalScanAt: FieldValue.serverTimestamp(),
+      historyRecoveryRequired: false,
+      parserVersion: GMAIL_PARSER_VERSION,
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
-    logger.warn("Gmail history id expired; full scan will recover missed invoices", { uid });
-    return;
-  }
 
-  const newInvoices = [];
-  const removedSourceMessageIds = new Set();
-  let importedCount = 0;
-  for (const messageId of history.messageIds) {
-    const result = await processMessage(uid, accessToken, messageId);
-    importedCount += result.importedCount;
-    for (const sourceMessageId of result.removedSourceMessageIds || []) {
-      removedSourceMessageIds.add(sourceMessageId);
+    if (importedCount > 0 && newInvoices.length > 0) {
+      const first = newInvoices[0];
+      const body = importedCount === 1
+        ? `${first.providerName}: ${first.monthlyCost.toFixed(2)} ₪. אנחנו בודקים עכשיו אם יש דרך לחסוך.`
+        : `נקלטו ${importedCount} חשבוניות חדשות. אנחנו בודקים עכשיו כמה אפשר לחסוך.`;
+      await sendPushToUser(uid, {
+        title: importedCount === 1 ? "חשבונית חדשה נקלטה" : "חשבוניות חדשות נקלטו",
+        body,
+        data: { type: "NEW_INVOICE", importedCount },
+      });
     }
-    if (result.importedCount > 0) newInvoices.push(...result.invoices);
-  }
 
-  await connectionDoc.ref.set({
-    watchHistoryId: notificationHistoryId,
-    pendingHistoryId: FieldValue.delete(),
-    lastIncrementalScanAt: FieldValue.serverTimestamp(),
-    historyRecoveryRequired: false,
-    parserVersion: GMAIL_PARSER_VERSION,
-    updatedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
-
-  if (importedCount > 0 && newInvoices.length > 0) {
-    const first = newInvoices[0];
-    const body = importedCount === 1
-      ? `${first.providerName}: ${first.monthlyCost.toFixed(2)} ₪. אנחנו בודקים עכשיו אם יש דרך לחסוך.`
-      : `נקלטו ${importedCount} חשבוניות חדשות. אנחנו בודקים עכשיו כמה אפשר לחסוך.`;
-    await sendPushToUser(uid, {
-      title: importedCount === 1 ? "חשבונית חדשה נקלטה" : "חשבוניות חדשות נקלטו",
-      body,
-      data: { type: "NEW_INVOICE", importedCount },
+    emitOperationalEvent({
+      event: "gmail.watch.incremental",
+      subsystem: "gmail",
+      outcome: "success",
+      severity: "INFO",
+      code: "GMAIL_INCREMENTAL_PROCESSING_COMPLETED",
+      uid,
+      details: {
+        parserVersion: GMAIL_PARSER_VERSION,
+        messageCount: history.messageIds.length,
+        importedCount,
+        removedSourceCount: removedSourceMessageIds.size,
+      },
     });
+  } catch (error) {
+    emitOperationalEvent({
+      event: "gmail.watch.incremental",
+      subsystem: "gmail",
+      outcome: "failure",
+      severity: "ERROR",
+      code: "GMAIL_INCREMENTAL_PROCESSING_FAILED",
+      uid,
+      details: {
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorCode: error?.code || "UNKNOWN",
+      },
+    });
+    throw error;
   }
-
-  logger.info("Incremental Gmail processing completed", {
-    uid,
-    parserVersion: GMAIL_PARSER_VERSION,
-    messageCount: history.messageIds.length,
-    importedCount,
-    removedSourceCount: removedSourceMessageIds.size,
-  });
 }
 
 exports.startGmailWatch = onCall(
@@ -386,10 +425,14 @@ exports.startGmailWatch = onCall(
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.historyId) {
-      logger.error("Gmail users.watch failed", {
+      emitOperationalEvent({
+        event: "gmail.watch.incremental",
+        subsystem: "gmail",
+        outcome: "failure",
+        severity: "ERROR",
+        code: "GMAIL_WATCH_START_FAILED",
         uid,
-        status: response.status,
-        error: payload.error?.message || "",
+        details: { status: response.status },
       });
       throw new HttpsError("failed-precondition", "Gmail push watch could not be started.");
     }
@@ -423,7 +466,17 @@ exports.stopGmailWatch = onCall(
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!response.ok) logger.warn("Gmail users.stop failed", { uid, status: response.status });
+      if (!response.ok) {
+        emitOperationalEvent({
+          event: "gmail.watch.incremental",
+          subsystem: "gmail",
+          outcome: "degraded",
+          severity: "WARNING",
+          code: "GMAIL_WATCH_STOP_UNCONFIRMED",
+          uid,
+          details: { status: response.status },
+        });
+      }
     }
     await ref.set({
       watchEnabled: false,

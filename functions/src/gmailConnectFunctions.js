@@ -6,6 +6,7 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const { assertActiveAccount } = require("./accountAuthorization");
 const { encryptToken } = require("./tokenCrypto");
+const { emitOperationalEvent } = require("./operationalTelemetry");
 
 const db = getFirestore();
 const googleOAuthClientId = defineString("GOOGLE_OAUTH_CLIENT_ID");
@@ -66,77 +67,103 @@ exports.connectGmail = onCall(
   },
   async (request) => {
     const uid = requireAuth(request);
-    await assertActiveAccount(uid);
-    const data = request.data || {};
-    const serverAuthCode = typeof data.serverAuthCode === "string"
-      ? data.serverAuthCode.trim()
-      : "";
+    try {
+      await assertActiveAccount(uid);
+      const data = request.data || {};
+      const serverAuthCode = typeof data.serverAuthCode === "string"
+        ? data.serverAuthCode.trim()
+        : "";
 
-    if (!serverAuthCode || serverAuthCode.length > 2048) {
-      throw new HttpsError("invalid-argument", "A valid Google server authorization code is required.");
-    }
-    if (data.consentAccepted !== true || data.consentVersion !== CONSENT_VERSION) {
-      throw new HttpsError("failed-precondition", "Explicit Gmail read-only consent is required.");
-    }
+      if (!serverAuthCode || serverAuthCode.length > 2048) {
+        throw new HttpsError("invalid-argument", "A valid Google server authorization code is required.");
+      }
+      if (data.consentAccepted !== true || data.consentVersion !== CONSENT_VERSION) {
+        throw new HttpsError("failed-precondition", "Explicit Gmail read-only consent is required.");
+      }
 
-    const connectionRef = db.collection("gmailConnections").doc(uid);
-    const existing = await connectionRef.get();
-    if (existing.data()?.disconnectState === "RETRY_REQUIRED") {
-      throw new HttpsError(
-        "failed-precondition",
-        "Previous Gmail provider cleanup is still pending. Retry Gmail disconnect before reconnecting."
-      );
-    }
+      const connectionRef = db.collection("gmailConnections").doc(uid);
+      const existing = await connectionRef.get();
+      if (existing.data()?.disconnectState === "RETRY_REQUIRED") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Previous Gmail provider cleanup is still pending. Retry Gmail disconnect before reconnecting."
+        );
+      }
 
-    const tokenPayload = await postForm("https://oauth2.googleapis.com/token", {
-      client_id: googleOAuthClientId.value(),
-      client_secret: googleOAuthClientSecret.value(),
-      code: serverAuthCode,
-      grant_type: "authorization_code",
-    });
-    const grantedScopes = String(tokenPayload.scope || "").split(/\s+/).filter(Boolean);
-    if (!grantedScopes.includes(GMAIL_READONLY_SCOPE)) {
-      await revokeTokenBestEffort(tokenPayload.refresh_token || tokenPayload.access_token);
-      throw new HttpsError("permission-denied", "The gmail.readonly scope was not granted.");
-    }
+      const tokenPayload = await postForm("https://oauth2.googleapis.com/token", {
+        client_id: googleOAuthClientId.value(),
+        client_secret: googleOAuthClientSecret.value(),
+        code: serverAuthCode,
+        grant_type: "authorization_code",
+      });
+      const grantedScopes = String(tokenPayload.scope || "").split(/\s+/).filter(Boolean);
+      if (!grantedScopes.includes(GMAIL_READONLY_SCOPE)) {
+        await revokeTokenBestEffort(tokenPayload.refresh_token || tokenPayload.access_token);
+        throw new HttpsError("permission-denied", "The gmail.readonly scope was not granted.");
+      }
 
-    const accessToken = String(tokenPayload.access_token || "");
-    if (!accessToken) {
-      throw new HttpsError("failed-precondition", "Google did not return an access token.");
-    }
-    const gmailEmail = await fetchGmailProfileEmail(accessToken);
-    const firebaseEmail = String(request.auth.token.email || "").trim().toLowerCase();
-    if (!firebaseEmail || gmailEmail !== firebaseEmail) {
-      await revokeTokenBestEffort(tokenPayload.refresh_token || accessToken);
-      throw new HttpsError(
-        "permission-denied",
-        "The Gmail account must match the Google account signed in to the app."
-      );
-    }
+      const accessToken = String(tokenPayload.access_token || "");
+      if (!accessToken) {
+        throw new HttpsError("failed-precondition", "Google did not return an access token.");
+      }
+      const gmailEmail = await fetchGmailProfileEmail(accessToken);
+      const firebaseEmail = String(request.auth.token.email || "").trim().toLowerCase();
+      if (!firebaseEmail || gmailEmail !== firebaseEmail) {
+        await revokeTokenBestEffort(tokenPayload.refresh_token || accessToken);
+        throw new HttpsError(
+          "permission-denied",
+          "The Gmail account must match the Google account signed in to the app."
+        );
+      }
 
-    const refreshToken = tokenPayload.refresh_token || null;
-    const encryptedRefreshToken = refreshToken
-      ? encryptToken(refreshToken, oauthTokenEncryptionKey.value())
-      : existing.data()?.encryptedRefreshToken;
-    if (!encryptedRefreshToken) {
-      throw new HttpsError(
-        "failed-precondition",
-        "No refresh token was returned. Disconnect Google access and approve it again."
-      );
+      const refreshToken = tokenPayload.refresh_token || null;
+      const encryptedRefreshToken = refreshToken
+        ? encryptToken(refreshToken, oauthTokenEncryptionKey.value())
+        : existing.data()?.encryptedRefreshToken;
+      if (!encryptedRefreshToken) {
+        throw new HttpsError(
+          "failed-precondition",
+          "No refresh token was returned. Disconnect Google access and approve it again."
+        );
+      }
+
+      await connectionRef.set({
+        uid,
+        email: gmailEmail,
+        encryptedRefreshToken,
+        scopes: grantedScopes,
+        consentVersion: CONSENT_VERSION,
+        consentedAt: FieldValue.serverTimestamp(),
+        disconnectState: FieldValue.delete(),
+        authorizationState: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      emitOperationalEvent({
+        event: "gmail.oauth.connect",
+        subsystem: "gmail",
+        outcome: "success",
+        severity: "INFO",
+        code: "GMAIL_OAUTH_CONNECTED",
+        uid,
+        details: { scope: "gmail.readonly", consentVersion: CONSENT_VERSION },
+      });
+
+      return { connected: true, email: gmailEmail, consentVersion: CONSENT_VERSION };
+    } catch (error) {
+      emitOperationalEvent({
+        event: "gmail.oauth.connect",
+        subsystem: "gmail",
+        outcome: "failure",
+        severity: "ERROR",
+        code: "GMAIL_OAUTH_CONNECT_FAILED",
+        uid,
+        details: {
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorCode: error?.code || "UNKNOWN",
+        },
+      });
+      throw error;
     }
-
-    await connectionRef.set({
-      uid,
-      email: gmailEmail,
-      encryptedRefreshToken,
-      scopes: grantedScopes,
-      consentVersion: CONSENT_VERSION,
-      consentedAt: FieldValue.serverTimestamp(),
-      disconnectState: FieldValue.delete(),
-      authorizationState: FieldValue.delete(),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-
-    return { connected: true, email: gmailEmail, consentVersion: CONSENT_VERSION };
   }
 );
