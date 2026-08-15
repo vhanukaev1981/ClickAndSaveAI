@@ -1,0 +1,30 @@
+{
+  "policyVersion": 1,
+  "compatibilityEpoch": "v1",
+  "minimumSupportedReleaseWindow": 2,
+  "additiveFirst": true,
+  "semanticFieldReuseAllowed": false,
+  "unknownFieldToleranceRequired": true,
+  "destructiveChanges": {
+    "defaultAllowed": false,
+    "requireDeprecationWindow": true,
+    "requireMigrationBeforeCleanup": true,
+    "requireExplicitCompatibilityReview": true,
+    "requireKnownGoodRecoveryAssessment": true
+  },
+  "migrationOrdering": [
+    "deploy_backward_compatible_readers",
+    "add_new_fields_or_collections",
+    "perform_idempotent_backfill_if_required",
+    "verify_new_and_previous_supported_clients",
+    "stop_old_writes_after_supported_release_window",
+    "remove_deprecated_data_only_after_explicit_review"
+  ],
+  "forwardRecovery": {
+    "mustReadDataWrittenByCandidateRelease": true,
+    "mustPreserveUnknownNewFields": true,
+    "mustNotRequireDestructiveDowngrade": true
+  },
+  "failurePolicy": "STOP_RELEASE_AND_ESCALATE",
+  "evidenceState": "REPOSITORY_READY"
+}

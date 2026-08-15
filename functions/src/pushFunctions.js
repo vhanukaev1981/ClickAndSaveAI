@@ -4,8 +4,8 @@ const crypto = require("node:crypto");
 const { getMessaging } = require("firebase-admin/messaging");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
-const logger = require("firebase-functions/logger");
 const { assertActiveAccount } = require("./accountAuthorization");
+const { emitOperationalEvent } = require("./operationalTelemetry");
 
 const db = getFirestore();
 
@@ -42,6 +42,15 @@ async function sendPushToUser(uid, { title, body, data = {} }) {
     .filter((item) => item.token.length >= 20);
 
   if (tokenDocs.length === 0) {
+    emitOperationalEvent({
+      event: "push.delivery",
+      subsystem: "push",
+      outcome: "no_op",
+      severity: "INFO",
+      code: "PUSH_NO_REGISTERED_DEVICE",
+      uid,
+      details: { attempted: 0, delivered: 0, removedInvalid: 0 },
+    });
     return { attempted: 0, delivered: 0, removedInvalid: 0 };
   }
 
@@ -75,12 +84,19 @@ async function sendPushToUser(uid, { title, body, data = {} }) {
     invalidIndexes.map((index) => tokenDocs[index].ref.delete().catch(() => undefined))
   );
 
-  logger.info("Push delivery completed", {
+  emitOperationalEvent({
+    event: "push.delivery",
+    subsystem: "push",
+    outcome: response.failureCount > 0 ? "not_delivered" : "delivered",
+    severity: response.failureCount > 0 ? "WARNING" : "INFO",
+    code: response.failureCount > 0 ? "PUSH_DELIVERY_FAILURES" : "PUSH_DELIVERY_COMPLETED",
     uid,
-    attempted: tokenDocs.length,
-    delivered: response.successCount,
-    failed: response.failureCount,
-    removedInvalid: invalidIndexes.length,
+    details: {
+      attempted: tokenDocs.length,
+      delivered: response.successCount,
+      failed: response.failureCount,
+      removedInvalid: invalidIndexes.length,
+    },
   });
 
   return {

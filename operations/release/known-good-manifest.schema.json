@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clickandsaveai.example/schemas/known-good-release-manifest-v1.json",
+  "title": "ClickAndSaveAI Known-Good Release Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifestVersion",
+    "evidenceState",
+    "sourceSha",
+    "surfaces",
+    "schema"
+  ],
+  "properties": {
+    "manifestVersion": { "const": 1 },
+    "evidenceState": {
+      "enum": [
+        "EXAMPLE_NOT_PRODUCTION",
+        "PRODUCTION_VERIFICATION_REQUIRED",
+        "VERIFIED"
+      ]
+    },
+    "sourceSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "surfaces": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "functions",
+        "firestoreRules",
+        "firestoreIndexes",
+        "configuration",
+        "android"
+      ],
+      "properties": {
+        "functions": { "$ref": "#/$defs/sourceSurface" },
+        "firestoreRules": { "$ref": "#/$defs/sourceSurface" },
+        "firestoreIndexes": { "$ref": "#/$defs/sourceSurface" },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["bindingState", "configurationVersion", "secretValuesStored"],
+          "properties": {
+            "bindingState": {
+              "enum": ["PENDING_PRODUCTION_BINDING", "PRODUCTION_VERIFICATION_REQUIRED", "VERIFIED"]
+            },
+            "configurationVersion": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "secretValuesStored": { "const": false }
+          }
+        },
+        "android": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["versionCode", "versionName", "signingState", "artifactDigestState"],
+          "properties": {
+            "versionCode": { "type": "integer", "minimum": 1 },
+            "versionName": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "signingState": {
+              "enum": ["OWNER_ACTION_REQUIRED", "PRODUCTION_VERIFICATION_REQUIRED", "VERIFIED"]
+            },
+            "artifactDigestState": {
+              "enum": ["PENDING_PRODUCTION_BINDING", "PRODUCTION_VERIFICATION_REQUIRED", "VERIFIED"]
+            }
+          }
+        }
+      }
+    },
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compatibilityEpoch", "minimumSupportedReleaseWindow"],
+      "properties": {
+        "compatibilityEpoch": { "type": "string", "pattern": "^[a-zA-Z0-9._-]+$" },
+        "minimumSupportedReleaseWindow": { "type": "integer", "minimum": 2 }
+      }
+    }
+  },
+  "$defs": {
+    "sourceSurface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceSha"],
+      "properties": {
+        "sourceSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    }
+  }
+}
