@@ -25,6 +25,8 @@ const v1 = "clicksave-auth-cleanup@click-save-ai-production.iam.gserviceaccount.
 const v2 = "clicksave-v2-runtime@click-save-ai-production.iam.gserviceaccount.com";
 const deploy = "clickandsaveai-github-deployer@click-save-ai-production.iam.gserviceaccount.com";
 const buildDeferred = "DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION";
+const defaultCloudBuild = `${projectNumber}@${["cloudbuild", "gserviceaccount.com"].join(".")}`;
+const defaultComputeRuntime = `${projectNumber}-${["compute", "developer.gserviceaccount.com"].join("@")}`;
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const has = (s, r) => assert.match(s, r);
 const no = (s, r) => assert.doesNotMatch(s, r);
@@ -114,8 +116,8 @@ test("11 Cloud Build service initialization gap has explicit deferred status", (
 test("12 empty Cloud Build identity defers without substituting a fake identity", () => {
   has(verifier, /\[\[ -z "\$BUILD_SA" \]\]/);
   has(verifier, new RegExp(buildDeferred));
-  no(verifier, /BUILD_SA=.*991489557172@cloudbuild\.gserviceaccount\.com/);
-  no(verifier, /BUILD_SA=.*991489557172-compute@developer\.gserviceaccount\.com/);
+  no(verifier, new RegExp(`BUILD_SA=.*${esc(defaultCloudBuild)}`));
+  no(verifier, new RegExp(`BUILD_SA=.*${esc(defaultComputeRuntime)}`));
 });
 
 test("13 unclassified Cloud Build discovery errors remain fatal", () => {
@@ -137,7 +139,7 @@ test("15 runtime target lock remains exact", () => {
 });
 
 test("16 absent default Compute runtime identity is no longer a dependency", () => {
-  no(changed(), /991489557172-compute@developer\.gserviceaccount\.com/);
+  no(changed(), new RegExp(esc(defaultComputeRuntime)));
 });
 
 test("17 no API enablement or App Engine initialization", () => {
