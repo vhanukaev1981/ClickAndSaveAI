@@ -82,7 +82,7 @@ if gcloud iam workload-identity-pools providers describe "$PROVIDER_ID" \
     --issuer-uri="$GITHUB_OIDC_ISSUER" \
     --attribute-mapping="$ATTRIBUTE_MAPPING" \
     --attribute-condition="$ATTRIBUTE_CONDITION" \
-    --display-name="Click & Save AI Production GitHub" \
+    --display-name="Click Save AI Prod GitHub" \
     --quiet >/dev/null
 else
   gcloud iam workload-identity-pools providers create-oidc "$PROVIDER_ID" \
@@ -92,7 +92,7 @@ else
     --issuer-uri="$GITHUB_OIDC_ISSUER" \
     --attribute-mapping="$ATTRIBUTE_MAPPING" \
     --attribute-condition="$ATTRIBUTE_CONDITION" \
-    --display-name="Click & Save AI Production GitHub" \
+    --display-name="Click Save AI Prod GitHub" \
     --description="Trust only the protected main Production release workflow in the production Environment" \
     --quiet >/dev/null
 fi
