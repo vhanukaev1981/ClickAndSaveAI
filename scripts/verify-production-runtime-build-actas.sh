@@ -5,8 +5,9 @@ P=click-save-ai-production
 N=991489557172
 DEPLOY="clickandsaveai-github-deployer@$P.iam.gserviceaccount.com"
 V1_RUNTIME_SA="clicksave-auth-cleanup@click-save-ai-production.iam.gserviceaccount.com"
-V2_RUNTIME_SA="991489557172-compute@developer.gserviceaccount.com"
+V2_RUNTIME_SA="clicksave-v2-runtime@click-save-ai-production.iam.gserviceaccount.com"
 V1_RUNTIME_ROLE="roles/datastore.user"
+BUILD_DEFERRED_STATUS="DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION"
 POOL=github-actions
 PROVIDER=clickandsaveai-production
 REGION=europe-west1
@@ -27,7 +28,7 @@ ALLOW_RUNTIME_BOOTSTRAP_GAP="${ALLOW_RUNTIME_BOOTSTRAP_GAP:-0}"
 DISCOVERY_OUTPUT="${DISCOVERY_OUTPUT:-}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOY_ROLES=(roles/cloudfunctions.developer roles/firebaserules.admin roles/datastore.indexAdmin roles/serviceusage.serviceUsageConsumer)
-BAD_ROLES=(roles/owner roles/editor roles/firebase.admin roles/firebase.developAdmin roles/cloudfunctions.admin roles/run.admin roles/resourcemanager.projectIamAdmin roles/iam.serviceAccountAdmin roles/iam.serviceAccountTokenCreator roles/iam.serviceAccountUser roles/secretmanager.admin roles/storage.admin roles/artifactregistry.admin)
+BAD_ROLES=(roles/owner roles/editor roles/firebase.admin roles/firebase.developAdmin roles/cloudfunctions.admin roles/run.admin roles/resourcemanager.projectIamAdmin roles/iam.serviceAccountAdmin roles/iam.serviceAccountTokenCreator roles/iam.serviceAccountUser roles/secretmanager.admin roles/secretmanager.secretAccessor roles/storage.admin roles/artifactregistry.admin)
 
 pass(){ printf 'PASS  %s\n' "$*"; }
 fatal(){ printf 'FAIL  %s\n' "$*" >&2; exit 1; }
@@ -39,9 +40,13 @@ valid_sa(){
   local s="$1"
   [[ -n "$s" && "$s" != *clickandsaveai-staging* && "$s" != *@clickandsaveai.* ]] || fatal "invalid Production service account: $s"
   case "$s" in
-    "$V1_RUNTIME_SA"|"$V2_RUNTIME_SA"|"$N@cloudbuild.gserviceaccount.com"|*"@$P.iam.gserviceaccount.com") : ;;
+    "$V1_RUNTIME_SA"|"$V2_RUNTIME_SA"|"$N@cloudbuild.gserviceaccount.com"|"$N-compute@developer.gserviceaccount.com"|"service-$N@gcp-sa-cloudbuild.iam.gserviceaccount.com"|*"@$P.iam.gserviceaccount.com") : ;;
     *) fatal "identity is not owned by Production: $s" ;;
   esac
+}
+BUILD_DISCOVERY_ERROR=""
+is_build_service_uninitialized() {
+  printf '%s\n' "$BUILD_DISCOVERY_ERROR" | grep -Eiq 'SERVICE_DISABLED|has not been used in project|cloudbuild\.googleapis\.com.*not enabled|Cloud Build API.*(not enabled|disabled|not initialized)|API.*cloudbuild.*not enabled'
 }
 
 case "$PROJECT_ID" in clickandsaveai|clickandsaveai-staging) fatal "forbidden non-Production project: $PROJECT_ID";; esac
@@ -94,10 +99,10 @@ PY
 [[ "$POL" != *clickandsaveai-staging* && "$POL" != *'serviceAccount:clickandsaveai-github-deployer@clickandsaveai.iam.gserviceaccount.com'* ]] || fatal 'staging/legacy deploy principal reference present'
 pass 'no project-wide SA User; staging/legacy deploy principal references absent'
 
-A="$(python3 - "$ROOT" "$P" "$V1_RUNTIME_SA" <<'PY'
+A="$(python3 - "$ROOT" "$P" "$V1_RUNTIME_SA" "$V2_RUNTIME_SA" <<'PY'
 from pathlib import Path
 import json,re,sys
-r=Path(sys.argv[1]).resolve(); prod=sys.argv[2]; v1sa=sys.argv[3]
+r=Path(sys.argv[1]).resolve(); prod=sys.argv[2]; v1sa=sys.argv[3]; v2sa=sys.argv[4]
 f=json.loads((r/'firebase.json').read_text()); fn=f.get('functions',{})
 assert isinstance(fn,dict) and fn.get('source')=='functions' and fn.get('codebase')=='default' and fn.get('runtime')=='nodejs22'
 def bad(v):
@@ -105,16 +110,17 @@ def bad(v):
  if isinstance(v,list): return any(map(bad,v))
  return False
 assert not bad(f),'global Firebase service-account configuration present'
-pkg=json.loads((r/'functions/package.json').read_text()); main=pkg.get('main'); assert isinstance(main,str) and main
+pkg=json.loads((r/'functions/package.json').read_text()); main=pkg.get('main'); assert main=='src/entry.js'
 entry=(r/'functions'/main).resolve(); src=(r/'functions/src').resolve(); assert entry.is_file() and (entry.parent==src or src in entry.parents)
 IR=re.compile(r'''(?:require\s*\(\s*|\bfrom\s*)["'](firebase-functions(?:/[^"']+)?)['"]\s*\)?''')
 def cl(s):
  if s=='firebase-functions/v1' or s.startswith('firebase-functions/v1/'): return 'v1'
  if s=='firebase-functions/v2' or s.startswith('firebase-functions/v2/'): return 'v2'
  return 'neutral'
-t=entry.read_text(errors='replace'); binds={}
+t=entry.read_text(errors='replace'); binds={}; ordered=[]
 for n,q in re.findall(r'''\bconst\s+([\w$]+)\s*=\s*require\s*\(\s*["'](\./[^"']+)["']\s*\)''',t):
- p=(entry.parent/q); p=p if p.suffix else p.with_suffix('.js'); binds[n]=p.resolve()
+ p=(entry.parent/q); p=p if p.suffix else p.with_suffix('.js'); binds[n]=p.resolve(); ordered.append((n,q,p.resolve()))
+assert ordered and ordered[0][1]=='./index','index must be the first local module required by entry.js'
 m=re.search(r'module\.exports\s*=\s*\{(.*?)\}\s*;',t,re.S); assert m
 names=re.findall(r'\.\.\.\s*([\w$]+)',m.group(1)); assert names
 deployed=[]
@@ -143,16 +149,23 @@ assert re.search(r'projectID\s*\.\s*equals\s*\(\s*["\']'+re.escape(prod)+r'["\']
 assert re.search(r'thenElse\s*\(\s*PRODUCTION_AUTH_CLEANUP_SERVICE_ACCOUNT\s*,\s*["\']default["\']\s*\)',cleanup)
 assert re.search(r'runWith\s*\(\s*\{\s*serviceAccount\s*:\s*authCleanupServiceAccount\s*\}\s*\)',cleanup)
 assert re.search(r'exports\.onPushAccountDeleted\s*=.*?\.auth\.user\(\)\.onDelete',cleanup,re.S)
+index=(r/'functions/src/index.js').read_text(errors='replace')
+assert 'firebase-functions/params' in index and 'projectID' in index
+assert v2sa in index and prod in index
+assert re.search(r'projectID\s*\.\s*equals\s*\(\s*["\']'+re.escape(prod)+r'["\']\s*\)',index)
+assert re.search(r'thenElse\s*\(\s*PRODUCTION_V2_SERVICE_ACCOUNT\s*,\s*["\']default["\']\s*\)',index)
+assert re.search(r'setGlobalOptions\s*\(\s*\{.*?serviceAccount\s*:\s*productionV2ServiceAccount.*?\}\s*\)',index,re.S)
 for rel in deployed:
- if rel!='functions/src/pushAccountCleanup.js':
-  assert v1sa not in (r/rel).read_text(errors='replace'),f'Production v1 runtime SA leaked into another deployed module: {rel}'
+ x=(r/rel).read_text(errors='replace')
+ if rel!='functions/src/pushAccountCleanup.js': assert v1sa not in x,f'Production v1 runtime SA leaked into another deployed module: {rel}'
+ if rel!='functions/src/index.js': assert v2sa not in x,f'Production v2 runtime SA leaked outside common v2 configuration: {rel}'
 wf=(r/'.github/workflows/production-release.yml').read_text(); z=re.sub(r'\\\n\s*',' ',wf); z=re.sub(r'\s+',' ',z)
 assert '--only firestore:rules,firestore:indexes,functions' in z and '--service-account' not in wf and '--build-service-account' not in wf
 print(','.join(sorted(g)))
 print('|'.join(v1files))
 print('|'.join(v2files))
 PY
-)" || fatal 'repository runtime/build identity configuration is not the proven Block 3B.3B shape'
+)" || fatal 'repository runtime/build identity configuration is not the proven Block 3B.3C shape'
 GENS="${A%%$'\n'*}"
 REST="${A#*$'\n'}"
 V1_FILES="${REST%%$'\n'*}"
@@ -185,8 +198,19 @@ else
 fi
 
 valid_sa "$V2_RUNTIME_SA"
-[[ "$(gcloud iam service-accounts describe "$V2_RUNTIME_SA" --project="$P" --format='value(email)' 2>/dev/null || true)" == "$V2_RUNTIME_SA" ]] || fatal "v2 runtime identity mismatch or absent: $V2_RUNTIME_SA"
-pass "required v2 runtime identity exists: $V2_RUNTIME_SA"
+V2_EMAIL="$(gcloud iam service-accounts describe "$V2_RUNTIME_SA" --project="$P" --format='value(email)' 2>/dev/null || true)"
+if [[ -z "$V2_EMAIL" ]]; then
+  [[ "$ALLOW_RUNTIME_BOOTSTRAP_GAP" == 1 ]] || fatal "dedicated v2 runtime identity absent: $V2_RUNTIME_SA"
+  pass 'pre-bootstrap mode permits only the exact dedicated v2 runtime SA to be absent'
+else
+  [[ "$V2_EMAIL" == "$V2_RUNTIME_SA" ]] || fatal "dedicated v2 runtime identity mismatch: $V2_EMAIL"
+  V2_KEYS="$(gcloud iam service-accounts keys list --iam-account="$V2_RUNTIME_SA" --managed-by=user --format='value(name)' 2>/dev/null | sed '/^$/d' | wc -l | tr -d '[:space:]')"
+  [[ "$V2_KEYS" == 0 ]] || fatal "dedicated v2 runtime SA has user-managed keys: $V2_KEYS"
+  mapfile -t V2_ROLES < <(roles_for "$V2_RUNTIME_SA")
+  [[ ${#V2_ROLES[@]} -eq 0 ]] || fatal "dedicated v2 runtime SA must have zero project roles: ${V2_ROLES[*]}"
+  [[ -n "$(gcloud iam service-accounts get-iam-policy "$V2_RUNTIME_SA" --project="$P" --format=json 2>/dev/null || true)" ]] || fatal "unable to inspect dedicated v2 runtime SA IAM policy"
+  pass 'dedicated v2 runtime identity exact; zero user-managed keys; zero project roles'
+fi
 
 BE="$(mktemp)"
 trap 'rm -f "$BE"' EXIT
@@ -194,41 +218,60 @@ set +e
 BR="$(gcloud builds get-default-service-account --project="$P" --region="$REGION" --format='value(serviceAccountEmail)' 2>"$BE")"
 BS=$?
 set -e
-[[ $BS -eq 0 ]] || fatal "Cloud Build default service-account discovery failed; no API was enabled. gcloud: $(tr '\n' ' ' <"$BE")"
-BUILD_SA="${BR#projects/$P/serviceAccounts/}"
-BUILD_SA="${BUILD_SA//$'\r'/}"
-BUILD_SA="${BUILD_SA//$'\n'/}"
-[[ -n "$BUILD_SA" ]] || fatal 'Cloud Build discovery returned an empty identity; no API was enabled or substituted'
-valid_sa "$BUILD_SA"
-[[ "$(gcloud iam service-accounts describe "$BUILD_SA" --project="$P" --format='value(email)' 2>/dev/null || true)" == "$BUILD_SA" ]] || fatal "build identity mismatch or absent: $BUILD_SA"
-pass "Cloud Build identity live-discovered: $BUILD_SA"
+BUILD_DISCOVERY_ERROR="$(tr '\n' ' ' <"$BE")"
+BUILD_SA=""
+PRODUCTION_BUILD_IDENTITY_STATUS="READY"
+if [[ $BS -ne 0 ]]; then
+  if is_build_service_uninitialized; then
+    PRODUCTION_BUILD_IDENTITY_STATUS="$BUILD_DEFERRED_STATUS"
+    pass 'Cloud Build identity deferred until build service initialization; no API was enabled'
+  else
+    fatal "Cloud Build default service-account discovery failed; no API was enabled. gcloud: $BUILD_DISCOVERY_ERROR"
+  fi
+else
+  BUILD_SA="${BR#projects/$P/serviceAccounts/}"
+  BUILD_SA="${BUILD_SA//$'\r'/}"
+  BUILD_SA="${BUILD_SA//$'\n'/}"
+  if [[ -z "$BUILD_SA" ]]; then
+    PRODUCTION_BUILD_IDENTITY_STATUS="$BUILD_DEFERRED_STATUS"
+    pass 'Cloud Build discovery returned no default identity; build identity deferred without API enablement'
+  fi
+fi
+
+if [[ "$PRODUCTION_BUILD_IDENTITY_STATUS" == "READY" ]]; then
+  valid_sa "$BUILD_SA"
+  [[ "$(gcloud iam service-accounts describe "$BUILD_SA" --project="$P" --format='value(email)' 2>/dev/null || true)" == "$BUILD_SA" ]] || fatal "build identity mismatch or absent: $BUILD_SA"
+  mapfile -t BUILD_ROLES < <(roles_for "$BUILD_SA")
+  for q in "${BUILD_ROLES[@]}"; do
+    if contains "$q" "${BAD_ROLES[@]}" || [[ "$q" =~ ^roles/.+\.serviceAgent$ ]]; then
+      fatal "discovered build identity $BUILD_SA holds forbidden role: $q"
+    fi
+  done
+  [[ -n "$(gcloud iam service-accounts get-iam-policy "$BUILD_SA" --project="$P" --format=json 2>/dev/null || true)" ]] || fatal "unable to inspect build SA IAM policy: $BUILD_SA"
+  pass "Cloud Build identity live-discovered: $BUILD_SA"
+fi
 
 INTENDED=()
 for s in "${RUNTIME_SAS[@]}"; do add_unique "$s" INTENDED; done
-add_unique "$BUILD_SA" INTENDED
-for s in "${INTENDED[@]}"; do
-  [[ "$s" == "$V1_RUNTIME_SA" ]] && continue
-  mapfile -t RR < <(roles_for "$s")
-  for q in "${RR[@]}"; do
-    if contains "$q" "${BAD_ROLES[@]}" || [[ "$q" =~ ^roles/.+\.serviceAgent$ ]]; then
-      fatal "discovered identity $s holds forbidden role: $q"
-    fi
-  done
-  [[ -n "$(gcloud iam service-accounts get-iam-policy "$s" --project="$P" --format=json 2>/dev/null || true)" ]] || fatal "unable to inspect SA IAM policy: $s"
-done
-pass 'v2/build identity risk audit passed'
+if [[ "$PRODUCTION_BUILD_IDENTITY_STATUS" == "READY" ]]; then
+  add_unique "$BUILD_SA" INTENDED
+fi
 
 mapfile -t ALL < <(gcloud iam service-accounts list --project="$P" --format='value(email)' 2>/dev/null | sed '/^$/d' | sort -u)
 for s in "${INTENDED[@]}"; do
   if [[ "$s" == "$V1_RUNTIME_SA" && -z "$V1_EMAIL" && "$ALLOW_RUNTIME_BOOTSTRAP_GAP" == 1 ]]; then continue; fi
+  if [[ "$s" == "$V2_RUNTIME_SA" && -z "$V2_EMAIL" && "$ALLOW_RUNTIME_BOOTSTRAP_GAP" == 1 ]]; then continue; fi
   contains "$s" "${ALL[@]}" || fatal "required identity absent from Production inventory: $s"
 done
 for s in "${ALL[@]}"; do
   if has_actas "$s"; then contains "$s" "${INTENDED[@]}" || fatal "accidental actAs on unintended Production SA: $s"; fi
 done
 if [[ "$ALLOW_MISSING_ACTAS" == 0 ]]; then
-  for s in "${INTENDED[@]}"; do has_actas "$s" || fatal "missing deploy-SA roles/iam.serviceAccountUser on intended identity: $s"; done
-  pass 'actAs exact on intended runtime/build identities'
+  for s in "${RUNTIME_SAS[@]}"; do has_actas "$s" || fatal "missing deploy-SA roles/iam.serviceAccountUser on intended runtime identity: $s"; done
+  if [[ "$PRODUCTION_BUILD_IDENTITY_STATUS" == "READY" ]]; then
+    has_actas "$BUILD_SA" || fatal "missing deploy-SA roles/iam.serviceAccountUser on intended build identity: $BUILD_SA"
+  fi
+  pass 'actAs exact on intended runtime identities and build identity when ready'
 else
   pass 'pre-mutation mode allows intended actAs bindings absent'
 fi
@@ -238,7 +281,8 @@ H=(-H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28
 [[ -n "${GH_TOKEN:-}" ]] && H+=(-H "Authorization: Bearer $GH_TOKEN")
 [[ -z "${GH_TOKEN:-}" && -n "${GITHUB_TOKEN:-}" ]] && H+=(-H "Authorization: Bearer $GITHUB_TOKEN")
 D="$(curl -fsSL "${H[@]}" "$URL" 2>/dev/null || true)"
-[[ -n "$D" ]] && printf '%s' "$D" | python3 -c 'import json,sys;x=json.load(sys.stdin);assert isinstance(x,list) and not x' || fatal 'unable to verify Production deployments = 0'
+[[ -n "$D" ]] || fatal 'unable to verify Production deployments = 0'
+printf '%s' "$D" | python3 -c 'import json,sys;x=json.load(sys.stdin);assert isinstance(x,list) and not x' || fatal 'Production deployment inventory is not empty'
 pass 'Production deployments = 0'
 
 if [[ -n "$DISCOVERY_OUTPUT" ]]; then
@@ -246,11 +290,28 @@ if [[ -n "$DISCOVERY_OUTPUT" ]]; then
   {
     printf 'RUNTIME_SAS=('; for s in "${RUNTIME_SAS[@]}"; do printf ' %q' "$s"; done; printf ' )\n'
     printf 'BUILD_SA=%q\n' "$BUILD_SA"
+    printf 'PRODUCTION_BUILD_IDENTITY_STATUS=%q\n' "$PRODUCTION_BUILD_IDENTITY_STATUS"
   } >"$DISCOVERY_OUTPUT"
+fi
+
+RUNTIME_STATUS="READY"
+if [[ "$ALLOW_RUNTIME_BOOTSTRAP_GAP" == 1 && ( -z "$V1_EMAIL" || -z "$V2_EMAIL" ) ]]; then
+  RUNTIME_STATUS="BOOTSTRAP_REQUIRED"
 fi
 printf '\nProduction runtime/build actAs verification PASSED.\n'
 printf 'runtimeServiceAccounts=%s\n' "$(IFS=,; printf '%s' "${RUNTIME_SAS[*]}")"
+printf 'productionRuntimeIdentityStatus=%s\n' "$RUNTIME_STATUS"
 printf 'buildServiceAccount=%s\n' "$BUILD_SA"
+printf 'productionBuildIdentityStatus=%s\n' "$PRODUCTION_BUILD_IDENTITY_STATUS"
 printf 'productionDeployIamConfigured=true\n'
-[[ "$ALLOW_MISSING_ACTAS" == 1 || "$ALLOW_RUNTIME_BOOTSTRAP_GAP" == 1 ]] && printf 'productionRuntimeBuildActAsConfigured=false\n' || printf 'productionRuntimeBuildActAsConfigured=true\n'
+if [[ "$ALLOW_MISSING_ACTAS" == 1 || "$ALLOW_RUNTIME_BOOTSTRAP_GAP" == 1 ]]; then
+  printf 'productionRuntimeActAsConfigured=false\n'
+else
+  printf 'productionRuntimeActAsConfigured=true\n'
+fi
+if [[ "$PRODUCTION_BUILD_IDENTITY_STATUS" == "READY" && "$ALLOW_MISSING_ACTAS" == 0 && "$ALLOW_RUNTIME_BOOTSTRAP_GAP" == 0 ]]; then
+  printf 'productionRuntimeBuildActAsConfigured=true\n'
+else
+  printf 'productionRuntimeBuildActAsConfigured=false\n'
+fi
 printf 'productionWifConfigured=true\nproductionWifEndToEndVerified=false\nproductionDeployEndToEndReady=false\nproductionIdentityReady=false\nproductionDeployed=false\n'
