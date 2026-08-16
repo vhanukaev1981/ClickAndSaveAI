@@ -9,6 +9,8 @@ EXPECTED_V2_RUNTIME_SA="clicksave-v2-runtime@click-save-ai-production.iam.gservi
 EXPECTED_DEPLOY_SA="clickandsaveai-github-deployer@click-save-ai-production.iam.gserviceaccount.com"
 EXPECTED_RUNTIME_ROLE="roles/datastore.user"
 BUILD_DEFERRED_STATUS="DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION"
+SERVICE_ACCOUNT_VISIBILITY_TIMEOUT_SECONDS=30
+SERVICE_ACCOUNT_VISIBILITY_POLL_SECONDS=2
 PROJECT_ID="${PROJECT_ID:-$EXPECTED_PROJECT_ID}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERIFIER="$ROOT/scripts/verify-production-runtime-build-actas.sh"
@@ -25,6 +27,29 @@ contains() {
   shift
   for item in "$@"; do [[ "$item" == "$needle" ]] && return 0; done
   return 1
+}
+describe_exact_service_account_email() {
+  local email="$1"
+  gcloud iam service-accounts describe "$email" \
+    --project="$PROJECT_ID" --format='value(email)' 2>/dev/null || true
+}
+wait_for_exact_service_account_visibility() {
+  local email="$1" observed now deadline
+  now="$(date +%s)"
+  deadline=$((now + SERVICE_ACCOUNT_VISIBILITY_TIMEOUT_SECONDS))
+  while true; do
+    observed="$(describe_exact_service_account_email "$email")"
+    if [[ "$observed" == "$email" ]]; then
+      printf '%s\n' "$observed"
+      return 0
+    fi
+    [[ -z "$observed" ]] || fail "Runtime service account visibility mismatch for $email: $observed"
+    now="$(date +%s)"
+    if (( now >= deadline )); then
+      fail "Timed out waiting for newly created runtime service account to become visible: $email"
+    fi
+    sleep "$SERVICE_ACCOUNT_VISIBILITY_POLL_SECONDS"
+  done
 }
 runtime_roles() {
   gcloud projects get-iam-policy "$PROJECT_ID" \
@@ -70,17 +95,17 @@ else
   fail "Unexpected Production build identity status: $PRODUCTION_BUILD_IDENTITY_STATUS"
 fi
 
-runtime_email="$(gcloud iam service-accounts describe "$EXPECTED_RUNTIME_SA" \
-  --project="$PROJECT_ID" --format='value(email)' 2>/dev/null || true)"
+runtime_email="$(describe_exact_service_account_email "$EXPECTED_RUNTIME_SA")"
 if [[ -z "$runtime_email" ]]; then
   printf 'Creating exact dedicated v1 runtime service account %s\n' "$EXPECTED_RUNTIME_SA"
-  gcloud iam service-accounts create "$EXPECTED_RUNTIME_SA_ID" \
+  if ! gcloud iam service-accounts create "$EXPECTED_RUNTIME_SA_ID" \
     --project="$PROJECT_ID" \
     --display-name="Click & Save Auth Cleanup Runtime" \
     --description="Dedicated runtime identity for v1 Firebase Auth onDelete push-token cleanup only" \
-    --quiet >/dev/null
-  runtime_email="$(gcloud iam service-accounts describe "$EXPECTED_RUNTIME_SA" \
-    --project="$PROJECT_ID" --format='value(email)' 2>/dev/null || true)"
+    --quiet >/dev/null; then
+    fail "Failed to create exact dedicated v1 runtime service account: $EXPECTED_RUNTIME_SA"
+  fi
+  runtime_email="$(wait_for_exact_service_account_visibility "$EXPECTED_RUNTIME_SA")"
 fi
 [[ "$runtime_email" == "$EXPECTED_RUNTIME_SA" ]] || fail "Dedicated runtime SA mismatch after create/reuse: ${runtime_email:-missing}"
 
@@ -106,17 +131,17 @@ mapfile -t roles_after < <(runtime_roles)
 [[ "${#roles_after[@]}" -eq 1 && "${roles_after[0]}" == "$EXPECTED_RUNTIME_ROLE" ]] || \
   fail "Dedicated runtime SA project roles are not exactly ${EXPECTED_RUNTIME_ROLE}"
 
-v2_runtime_email="$(gcloud iam service-accounts describe "$EXPECTED_V2_RUNTIME_SA" \
-  --project="$PROJECT_ID" --format='value(email)' 2>/dev/null || true)"
+v2_runtime_email="$(describe_exact_service_account_email "$EXPECTED_V2_RUNTIME_SA")"
 if [[ -z "$v2_runtime_email" ]]; then
   printf 'Creating exact dedicated v2 runtime service account %s\n' "$EXPECTED_V2_RUNTIME_SA"
-  gcloud iam service-accounts create "$EXPECTED_V2_RUNTIME_SA_ID" \
+  if ! gcloud iam service-accounts create "$EXPECTED_V2_RUNTIME_SA_ID" \
     --project="$PROJECT_ID" \
     --display-name="Click & Save v2 Runtime" \
     --description="Dedicated runtime identity for exported Production Firebase Functions v2 only" \
-    --quiet >/dev/null
-  v2_runtime_email="$(gcloud iam service-accounts describe "$EXPECTED_V2_RUNTIME_SA" \
-    --project="$PROJECT_ID" --format='value(email)' 2>/dev/null || true)"
+    --quiet >/dev/null; then
+    fail "Failed to create exact dedicated v2 runtime service account: $EXPECTED_V2_RUNTIME_SA"
+  fi
+  v2_runtime_email="$(wait_for_exact_service_account_visibility "$EXPECTED_V2_RUNTIME_SA")"
 fi
 [[ "$v2_runtime_email" == "$EXPECTED_V2_RUNTIME_SA" ]] || \
   fail "Dedicated v2 runtime SA mismatch after create/reuse: ${v2_runtime_email:-missing}"
