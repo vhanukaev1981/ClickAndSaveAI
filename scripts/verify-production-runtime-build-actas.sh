@@ -328,4 +328,4 @@ if [[ "$PRODUCTION_BUILD_IDENTITY_STATUS" == "READY" && "$ALLOW_MISSING_ACTAS" =
 else
   printf 'productionRuntimeBuildActAsConfigured=false\n'
 fi
-printf 'productionWifConfigured=true\nproductionWifEndToEndVerified=false\nproductionDeployEndToEndReady=false\nproductionIdentityReady=false\nproductionDeployed=false\n
+printf 'productionWifConfigured=true\nproductionWifEndToEndVerified=false\nproductionDeployEndToEndReady=false\nproductionIdentityReady=false\nproductionDeployed=false\n'
