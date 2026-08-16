@@ -8,6 +8,7 @@ V1_RUNTIME_SA="clicksave-auth-cleanup@click-save-ai-production.iam.gserviceaccou
 V2_RUNTIME_SA="clicksave-v2-runtime@click-save-ai-production.iam.gserviceaccount.com"
 V1_RUNTIME_ROLE="roles/datastore.user"
 BUILD_DEFERRED_STATUS="DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION"
+CLOUD_BUILD_SERVICE="cloudbuild.googleapis.com"
 POOL=github-actions
 PROVIDER=clickandsaveai-production
 REGION=europe-west1
@@ -43,10 +44,6 @@ valid_sa(){
     "$V1_RUNTIME_SA"|"$V2_RUNTIME_SA"|"$N@cloudbuild.gserviceaccount.com"|"$N-compute@developer.gserviceaccount.com"|"service-$N@gcp-sa-cloudbuild.iam.gserviceaccount.com"|*"@$P.iam.gserviceaccount.com") : ;;
     *) fatal "identity is not owned by Production: $s" ;;
   esac
-}
-BUILD_DISCOVERY_ERROR=""
-is_build_service_uninitialized() {
-  printf '%s\n' "$BUILD_DISCOVERY_ERROR" | grep -Eiq 'SERVICE_DISABLED|has not been used in project|cloudbuild\.googleapis\.com.*not enabled|Cloud Build API.*(not enabled|disabled|not initialized)|API.*cloudbuild.*not enabled'
 }
 
 case "$PROJECT_ID" in clickandsaveai|clickandsaveai-staging) fatal "forbidden non-Production project: $PROJECT_ID";; esac
@@ -212,30 +209,43 @@ else
   pass 'dedicated v2 runtime identity exact; zero user-managed keys; zero project roles'
 fi
 
+SE="$(mktemp)"
 BE="$(mktemp)"
-trap 'rm -f "$BE"' EXIT
-set +e
-BR="$(gcloud builds get-default-service-account --project="$P" --region="$REGION" --format='value(serviceAccountEmail)' 2>"$BE")"
-BS=$?
-set -e
-BUILD_DISCOVERY_ERROR="$(tr '\n' ' ' <"$BE")"
+trap 'rm -f "$SE" "$BE"' EXIT
+CLOUD_BUILD_SERVICE_ENABLED=false
+BUILD_IDENTITY_DISCOVERY_ATTEMPTED=false
 BUILD_SA=""
-PRODUCTION_BUILD_IDENTITY_STATUS="READY"
-if [[ $BS -ne 0 ]]; then
-  if is_build_service_uninitialized; then
-    PRODUCTION_BUILD_IDENTITY_STATUS="$BUILD_DEFERRED_STATUS"
-    pass 'Cloud Build identity deferred until build service initialization; no API was enabled'
-  else
-    fatal "Cloud Build default service-account discovery failed; no API was enabled. gcloud: $BUILD_DISCOVERY_ERROR"
-  fi
-else
+PRODUCTION_BUILD_IDENTITY_STATUS="$BUILD_DEFERRED_STATUS"
+
+set +e
+SERVICE_ROWS="$(gcloud services list --project="$P" --enabled --filter="config.name:$CLOUD_BUILD_SERVICE" --format='value(config.name)' 2>"$SE")"
+SS=$?
+set -e
+SERVICE_STATE_ERROR="$(tr '\n' ' ' <"$SE")"
+[[ $SS -eq 0 ]] || fatal "Cloud Build service-state query failed; no API was enabled. gcloud: $SERVICE_STATE_ERROR"
+mapfile -t ENABLED_BUILD_SERVICES < <(printf '%s\n' "$SERVICE_ROWS" | sed '/^$/d' | sort -u)
+
+if [[ ${#ENABLED_BUILD_SERVICES[@]} -eq 0 ]]; then
+  pass 'Cloud Build service is not enabled; build identity deferred without API enablement'
+elif [[ ${#ENABLED_BUILD_SERVICES[@]} -eq 1 && "${ENABLED_BUILD_SERVICES[0]}" == "$CLOUD_BUILD_SERVICE" ]]; then
+  CLOUD_BUILD_SERVICE_ENABLED=true
+  BUILD_IDENTITY_DISCOVERY_ATTEMPTED=true
+  set +e
+  BR="$(gcloud builds get-default-service-account --project="$P" --region="$REGION" --format='value(serviceAccountEmail)' 2>"$BE")"
+  BS=$?
+  set -e
+  BUILD_DISCOVERY_ERROR="$(tr '\n' ' ' <"$BE")"
+  [[ $BS -eq 0 ]] || fatal "Cloud Build default service-account discovery failed after enabled-service verification; no API was enabled. gcloud: $BUILD_DISCOVERY_ERROR"
   BUILD_SA="${BR#projects/$P/serviceAccounts/}"
   BUILD_SA="${BUILD_SA//$'\r'/}"
   BUILD_SA="${BUILD_SA//$'\n'/}"
   if [[ -z "$BUILD_SA" ]]; then
-    PRODUCTION_BUILD_IDENTITY_STATUS="$BUILD_DEFERRED_STATUS"
-    pass 'Cloud Build discovery returned no default identity; build identity deferred without API enablement'
+    pass 'Cloud Build service enabled but discovery returned no default identity; build identity deferred without API enablement'
+  else
+    PRODUCTION_BUILD_IDENTITY_STATUS="READY"
   fi
+else
+  fatal "Cloud Build enabled-service inventory is ambiguous: ${ENABLED_BUILD_SERVICES[*]}"
 fi
 
 if [[ "$PRODUCTION_BUILD_IDENTITY_STATUS" == "READY" ]]; then
@@ -291,6 +301,8 @@ if [[ -n "$DISCOVERY_OUTPUT" ]]; then
     printf 'RUNTIME_SAS=('; for s in "${RUNTIME_SAS[@]}"; do printf ' %q' "$s"; done; printf ' )\n'
     printf 'BUILD_SA=%q\n' "$BUILD_SA"
     printf 'PRODUCTION_BUILD_IDENTITY_STATUS=%q\n' "$PRODUCTION_BUILD_IDENTITY_STATUS"
+    printf 'CLOUD_BUILD_SERVICE_ENABLED=%q\n' "$CLOUD_BUILD_SERVICE_ENABLED"
+    printf 'BUILD_IDENTITY_DISCOVERY_ATTEMPTED=%q\n' "$BUILD_IDENTITY_DISCOVERY_ATTEMPTED"
   } >"$DISCOVERY_OUTPUT"
 fi
 
@@ -303,6 +315,8 @@ printf 'runtimeServiceAccounts=%s\n' "$(IFS=,; printf '%s' "${RUNTIME_SAS[*]}")"
 printf 'productionRuntimeIdentityStatus=%s\n' "$RUNTIME_STATUS"
 printf 'buildServiceAccount=%s\n' "$BUILD_SA"
 printf 'productionBuildIdentityStatus=%s\n' "$PRODUCTION_BUILD_IDENTITY_STATUS"
+printf 'productionCloudBuildServiceEnabled=%s\n' "$CLOUD_BUILD_SERVICE_ENABLED"
+printf 'productionBuildIdentityDiscoveryAttempted=%s\n' "$BUILD_IDENTITY_DISCOVERY_ATTEMPTED"
 printf 'productionDeployIamConfigured=true\n'
 if [[ "$ALLOW_MISSING_ACTAS" == 1 || "$ALLOW_RUNTIME_BOOTSTRAP_GAP" == 1 ]]; then
   printf 'productionRuntimeActAsConfigured=false\n'
@@ -314,4 +328,4 @@ if [[ "$PRODUCTION_BUILD_IDENTITY_STATUS" == "READY" && "$ALLOW_MISSING_ACTAS" =
 else
   printf 'productionRuntimeBuildActAsConfigured=false\n'
 fi
-printf 'productionWifConfigured=true\nproductionWifEndToEndVerified=false\nproductionDeployEndToEndReady=false\nproductionIdentityReady=false\nproductionDeployed=false\n'
+printf 'productionWifConfigured=true\nproductionWifEndToEndVerified=false\nproductionDeployEndToEndReady=false\nproductionIdentityReady=false\nproductionDeployed=false\n
