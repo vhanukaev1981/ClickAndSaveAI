@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Configure the exported Firebase Functions v2 surface to use a dedicated Production runtime service account, preserve the v1 cleanup identity, and make Cloud Build identity safely deferrable when the build service is not initialized.
+**Goal:** Configure the exported Firebase Functions v2 surface to use a dedicated Production runtime service account, preserve the v1 cleanup identity, and make Cloud Build identity safely deferrable when the build service is not enabled or has not yet produced a default build identity.
 
-**Architecture:** Keep one common v2 `setGlobalOptions` call in `functions/src/index.js`, which is loaded first by the configured `src/entry.js`, and add a `projectID` parameter expression so only Production resolves to the dedicated v2 service account. Extend the existing fail-closed runtime/build verifier and bootstrap so v1 and v2 runtime readiness are independent of Cloud Build readiness, with the v2 identity starting at zero project roles. Produce a source-backed runtime permission matrix but grant no application runtime roles in this block.
+**Architecture:** Keep one common v2 `setGlobalOptions` call in `functions/src/index.js`, which is loaded first by the configured `src/entry.js`, and add a `projectID` parameter expression so only Production resolves to the dedicated v2 service account. Extend the existing fail-closed runtime/build verifier and bootstrap so v1 and v2 runtime readiness are independent of Cloud Build readiness, with the v2 identity starting at zero project roles. Establish Cloud Build enabled-service state before any default build-identity discovery. Produce a source-backed runtime permission matrix but grant no application runtime roles in this block.
 
 **Tech Stack:** Node.js 22, Firebase Functions 7.3.0, Firebase Admin 14.2.0, Bash, gcloud CLI, Node `node:test`, GitHub Actions/GitHub.
 
@@ -54,8 +54,10 @@ Tests must prove:
 - `pushAccountCleanup.js` still contains the exact v1 SA, Production/default expression, and v1 `runWith` binding;
 - bootstrap has exact IDs for v1 and v2, can create both exact service accounts, verifies user-managed key count, and enforces v2 zero project roles;
 - verifier identifies the exact v2 SA, requires zero v2 project roles, and emits a distinct build status;
-- the exact `gcloud builds get-default-service-account` discovery command remains present;
-- Cloud Build API-not-initialized/disabled and empty-result paths map to `DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION` and skip build `actAs`;
+- `gcloud services list` establishes `cloudbuild.googleapis.com` enabled-service state before the exact `gcloud builds get-default-service-account` discovery command can run;
+- disabled Cloud Build service maps to `DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION`, leaves `BUILD_SA` empty, sets service/discovery truth flags to false, and does not invoke identity discovery or build `actAs`;
+- enabled-service discovery failure is a hard failure independent of gcloud error prose;
+- enabled-service discovery success with an empty identity maps to `DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION` without substituting another identity;
 - unrelated Cloud Build discovery failures remain hard failures;
 - no `gcloud services enable`, `gcloud app create`, default Compute runtime SA dependency, Firebase deployment, Functions deployment, or service-account key creation is introduced;
 - no private key, Google API key, or GitHub token pattern appears in changed security files.
@@ -141,7 +143,7 @@ git commit -m "feat: bind Production v2 functions to dedicated runtime identity"
 
 **Interfaces:**
 - Consumes: exact v1/v2/deploy identities and live `gcloud` state.
-- Produces: runtime identity verification, optional `BUILD_SA`, and `productionBuildIdentityStatus` equal to `READY` or `DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION`.
+- Produces: runtime identity verification, optional `BUILD_SA`, explicit Cloud Build service/discovery truth flags, and `productionBuildIdentityStatus` equal to `READY` or `DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION`.
 
 - [ ] **Step 1: Replace the v2 default Compute identity with the dedicated v2 identity**
 
@@ -171,25 +173,55 @@ Keep the existing v1 `roles/datastore.user` logic unchanged.
 
 The verifier must require the v2 service account to exist outside bootstrap-gap mode and require its project-role set to be empty. Bootstrap-gap mode may permit only the exact v1/v2 dedicated runtime accounts to be absent before creation.
 
-- [ ] **Step 4: Classify Cloud Build discovery safely**
+- [ ] **Step 4: Establish Cloud Build service state before identity discovery**
 
-Run the exact discovery command and implement three outcomes:
+The verifier must first establish whether `cloudbuild.googleapis.com` is enabled:
 
-```text
-READY
-DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION
-HARD FAILURE
+```bash
+gcloud services list \
+  --project=click-save-ai-production \
+  --enabled \
+  --filter='config.name:cloudbuild.googleapis.com' \
+  --format='value(config.name)'
 ```
 
-A successful empty result is deferred. A nonzero result is deferred only when stderr clearly indicates Cloud Build API/service not initialized/enabled, including known `SERVICE_DISABLED`, `API ... not enabled`, or `has not been used in project` forms. Authentication, authorization, malformed target, network, and unclassified errors are hard failures.
+Only when the service is confirmed enabled may it invoke the exact discovery command:
+
+```bash
+gcloud builds get-default-service-account \
+  --project=click-save-ai-production \
+  --region=europe-west1 \
+  --format='value(serviceAccountEmail)'
+```
+
+The state machine is exactly:
+
+```text
+SERVICE-STATE QUERY FAILURE -> HARD FAILURE
+SERVICE NOT ENABLED -> DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION
+SERVICE ENABLED + DISCOVERY FAILURE -> HARD FAILURE
+SERVICE ENABLED + EMPTY IDENTITY -> DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION
+SERVICE ENABLED + NON-EMPTY PRODUCTION IDENTITY -> READY
+```
+
+Required transitions:
+
+1. If the service-state query fails, hard FAIL and do not enable any API.
+2. If the service is not enabled, set `CLOUD_BUILD_SERVICE_ENABLED=false`, `BUILD_IDENTITY_DISCOVERY_ATTEMPTED=false`, `productionCloudBuildServiceEnabled=false`, `productionBuildIdentityDiscoveryAttempted=false`, leave `BUILD_SA` empty, set `productionBuildIdentityStatus=DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION`, and do not invoke default build identity discovery.
+3. If the service is enabled, set the service truth flag to true and attempt identity discovery exactly once.
+4. If the enabled-service identity discovery command fails, hard FAIL independent of gcloud error prose.
+5. If enabled-service discovery succeeds but returns an empty identity, defer with no substitute identity and skip build `actAs`.
+6. If enabled-service discovery returns a non-empty Production-owned identity, set `productionBuildIdentityStatus=READY` and apply normal build identity privilege and per-SA `actAs` checks.
+
+The retired prose classifier must not be used. Deferral for a disabled service comes from the explicit enabled-service query, never from matching command error wording.
 
 When deferred:
 
 - leave `BUILD_SA` empty;
 - do not add build identity to the intended service-account set;
-- do not mutate build `actAs`;
+- do not mutate or verify build `actAs` as if an identity existed;
 - continue runtime identity inventory and runtime `actAs` verification;
-- emit `productionBuildIdentityStatus=DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION`.
+- emit `productionBuildIdentityStatus=DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION` plus the explicit service/discovery truth flags.
 
 When ready, preserve normal build identity validation and per-SA `actAs` behavior.
 
@@ -295,6 +327,8 @@ firebase deploy
 gcloud functions deploy
 -----BEGIN ... PRIVATE KEY-----
 ```
+
+Also fail if the retired prose-based Cloud Build service classifier is reintroduced into implementation or governing contract text.
 
 - [ ] **Step 3: Compare lineage**
 
