@@ -49,3 +49,27 @@ test("verifier implementation and contract documents reject the retired prose cl
     assert.doesNotMatch(source, /is_build_service_uninitialized/);
   }
 });
+
+test("runtime verifier uses an explicit Cloud Build service-state machine", () => {
+  assert.match(verifier, /CLOUD_BUILD_SERVICE_STATE="UNKNOWN"/);
+  assert.match(verifier, /--filter="config\.name=\$CLOUD_BUILD_SERVICE"/);
+  assert.match(verifier, /CLOUD_BUILD_SERVICE_STATE="DISABLED"/);
+  assert.match(verifier, /CLOUD_BUILD_SERVICE_STATE="ENABLED"/);
+  assert.match(verifier, /case "\$CLOUD_BUILD_SERVICE_STATE" in/);
+  assert.match(verifier, /DISABLED\)/);
+  assert.match(verifier, /ENABLED\)/);
+});
+
+test("runtime verifier keeps build identity discovery inside the ENABLED state only", () => {
+  const stateCase = verifier.indexOf('case "$CLOUD_BUILD_SERVICE_STATE" in');
+  const disabledBranch = verifier.indexOf("DISABLED)", stateCase);
+  const enabledBranch = verifier.indexOf("ENABLED)", disabledBranch);
+  const discovery = verifier.indexOf(identityDiscovery, stateCase);
+  const caseEnd = verifier.indexOf("esac", enabledBranch);
+
+  assert.ok(stateCase >= 0, "explicit service-state case is required");
+  assert.ok(disabledBranch > stateCase, "DISABLED branch is required");
+  assert.ok(enabledBranch > disabledBranch, "ENABLED branch must follow DISABLED");
+  assert.ok(discovery > enabledBranch, "build identity discovery must occur only after entering ENABLED");
+  assert.ok(caseEnd > discovery, "build identity discovery must remain inside the service-state case");
+});
