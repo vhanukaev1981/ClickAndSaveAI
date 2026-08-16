@@ -86,6 +86,7 @@ exit 92
 
 function bootstrapFailureScenario(o = {}) {
   assert.ok(bootstrap, "Block 3C bootstrap is absent");
+  const failureMessage = o.failureMessage || `FAIL discovered build identity ${BUILD} holds forbidden role: roles/editor`;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "block3c-orch-"));
   const scripts = path.join(dir, "scripts"), bin = path.join(dir, "bin"), state = path.join(dir, "state");
   fs.mkdirSync(scripts); fs.mkdirSync(bin); fs.mkdirSync(state);
@@ -95,7 +96,7 @@ function bootstrapFailureScenario(o = {}) {
   exe(path.join(scripts, "bootstrap-production-runtime-build-actas.sh"), '#!/usr/bin/env bash\nn=$(cat "$FAKE_STATE/runtime"); echo $((n+1)) >"$FAKE_STATE/runtime"; echo runtime >>"$FAKE_STATE/events"\n');
   exe(path.join(scripts, "verify-production-runtime-build-actas.sh"), `#!/usr/bin/env bash
 n=$(cat "$FAKE_STATE/verify"); n=$((n+1)); echo "$n" >"$FAKE_STATE/verify"; echo "verifier-$n" >>"$FAKE_STATE/events"
-if [[ "$n" == 1 ]]; then echo 'FAIL discovered build identity ${BUILD} holds forbidden role: roles/editor' >&2; exit ${o.verifierExit || 1}; fi
+if [[ "$n" == 1 ]]; then echo '${failureMessage}' >&2; exit ${o.verifierExit || 1}; fi
 cat >"$DISCOVERY_OUTPUT" <<STATE
 RUNTIME_SAS=("${V1}" "${V2}")
 BUILD_SA="${BUILD}"
@@ -154,7 +155,7 @@ test("preflight reports exact state without mutation", () => { const s = hardeni
 test("live editor verifier failure remediates only after explicit preflight and reruns verifier before runtime", () => {
   const s = bootstrapFailureScenario(); const r = s.run(); assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`); assert.equal(s.n("apply"), 1); assert.equal(s.n("runtime"), 1); assert.equal(s.n("closure"), 1); assert.match(s.events(), /verifier-1[\s\S]*harden-preflight[\s\S]*harden-apply[\s\S]*verifier-2[\s\S]*runtime[\s\S]*closure/);
 });
-test("arbitrary verifier failure is not treated as remediable", () => { const s = bootstrapFailureScenario({ preflightState: "BUILDER_ONLY" }); const r = s.run(); assert.equal(r.status, 1); assert.equal(s.n("apply"), 0); assert.equal(s.n("runtime"), 0); });
+test("arbitrary verifier failure is not treated as remediable even when hardening state would be Editor-only", () => { const s = bootstrapFailureScenario({ failureMessage: "FAIL Production WIF provider boundary mismatch" }); const r = s.run(); assert.equal(r.status, 1); assert.equal(s.n("apply"), 0); assert.equal(s.n("runtime"), 0); assert.doesNotMatch(s.events(), /harden-preflight/); });
 test("hardening apply failure prevents later runtime/bootstrap execution", () => { const s = bootstrapFailureScenario({ applyExit: 9 }); const r = s.run(); assert.equal(r.status, 1); assert.equal(s.n("runtime"), 0); assert.equal(s.n("closure"), 0); });
 test("no Owner/Editor grants, service-account key mutation, deployment, App Engine init, or extra API enablement", () => {
   assert.doesNotMatch(hardener, /projects add-iam-policy-binding[\s\S]{0,300}--role="roles\/(?:owner|editor)"/);
