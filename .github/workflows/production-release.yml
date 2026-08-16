@@ -21,6 +21,11 @@ on:
         required: true
         default: NO_WIF_PROOF
         type: string
+      authorize_3f_metadata_probe:
+        description: Type PROBE_3F_METADATA_ONLY only when a separately authorized Block 3F metadata-only probe is intended
+        required: true
+        default: NO_3F_PROBE
+        type: string
 
 concurrency:
   group: clickandsaveai-production-release
@@ -28,7 +33,7 @@ concurrency:
 
 jobs:
   production-candidate:
-    if: ${{ inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' }}
+    if: ${{ inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
@@ -223,7 +228,7 @@ jobs:
           rm -f app/src/release/google-services.json "$PRODUCTION_GOOGLE_SERVICES_JSON_PATH" "$PRODUCTION_UPLOAD_KEYSTORE_PATH"
 
   production-wif-auth-proof:
-    if: ${{ inputs.authorize_wif_auth_proof == 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
+    if: ${{ inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_wif_auth_proof == 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
@@ -320,9 +325,115 @@ jobs:
             "service_account=$EXPECTED_DEPLOY_SA" \
             'credential_type=external_account'
 
+  production-3f-metadata-probe:
+    if: ${{ inputs.authorize_3f_metadata_probe == 'PROBE_3F_METADATA_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.authorize_wif_auth_proof == 'NO_WIF_PROOF' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      EXPECTED_REPOSITORY: vhanukaev1981/ClickAndSaveAI
+      EXPECTED_REPOSITORY_ID: '1314210715'
+      EXPECTED_REPOSITORY_OWNER_ID: '64756523'
+      EXPECTED_REF: refs/heads/main
+      EXPECTED_WORKFLOW_REF: vhanukaev1981/ClickAndSaveAI/.github/workflows/production-release.yml@refs/heads/main
+      PRODUCTION_FIREBASE_PROJECT_ID: ${{ vars.PRODUCTION_FIREBASE_PROJECT_ID }}
+      PRODUCTION_GOOGLE_WEB_CLIENT_ID: ${{ vars.PRODUCTION_GOOGLE_WEB_CLIENT_ID }}
+      PRODUCTION_APP_SIGNING_CERT_SHA1: ${{ vars.PRODUCTION_APP_SIGNING_CERT_SHA1 }}
+      PRODUCTION_APP_SIGNING_CERT_SHA256: ${{ vars.PRODUCTION_APP_SIGNING_CERT_SHA256 }}
+      PRODUCTION_UPLOAD_KEY_ALIAS: ${{ vars.PRODUCTION_UPLOAD_KEY_ALIAS }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      PRODUCTION_GOOGLE_SERVICES_JSON_B64: ${{ secrets.PRODUCTION_GOOGLE_SERVICES_JSON_B64 }}
+      PRODUCTION_UPLOAD_KEYSTORE_B64: ${{ secrets.PRODUCTION_UPLOAD_KEYSTORE_B64 }}
+      PRODUCTION_UPLOAD_STORE_PASSWORD: ${{ secrets.PRODUCTION_UPLOAD_STORE_PASSWORD }}
+      PRODUCTION_UPLOAD_KEY_PASSWORD: ${{ secrets.PRODUCTION_UPLOAD_KEY_PASSWORD }}
+
+    steps:
+      - name: Guard exact Block 3F metadata-only boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ '${{ inputs.authorize_3f_metadata_probe }}' == 'PROBE_3F_METADATA_ONLY' ]] || { echo 'Block 3F metadata-probe authorization phrase mismatch.' >&2; exit 1; }
+          [[ '${{ inputs.authorize_firebase_deploy }}' == 'NO_DEPLOY' ]] || { echo 'Block 3F metadata-probe mode requires authorize_firebase_deploy=NO_DEPLOY.' >&2; exit 1; }
+          [[ '${{ inputs.authorize_wif_auth_proof }}' == 'NO_WIF_PROOF' ]] || { echo 'Block 3F metadata-probe mode requires authorize_wif_auth_proof=NO_WIF_PROOF.' >&2; exit 1; }
+          [[ '${{ inputs.confirm_environment }}' == 'CLICKANDSAVEAI_PRODUCTION' ]] || { echo 'Production confirmation phrase mismatch.' >&2; exit 1; }
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'source_sha must be an exact lowercase 40-character commit SHA.' >&2; exit 1; }
+          [[ '${{ github.sha }}' == "$SOURCE_SHA" ]] || { echo 'Block 3F metadata probe source must equal the workflow main HEAD.' >&2; exit 1; }
+          [[ '${{ github.repository }}' == "$EXPECTED_REPOSITORY" ]] || { echo 'Repository identity mismatch.' >&2; exit 1; }
+          [[ '${{ github.repository_id }}' == "$EXPECTED_REPOSITORY_ID" ]] || { echo 'Repository ID mismatch.' >&2; exit 1; }
+          [[ '${{ github.repository_owner_id }}' == "$EXPECTED_REPOSITORY_OWNER_ID" ]] || { echo 'Repository owner ID mismatch.' >&2; exit 1; }
+          [[ '${{ github.ref }}' == "$EXPECTED_REF" ]] || { echo 'Git ref mismatch.' >&2; exit 1; }
+          [[ '${{ github.workflow_ref }}' == "$EXPECTED_WORKFLOW_REF" ]] || { echo 'Workflow ref mismatch.' >&2; exit 1; }
+
+      - name: Check out exact Block 3F probe source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js 22 for metadata validation
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Set up JDK 21 for public certificate metadata
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Materialize protected blobs to runner temp only
+        env:
+          BLOCK3F_GOOGLE_CONFIG_PATH: ${{ runner.temp }}/block3f-google-services.json
+          BLOCK3F_UPLOAD_KEYSTORE_PATH: ${{ runner.temp }}/block3f-upload-keystore
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          rm -f "$BLOCK3F_GOOGLE_CONFIG_PATH" "$BLOCK3F_UPLOAD_KEYSTORE_PATH"
+          if [[ -n "$PRODUCTION_GOOGLE_SERVICES_JSON_B64" ]]; then
+            printf '%s' "$PRODUCTION_GOOGLE_SERVICES_JSON_B64" | base64 --decode > "$BLOCK3F_GOOGLE_CONFIG_PATH"
+          fi
+          if [[ -n "$PRODUCTION_UPLOAD_KEYSTORE_B64" ]]; then
+            printf '%s' "$PRODUCTION_UPLOAD_KEYSTORE_B64" | base64 --decode > "$BLOCK3F_UPLOAD_KEYSTORE_PATH"
+          fi
+          echo "BLOCK3F_GOOGLE_CONFIG_PATH=$BLOCK3F_GOOGLE_CONFIG_PATH" >> "$GITHUB_ENV"
+          echo "BLOCK3F_UPLOAD_KEYSTORE_PATH=$BLOCK3F_UPLOAD_KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      - name: Extract upload certificate metadata without exposing keystore material
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "$PRODUCTION_UPLOAD_KEYSTORE_B64" && -n "$PRODUCTION_UPLOAD_STORE_PASSWORD" && -n "$PRODUCTION_UPLOAD_KEY_ALIAS" ]]; then
+            CERT_OUTPUT="$(keytool -list -v -keystore "$BLOCK3F_UPLOAD_KEYSTORE_PATH" -storepass:env PRODUCTION_UPLOAD_STORE_PASSWORD -alias "$PRODUCTION_UPLOAD_KEY_ALIAS" 2>/dev/null)" || { echo 'Upload keystore metadata read failed.' >&2; exit 1; }
+            UPLOAD_CERT_SHA1="$(printf '%s\n' "$CERT_OUTPUT" | sed -n 's/^[[:space:]]*SHA1: //p' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+            UPLOAD_CERT_SHA256="$(printf '%s\n' "$CERT_OUTPUT" | sed -n 's/^[[:space:]]*SHA256: //p' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+            [[ "$UPLOAD_CERT_SHA1" =~ ^[0-9a-f]{40}$ ]] || { echo 'Upload certificate SHA-1 metadata is unavailable.' >&2; exit 1; }
+            [[ "$UPLOAD_CERT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo 'Upload certificate SHA-256 metadata is unavailable.' >&2; exit 1; }
+            echo "PRODUCTION_UPLOAD_CERT_SHA1=$UPLOAD_CERT_SHA1" >> "$GITHUB_ENV"
+            echo "PRODUCTION_UPLOAD_CERT_SHA256=$UPLOAD_CERT_SHA256" >> "$GITHUB_ENV"
+          fi
+
+      - name: Validate secret-safe Production metadata relationships
+        run: node scripts/production-3f-metadata-probe.mjs
+
+      - name: Remove Block 3F temporary decoded files
+        if: ${{ always() }}
+        env:
+          BLOCK3F_GOOGLE_CONFIG_PATH: ${{ runner.temp }}/block3f-google-services.json
+          BLOCK3F_UPLOAD_KEYSTORE_PATH: ${{ runner.temp }}/block3f-upload-keystore
+        shell: bash
+        run: |
+          rm -f "$BLOCK3F_GOOGLE_CONFIG_PATH" "$BLOCK3F_UPLOAD_KEYSTORE_PATH"
+
   deploy-firebase-production:
     needs: production-candidate
-    if: ${{ inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_firebase_deploy == 'DEPLOY_FIREBASE_PRODUCTION' }}
+    if: ${{ inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_firebase_deploy == 'DEPLOY_FIREBASE_PRODUCTION' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 30
