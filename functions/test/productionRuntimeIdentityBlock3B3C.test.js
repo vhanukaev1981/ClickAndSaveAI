@@ -25,6 +25,7 @@ const v1 = "clicksave-auth-cleanup@click-save-ai-production.iam.gserviceaccount.
 const v2 = "clicksave-v2-runtime@click-save-ai-production.iam.gserviceaccount.com";
 const deploy = "clickandsaveai-github-deployer@click-save-ai-production.iam.gserviceaccount.com";
 const buildDeferred = "DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION";
+const cloudBuildService = "cloudbuild.googleapis.com";
 const defaultCloudBuild = `${projectNumber}@${["cloudbuild", "gserviceaccount.com"].join(".")}`;
 const defaultComputeRuntime = `${projectNumber}-${["compute", "developer.gserviceaccount.com"].join("@")}`;
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -101,28 +102,37 @@ test("9 deployer actAs is individual-SA only and covers v1/v2 runtime identities
   has(verifier, /project-wide roles\/iam\.serviceAccountUser exists/);
 });
 
-test("10 Cloud Build identity remains authoritative live discovery", () => {
+test("10 Cloud Build enabled-service state is established before default identity discovery", () => {
+  has(verifier, new RegExp(`CLOUD_BUILD_SERVICE=["']${esc(cloudBuildService)}["']`));
+  has(verifier, /gcloud services list --project="\$P" --enabled --filter="config\.name:\$CLOUD_BUILD_SERVICE" --format='value\(config\.name\)'/);
   has(verifier, /gcloud builds get-default-service-account --project="\$P" --region="\$REGION" --format='value\(serviceAccountEmail\)'/);
+  assert.ok(
+    verifier.indexOf("gcloud services list --project=\"$P\" --enabled") <
+      verifier.indexOf("gcloud builds get-default-service-account"),
+    "Cloud Build enabled-service query must occur before default service-account discovery"
+  );
 });
 
-test("11 Cloud Build service initialization gap has explicit deferred status", () => {
+test("11 disabled Cloud Build service deterministically defers without prose matching", () => {
   has(verifier, new RegExp(buildDeferred));
-  has(verifier, /productionBuildIdentityStatus=%s/);
-  has(verifier, /is_build_service_uninitialized\(\)/);
-  has(verifier, /SERVICE_DISABLED|has not been used|not enabled/i);
+  has(verifier, /CLOUD_BUILD_SERVICE_ENABLED=false/);
+  has(verifier, /BUILD_IDENTITY_DISCOVERY_ATTEMPTED=false/);
+  has(verifier, /Cloud Build service is not enabled; build identity deferred without API enablement/);
+  no(verifier, /is_build_service_uninitialized/);
+  no(verifier, /SERVICE_DISABLED|has not been used in project|not initialized/i);
   has(bootstrap, new RegExp(buildDeferred));
 });
 
-test("12 empty Cloud Build identity defers without substituting a fake identity", () => {
+test("12 empty Cloud Build identity after enabled-service discovery defers without substitution", () => {
   has(verifier, /\[\[ -z "\$BUILD_SA" \]\]/);
   has(verifier, new RegExp(buildDeferred));
   no(verifier, new RegExp(`BUILD_SA=.*${esc(defaultCloudBuild)}`));
   no(verifier, new RegExp(`BUILD_SA=.*${esc(defaultComputeRuntime)}`));
 });
 
-test("13 unclassified Cloud Build discovery errors remain fatal", () => {
-  has(verifier, /Cloud Build default service-account discovery failed/);
-  has(verifier, /is_build_service_uninitialized/);
+test("13 enabled-service Cloud Build discovery errors are hard failures independent of error prose", () => {
+  has(verifier, /Cloud Build default service-account discovery failed after enabled-service verification/);
+  no(verifier, /is_build_service_uninitialized/);
 });
 
 test("14 build actAs is skipped when identity status is deferred", () => {
@@ -173,4 +183,11 @@ test("21 runtime/build shell scripts remain syntactically valid", () => {
     const r = spawnSync("bash", ["-n", path.join(root, p)], { encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
   }
+});
+
+test("22 service and discovery truth flags are exported and printed", () => {
+  has(verifier, /printf 'CLOUD_BUILD_SERVICE_ENABLED=%q\\n' "\$CLOUD_BUILD_SERVICE_ENABLED"/);
+  has(verifier, /printf 'BUILD_IDENTITY_DISCOVERY_ATTEMPTED=%q\\n' "\$BUILD_IDENTITY_DISCOVERY_ATTEMPTED"/);
+  has(verifier, /productionCloudBuildServiceEnabled=%s/);
+  has(verifier, /productionBuildIdentityDiscoveryAttempted=%s/);
 });
