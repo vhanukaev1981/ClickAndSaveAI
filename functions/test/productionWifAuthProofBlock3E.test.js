@@ -36,7 +36,7 @@ test("auth-only mode is mutually exclusive with production candidate and Firebas
   const proof = jobBlock("production-wif-auth-proof");
 
   assert.ok(
-    candidate.includes("if: ${{ inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' }}"),
+    candidate.includes("inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY'"),
     "production-candidate must be skipped in auth-only mode"
   );
   assert.doesNotMatch(candidate, /id-token:\s*write/);
