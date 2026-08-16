@@ -50,7 +50,7 @@ case "$PROJECT_ID" in clickandsaveai|clickandsaveai-staging) fatal "forbidden no
 [[ "$PROJECT_ID" == "$P" ]] || fatal "PROJECT_ID must be exactly $P"
 [[ "$ALLOW_MISSING_ACTAS" =~ ^[01]$ ]] || fatal 'ALLOW_MISSING_ACTAS must be 0 or 1'
 [[ "$ALLOW_RUNTIME_BOOTSTRAP_GAP" =~ ^[01]$ ]] || fatal 'ALLOW_RUNTIME_BOOTSTRAP_GAP must be 0 or 1'
-for c in gcloud python3 curl; do command -v "$c" >/dev/null || fatal "$c is required"; done
+for c in gcloud python3 curl timeout; do command -v "$c" >/dev/null || fatal "$c is required"; done
 [[ -n "$(gcloud auth list --filter='status:ACTIVE' --format='value(account)' 2>/dev/null | head -1)" ]] || fatal 'no active gcloud account'
 PID="$(gcloud projects describe "$P" --format='value(projectId)' 2>/dev/null || true)"
 PNUM="$(gcloud projects describe "$P" --format='value(projectNumber)' 2>/dev/null || true)"
@@ -247,11 +247,17 @@ case "$CLOUD_BUILD_SERVICE_STATE" in
     CLOUD_BUILD_SERVICE_ENABLED=true
     BUILD_IDENTITY_DISCOVERY_ATTEMPTED=true
     set +e
-    BR="$(gcloud builds get-default-service-account --project="$P" --region="$REGION" --format='value(serviceAccountEmail)' 2>"$BE")"
+    BR="$(timeout 30s gcloud builds get-default-service-account \
+      --project="$P" \
+      --region="$REGION" \
+      --format='value(serviceAccountEmail)' 2>"$BE")"
     BS=$?
     set -e
-    BUILD_DISCOVERY_ERROR="$(tr '\n' ' ' <"$BE")"
-    [[ $BS -eq 0 ]] || fatal "Cloud Build default service-account discovery failed after enabled-service verification; no API was enabled. gcloud: $BUILD_DISCOVERY_ERROR"
+    BUILD_DISCOVERY_ERROR="$(tr '\r\n' '  ' <"$BE" | sed -E 's/[^[:print:]\t]/?/g; s/[[:space:]]+/ /g; s/^ //; s/ $//')"
+    if [[ $BS -eq 124 ]]; then
+      fatal 'Cloud Build default service-account discovery timed out after 30 seconds'
+    fi
+    [[ $BS -eq 0 ]] || fatal "Cloud Build default service-account discovery failed with exit code $BS after enabled-service verification; no API was enabled. gcloud: $BUILD_DISCOVERY_ERROR"
     BUILD_SA="${BR#projects/$P/serviceAccounts/}"
     BUILD_SA="${BUILD_SA//$'\r'/}"
     BUILD_SA="${BUILD_SA//$'\n'/}"
@@ -304,6 +310,34 @@ else
   pass 'pre-mutation mode allows intended actAs bindings absent'
 fi
 
+PRODUCTION_RUNTIME_IDENTITY_CONFIGURED=false
+if [[ -n "$V1_EMAIL" && -n "$V2_EMAIL" ]]; then
+  PRODUCTION_RUNTIME_IDENTITY_CONFIGURED=true
+fi
+
+PRODUCTION_RUNTIME_ACTAS_CONFIGURED=false
+if [[ "$PRODUCTION_RUNTIME_IDENTITY_CONFIGURED" == true ]] && has_actas "$V1_RUNTIME_SA" && has_actas "$V2_RUNTIME_SA"; then
+  PRODUCTION_RUNTIME_ACTAS_CONFIGURED=true
+fi
+
+PRODUCTION_BUILD_IDENTITY_CONFIGURED=false
+if [[ "$PRODUCTION_BUILD_IDENTITY_STATUS" == "READY" && -n "$BUILD_SA" ]]; then
+  PRODUCTION_BUILD_IDENTITY_CONFIGURED=true
+fi
+
+PRODUCTION_BUILD_ACTAS_CONFIGURED=false
+if [[ "$PRODUCTION_BUILD_IDENTITY_CONFIGURED" == true ]] && has_actas "$BUILD_SA"; then
+  PRODUCTION_BUILD_ACTAS_CONFIGURED=true
+fi
+
+PRODUCTION_RUNTIME_BUILD_ACTAS_CONFIGURED=false
+if [[ "$PRODUCTION_RUNTIME_IDENTITY_CONFIGURED" == true &&
+      "$PRODUCTION_RUNTIME_ACTAS_CONFIGURED" == true &&
+      "$PRODUCTION_BUILD_IDENTITY_CONFIGURED" == true &&
+      "$PRODUCTION_BUILD_ACTAS_CONFIGURED" == true ]]; then
+  PRODUCTION_RUNTIME_BUILD_ACTAS_CONFIGURED=true
+fi
+
 URL="https://api.github.com/repos/$REPO/deployments?environment=production&per_page=1"
 H=(-H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
 [[ -n "${GH_TOKEN:-}" ]] && H+=(-H "Authorization: Bearer $GH_TOKEN")
@@ -336,14 +370,9 @@ printf 'productionBuildIdentityStatus=%s\n' "$PRODUCTION_BUILD_IDENTITY_STATUS"
 printf 'productionCloudBuildServiceEnabled=%s\n' "$CLOUD_BUILD_SERVICE_ENABLED"
 printf 'productionBuildIdentityDiscoveryAttempted=%s\n' "$BUILD_IDENTITY_DISCOVERY_ATTEMPTED"
 printf 'productionDeployIamConfigured=true\n'
-if [[ "$ALLOW_MISSING_ACTAS" == 1 || "$ALLOW_RUNTIME_BOOTSTRAP_GAP" == 1 ]]; then
-  printf 'productionRuntimeActAsConfigured=false\n'
-else
-  printf 'productionRuntimeActAsConfigured=true\n'
-fi
-if [[ "$PRODUCTION_BUILD_IDENTITY_STATUS" == "READY" && "$ALLOW_MISSING_ACTAS" == 0 && "$ALLOW_RUNTIME_BOOTSTRAP_GAP" == 0 ]]; then
-  printf 'productionRuntimeBuildActAsConfigured=true\n'
-else
-  printf 'productionRuntimeBuildActAsConfigured=false\n'
-fi
+printf 'productionRuntimeIdentityConfigured=%s\n' "$PRODUCTION_RUNTIME_IDENTITY_CONFIGURED"
+printf 'productionRuntimeActAsConfigured=%s\n' "$PRODUCTION_RUNTIME_ACTAS_CONFIGURED"
+printf 'productionBuildIdentityConfigured=%s\n' "$PRODUCTION_BUILD_IDENTITY_CONFIGURED"
+printf 'productionBuildActAsConfigured=%s\n' "$PRODUCTION_BUILD_ACTAS_CONFIGURED"
+printf 'productionRuntimeBuildActAsConfigured=%s\n' "$PRODUCTION_RUNTIME_BUILD_ACTAS_CONFIGURED"
 printf 'productionWifConfigured=true\nproductionWifEndToEndVerified=false\nproductionDeployEndToEndReady=false\nproductionIdentityReady=false\nproductionDeployed=false\n'
