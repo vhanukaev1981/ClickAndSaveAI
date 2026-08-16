@@ -5,7 +5,6 @@ plugins {
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
-  alias(libs.plugins.secrets)
   alias(libs.plugins.google.services)
 }
 
@@ -19,66 +18,106 @@ android {
     targetSdk = 36
     versionCode = 1
     versionName = "1.0"
-
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
-  signingConfigs {
-    create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+  val productionReleaseCandidate = System.getenv("PRODUCTION_RELEASE_CANDIDATE")
+    ?.equals("true", ignoreCase = true) == true
+  val productionWebClientId = System.getenv("PRODUCTION_GOOGLE_WEB_CLIENT_ID")?.trim().orEmpty()
+  val stagingWebClientId = "716864421960-hnt5709tqk9qp79si8ggplf5jif1ulfu.apps.googleusercontent.com"
+
+  fun requireProductionInput(name: String): String {
+    return System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() }
+      ?: throw GradleException("Production release candidate requires $name")
+  }
+
+  val productionUploadKeystore = if (productionReleaseCandidate) {
+    val path = requireProductionInput("PRODUCTION_UPLOAD_KEYSTORE_PATH")
+    file(path).also {
+      if (!it.isFile) throw GradleException("PRODUCTION_UPLOAD_KEYSTORE_PATH does not reference a file")
     }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
+  } else null
+
+  if (productionReleaseCandidate) {
+    if (productionWebClientId.isBlank()) {
+      throw GradleException("Production release candidate requires PRODUCTION_GOOGLE_WEB_CLIENT_ID")
+    }
+    if (productionWebClientId == stagingWebClientId) {
+      throw GradleException("Production release candidate cannot use the staging Google OAuth client")
+    }
+    if (!productionWebClientId.endsWith(".apps.googleusercontent.com")) {
+      throw GradleException("PRODUCTION_GOOGLE_WEB_CLIENT_ID has an invalid format")
+    }
+  }
+
+  val stagingDebugKeystorePath = System.getenv("STAGING_DEBUG_KEYSTORE_PATH")
+  val stagingDebugKeystore = stagingDebugKeystorePath?.let(::file)?.takeIf { it.exists() }
+  val stagingDebugKeystorePassword = System.getenv("STAGING_DEBUG_KEYSTORE_PASSWORD")
+
+  signingConfigs {
+    if (stagingDebugKeystore != null && !stagingDebugKeystorePassword.isNullOrBlank()) {
+      create("stagingDebug") {
+        storeFile = stagingDebugKeystore
+        storePassword = stagingDebugKeystorePassword
+        keyAlias = "clickandsaveai-staging"
+        keyPassword = stagingDebugKeystorePassword
+      }
+    }
+
+    if (productionReleaseCandidate && productionUploadKeystore != null) {
+      create("productionUpload") {
+        storeFile = productionUploadKeystore
+        storePassword = requireProductionInput("PRODUCTION_UPLOAD_STORE_PASSWORD")
+        keyAlias = requireProductionInput("PRODUCTION_UPLOAD_KEY_ALIAS")
+        keyPassword = requireProductionInput("PRODUCTION_UPLOAD_KEY_PASSWORD")
+      }
     }
   }
 
   buildTypes {
+    debug {
+      if (stagingDebugKeystore != null && !stagingDebugKeystorePassword.isNullOrBlank()) {
+        signingConfig = signingConfigs.getByName("stagingDebug")
+      }
+    }
+
     release {
       isCrunchPngs = false
-      isMinifyEnabled = false
+      isMinifyEnabled = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("release")
+      resValue("string", "google_web_client_id", productionWebClientId)
+      if (productionReleaseCandidate) {
+        signingConfig = signingConfigs.getByName("productionUpload")
+      }
     }
-    debug { signingConfig = signingConfigs.getByName("debugConfig") }
   }
+
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
   }
+
   buildFeatures {
     compose = true
     buildConfig = true
+    resValues = true
   }
-  testOptions { unitTests { isIncludeAndroidResources = true } }
+
+  testOptions {
+    unitTests { isIncludeAndroidResources = true }
+  }
 }
 
-// Configure the Secrets Gradle Plugin to use .env and .env.example files
-// to match the convention used in Web projects.
-secrets {
-  propertiesFileName = ".env"
-  defaultPropertiesFileName = ".env.example"
+ksp {
+  arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
 
-// Some unused dependencies are commented out below instead of being removed.
-// This makes it easy to add them back in the future if needed.
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
-  // implementation(libs.accompanist.permissions)
   implementation(libs.androidx.activity.compose)
-  // implementation(libs.androidx.camera.camera2)
-  // implementation(libs.androidx.camera.core)
-  // implementation(libs.androidx.camera.lifecycle)
-  // implementation(libs.androidx.camera.view)
   implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.androidx.compose.material3)
@@ -86,32 +125,26 @@ dependencies {
   implementation(libs.androidx.compose.ui.graphics)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.core.ktx)
-  implementation(libs.androidx.datastore.preferences)
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
   implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
-  implementation(libs.coil.compose)
-  implementation(libs.converter.moshi)
-  implementation(libs.firebase.ai)
-  // Uncomment to use Firestore:
-  // implementation(libs.firebase.firestore)
-
-  // Firebase Auth with Google Sign-In
   implementation(libs.firebase.auth)
+  implementation("com.google.firebase:firebase-functions")
+  implementation("com.google.firebase:firebase-messaging")
+  implementation("com.google.firebase:firebase-appcheck-playintegrity")
+  debugImplementation("com.google.firebase:firebase-appcheck-debug")
   implementation(libs.androidx.credentials)
   implementation(libs.androidx.credentials.play.services)
   implementation(libs.googleid)
-  implementation(libs.firebase.appcheck.recaptcha)
+  implementation("com.google.android.gms:play-services-auth:21.6.0")
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
-  implementation(libs.logging.interceptor)
-  implementation(libs.moshi.kotlin)
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
   implementation(libs.okhttp)
-  // implementation(libs.play.services.location)
-  implementation(libs.retrofit)
+
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)
@@ -121,13 +154,15 @@ dependencies {
   testImplementation(libs.roborazzi)
   testImplementation(libs.roborazzi.compose)
   testImplementation(libs.roborazzi.junit.rule)
+
   androidTestImplementation(platform(libs.androidx.compose.bom))
   androidTestImplementation(libs.androidx.compose.ui.test.junit4)
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.runner)
+
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
+
   "ksp"(libs.androidx.room.compiler)
-  "ksp"(libs.moshi.kotlin.codegen)
 }

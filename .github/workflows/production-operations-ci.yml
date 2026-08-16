@@ -1,0 +1,112 @@
+name: Production Operations CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-operations-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  APPROVED_BLOCK1_SHA: 4f674d27dfec148e10108274de23013ae73613df
+
+jobs:
+  repository-operations-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact candidate with full history
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Verify exact source and approved Block 1 lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_SHA" ]] || {
+            echo 'Checked-out SHA does not match the pull request head.' >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "$APPROVED_BLOCK1_SHA" "$SOURCE_SHA" || {
+            echo 'Block 2 candidate is not descended from the exact approved Block 1 SHA.' >&2
+            exit 1
+          }
+          echo "Block 2 repository candidate: $SOURCE_SHA"
+          echo "Approved Block 1 ancestor: $APPROVED_BLOCK1_SHA"
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Current-tree secret audit
+        env:
+          SECRET_AUDIT_OUTPUT: ${{ runner.temp }}/block2-secret-current.json
+        run: node scripts/repository-secret-audit.mjs current
+
+      - name: Production environment isolation guard
+        run: node scripts/production-readiness-guard.mjs repository
+
+      - name: Production operations policy and truth-state guard
+        run: node scripts/production-operations-guard.mjs
+
+      - name: Recovery planner dry-run verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in functions firestore-rules configuration android; do
+            node scripts/production-recovery-plan.mjs \
+              --manifest operations/release/known-good-manifest.example.json \
+              --target "$target" \
+              --mode plan >"$RUNNER_TEMP/recovery-$target.json"
+          done
+          node - <<'NODE'
+          const fs = require('node:fs');
+          for (const target of ['functions', 'firestore-rules', 'configuration', 'android']) {
+            const payload = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/recovery-${target}.json`, 'utf8'));
+            if (payload.executionState !== 'NOT_EXECUTED') throw new Error(`${target}: planner attempted execution`);
+            if (payload.verificationState !== 'PRODUCTION_VERIFICATION_REQUIRED') throw new Error(`${target}: truth state overstated`);
+          }
+          NODE
+
+      - name: Backend regression, Block 2 contracts and dependency audit
+        working-directory: functions
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts
+          npm test
+          npm audit --omit=dev --audit-level=high
+
+      - name: Assert repository-only completion state
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'PASS — repository operations readiness checks completed.'
+          echo 'productionRecoveryVerified=false'
+          echo 'monitoringActive=false'
+          echo 'alertsActive=false'
+          echo 'legalApproval=false'
+          echo 'No production deployment or Google Play publication is performed by this workflow.'
+
+      - name: Upload sanitized Block 2 evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-operations-evidence-${{ env.SOURCE_SHA }}
+          path: |
+            ${{ runner.temp }}/block2-secret-current.json
+            ${{ runner.temp }}/recovery-functions.json
+            ${{ runner.temp }}/recovery-firestore-rules.json
+            ${{ runner.temp }}/recovery-configuration.json
+            ${{ runner.temp }}/recovery-android.json
+          if-no-files-found: warn
+          retention-days: 14

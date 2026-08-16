@@ -1,0 +1,4 @@
+<resources>
+    <!-- Staging-only Web OAuth client ID. Debug resources override the blank release-safe default. -->
+    <string name="google_web_client_id" translatable="false">716864421960-hnt5709tqk9qp79si8ggplf5jif1ulfu.apps.googleusercontent.com</string>
+</resources>

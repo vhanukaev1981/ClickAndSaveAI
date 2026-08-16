@@ -1,0 +1,279 @@
+name: Production Release Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact 40-character source SHA to release
+        required: true
+        type: string
+      confirm_environment:
+        description: Type CLICKANDSAVEAI_PRODUCTION
+        required: true
+        type: string
+      authorize_firebase_deploy:
+        description: Type DEPLOY_FIREBASE_PRODUCTION only when a separately authorized Firebase deployment is intended
+        required: true
+        default: NO_DEPLOY
+        type: string
+
+concurrency:
+  group: clickandsaveai-production-release
+  cancel-in-progress: false
+
+jobs:
+  production-candidate:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      PRODUCTION_FIREBASE_PROJECT_ID: ${{ vars.PRODUCTION_FIREBASE_PROJECT_ID }}
+      PRODUCTION_GOOGLE_WEB_CLIENT_ID: ${{ vars.PRODUCTION_GOOGLE_WEB_CLIENT_ID }}
+      PRODUCTION_APP_SIGNING_CERT_SHA1: ${{ vars.PRODUCTION_APP_SIGNING_CERT_SHA1 }}
+      PRODUCTION_APP_SIGNING_CERT_SHA256: ${{ vars.PRODUCTION_APP_SIGNING_CERT_SHA256 }}
+      PRODUCTION_UPLOAD_KEY_ALIAS: ${{ vars.PRODUCTION_UPLOAD_KEY_ALIAS }}
+      PRODUCTION_GOOGLE_SERVICES_JSON_B64: ${{ secrets.PRODUCTION_GOOGLE_SERVICES_JSON_B64 }}
+      PRODUCTION_UPLOAD_KEYSTORE_B64: ${{ secrets.PRODUCTION_UPLOAD_KEYSTORE_B64 }}
+      PRODUCTION_UPLOAD_STORE_PASSWORD: ${{ secrets.PRODUCTION_UPLOAD_STORE_PASSWORD }}
+      PRODUCTION_UPLOAD_KEY_PASSWORD: ${{ secrets.PRODUCTION_UPLOAD_KEY_PASSWORD }}
+
+    steps:
+      - name: Guard explicit production authorization and inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ '${{ inputs.confirm_environment }}' == 'CLICKANDSAVEAI_PRODUCTION' ]] || { echo 'Production confirmation phrase mismatch.' >&2; exit 1; }
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'source_sha must be an exact lowercase 40-character commit SHA.' >&2; exit 1; }
+          missing=()
+          for name in PRODUCTION_FIREBASE_PROJECT_ID PRODUCTION_GOOGLE_WEB_CLIENT_ID PRODUCTION_APP_SIGNING_CERT_SHA1 PRODUCTION_APP_SIGNING_CERT_SHA256 PRODUCTION_UPLOAD_KEY_ALIAS PRODUCTION_GOOGLE_SERVICES_JSON_B64 PRODUCTION_UPLOAD_KEYSTORE_B64 PRODUCTION_UPLOAD_STORE_PASSWORD PRODUCTION_UPLOAD_KEY_PASSWORD; do
+            [[ -n "${!name:-}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing production environment inputs:' >&2
+            printf ' %s' "${missing[@]}" >&2
+            printf '\n' >&2
+            exit 1
+          fi
+          [[ "$PRODUCTION_FIREBASE_PROJECT_ID" != 'clickandsaveai-staging' ]] || { echo 'Production project cannot equal staging.' >&2; exit 1; }
+
+      - name: Check out exact production source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Verify exact source and P0 lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          P0_SHA='6a3a3ac2dcbeef16260cb8d7456568a41c80fa01'
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          [[ "$ACTUAL_SHA" == "$SOURCE_SHA" ]] || { echo "Checked out $ACTUAL_SHA instead of $SOURCE_SHA" >&2; exit 1; }
+          git merge-base --is-ancestor "$P0_SHA" "$ACTUAL_SHA" || { echo 'Source is not descended from the frozen P0 checkpoint.' >&2; exit 1; }
+
+      - name: Require final CI success on exact source SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUNS="$(gh api --method GET "/repos/$GITHUB_REPOSITORY/actions/workflows/android-ci.yml/runs?head_sha=$SOURCE_SHA&status=completed&per_page=20")"
+          RUN_NUMBER="$(printf '%s' "$RUNS" | jq -r '[.workflow_runs[] | select(.conclusion == "success")][0].run_number // ""')"
+          [[ -n "$RUN_NUMBER" ]] || { echo "No successful final CI exists for exact SHA $SOURCE_SHA." >&2; exit 1; }
+          echo "FINAL_CI_RUN_NUMBER=$RUN_NUMBER" >> "$GITHUB_ENV"
+          echo "Verified final CI #$RUN_NUMBER for exact source SHA."
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Run repository and history security gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          SECRET_AUDIT_OUTPUT="$RUNNER_TEMP/secret-current.json" node scripts/repository-secret-audit.mjs current
+          SECRET_AUDIT_OUTPUT="$RUNNER_TEMP/secret-history.json" node scripts/repository-secret-audit.mjs history
+          node scripts/production-readiness-guard.mjs repository
+
+      - name: Materialize production configuration without logging credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f app/google-services.json app/src/release/google-services.json
+          mkdir -p app/src/release
+          GOOGLE_CONFIG="$RUNNER_TEMP/google-services-production.json"
+          UPLOAD_KEYSTORE="$RUNNER_TEMP/clickandsaveai-production-upload.jks"
+          printf '%s' "$PRODUCTION_GOOGLE_SERVICES_JSON_B64" | base64 --decode > "$GOOGLE_CONFIG"
+          printf '%s' "$PRODUCTION_UPLOAD_KEYSTORE_B64" | base64 --decode > "$UPLOAD_KEYSTORE"
+          chmod 600 "$GOOGLE_CONFIG" "$UPLOAD_KEYSTORE"
+          cp "$GOOGLE_CONFIG" app/src/release/google-services.json
+          echo "PRODUCTION_GOOGLE_SERVICES_JSON_PATH=$GOOGLE_CONFIG" >> "$GITHUB_ENV"
+          echo "PRODUCTION_UPLOAD_KEYSTORE_PATH=$UPLOAD_KEYSTORE" >> "$GITHUB_ENV"
+          echo 'PRODUCTION_RELEASE_CANDIDATE=true' >> "$GITHUB_ENV"
+
+      - name: Verify production configuration isolation
+        run: node scripts/production-readiness-guard.mjs materialized
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install required Android SDK packages
+        run: sdkmanager 'platforms;android-36.1' 'build-tools;36.0.0'
+
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Re-run backend regression and dependency severity gate
+        working-directory: functions
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts
+          npm test
+          npm audit --omit=dev --audit-level=high
+
+      - name: Re-run Android regression and lint
+        run: gradle --no-daemon testDebugUnitTest lintDebug --stacktrace
+
+      - name: Build signed production candidate APK and AAB
+        run: gradle --no-daemon assembleRelease bundleRelease --stacktrace
+
+      - name: Verify signing identities and record exact-SHA traceability
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
+          AAB="$(find app/build/outputs/bundle/release -maxdepth 1 -name '*.aab' -print -quit)"
+          [[ -n "$APK" && -n "$AAB" ]] || { echo 'Signed release APK/AAB not found.' >&2; exit 1; }
+
+          APK_CERT_OUTPUT="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK")"
+          UPLOAD_CERT_SHA256="$(printf '%s\n' "$APK_CERT_OUTPUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          [[ "$UPLOAD_CERT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo 'Unable to identify upload signing certificate.' >&2; exit 1; }
+
+          AAB_CERT_OUTPUT="$(keytool -printcert -jarfile "$AAB")"
+          AAB_CERT_SHA256="$(printf '%s\n' "$AAB_CERT_OUTPUT" | sed -n 's/^[[:space:]]*SHA256: //p' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          [[ "$AAB_CERT_SHA256" == "$UPLOAD_CERT_SHA256" ]] || { echo 'APK and AAB upload signing identities differ.' >&2; exit 1; }
+
+          PLAY_CERT_SHA1="$(printf '%s' "$PRODUCTION_APP_SIGNING_CERT_SHA1" | tr '[:lower:]' '[:upper:]' | tr -d ':')"
+          [[ "$PLAY_CERT_SHA1" =~ ^[0-9A-F]{40}$ ]] || { echo 'PRODUCTION_APP_SIGNING_CERT_SHA1 must be a SHA-1 certificate fingerprint.' >&2; exit 1; }
+          PLAY_CERT_SHA256="$(printf '%s' "$PRODUCTION_APP_SIGNING_CERT_SHA256" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          [[ "$PLAY_CERT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo 'PRODUCTION_APP_SIGNING_CERT_SHA256 must be a SHA-256 certificate fingerprint.' >&2; exit 1; }
+          [[ "$UPLOAD_CERT_SHA256" != "$PLAY_CERT_SHA256" ]] || { echo 'Upload key must be distinct from the Google Play app signing key.' >&2; exit 1; }
+
+          VERSION_CODE="$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)"
+          VERSION_NAME="$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)"
+          OUT="$RUNNER_TEMP/production-candidate"
+          mkdir -p "$OUT"
+          cp "$APK" "$AAB" "$OUT/"
+          APK_SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          AAB_SHA256="$(sha256sum "$AAB" | awk '{print $1}')"
+          cat > "$OUT/identity.txt" <<EOF
+          source_sha=$SOURCE_SHA
+          ci_run_number=$FINAL_CI_RUN_NUMBER
+          production_gate_run_id=$GITHUB_RUN_ID
+          production_gate_run_number=$GITHUB_RUN_NUMBER
+          application_id=com.aistudio.clickandsaveai.app
+          version_code=$VERSION_CODE
+          version_name=$VERSION_NAME
+          firebase_project_id=$PRODUCTION_FIREBASE_PROJECT_ID
+          apk_file=$(basename "$APK")
+          apk_sha256=$APK_SHA256
+          aab_file=$(basename "$AAB")
+          aab_sha256=$AAB_SHA256
+          upload_signing_cert_sha256=$UPLOAD_CERT_SHA256
+          play_app_signing_cert_sha1=$PLAY_CERT_SHA1
+          play_app_signing_cert_sha256=$PLAY_CERT_SHA256
+          release_approved=false
+          firebase_deployed=false
+          google_play_published=false
+          EOF
+
+      - name: Upload signed production candidate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: clickandsaveai-production-candidate-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/production-candidate
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove materialized production credential files
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          rm -f app/src/release/google-services.json "$PRODUCTION_GOOGLE_SERVICES_JSON_PATH" "$PRODUCTION_UPLOAD_KEYSTORE_PATH"
+
+  deploy-firebase-production:
+    needs: production-candidate
+    if: ${{ inputs.authorize_firebase_deploy == 'DEPLOY_FIREBASE_PRODUCTION' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      PRODUCTION_FIREBASE_PROJECT_ID: ${{ vars.PRODUCTION_FIREBASE_PROJECT_ID }}
+
+    steps:
+      - name: Check out exact approved candidate
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Re-guard production deployment target
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ '${{ inputs.confirm_environment }}' == 'CLICKANDSAVEAI_PRODUCTION' ]] || exit 1
+          [[ -n "$PRODUCTION_FIREBASE_PROJECT_ID" ]] || { echo 'PRODUCTION_FIREBASE_PROJECT_ID is missing.' >&2; exit 1; }
+          [[ "$PRODUCTION_FIREBASE_PROJECT_ID" != 'clickandsaveai-staging' ]] || { echo 'Refusing production deployment to staging project.' >&2; exit 1; }
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_SHA" ]] || exit 1
+
+      - name: Authenticate production deploy identity with GitHub OIDC
+        uses: google-github-actions/auth@v3
+        with:
+          create_credentials_file: 'true'
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Install backend dependencies and Firebase CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix functions install --ignore-scripts
+          npm install --global firebase-tools@15.24.0
+
+      - name: Re-run backend tests immediately before deploy
+        run: npm --prefix functions test
+
+      - name: Deploy Firebase production only after explicit authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase deploy \
+            --project "$PRODUCTION_FIREBASE_PROJECT_ID" \
+            --only firestore:rules,firestore:indexes,functions \
+            --non-interactive

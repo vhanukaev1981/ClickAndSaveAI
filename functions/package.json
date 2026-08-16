@@ -1,0 +1,21 @@
+{
+  "name": "click-and-save-functions",
+  "private": true,
+  "main": "src/entry.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "test": "node --test",
+    "serve": "firebase emulators:start --only auth,functions,firestore",
+    "deploy": "firebase deploy --only functions,firestore"
+  },
+  "dependencies": {
+    "@google/genai": "2.13.0",
+    "firebase-admin": "14.2.0",
+    "firebase-functions": "7.3.0"
+  },
+  "devDependencies": {
+    "firebase-tools": "15.24.0"
+  }
+}

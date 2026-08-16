@@ -1,8 +1,34 @@
 package com.example.data.repository
 
-import com.example.data.local.*
+import com.example.data.local.AppDatabase
+import com.example.data.local.CouponItem
+import com.example.data.local.InvoiceItem
+import com.example.data.local.SavingsRecord
+import com.example.data.local.WatchlistItem
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
+
+internal fun mergeObservedGmailInvoice(existing: InvoiceItem, incoming: InvoiceItem): InvoiceItem {
+    val existingSourceId = existing.sourceMessageId?.trim().orEmpty()
+    val incomingSourceId = incoming.sourceMessageId?.trim().orEmpty()
+    require(existingSourceId.isNotEmpty() && existingSourceId == incomingSourceId) {
+        "Gmail invoice merge requires the same non-empty sourceMessageId"
+    }
+
+    return existing.copy(
+        providerName = incoming.providerName,
+        category = incoming.category,
+        monthlyCost = incoming.monthlyCost,
+        billDate = incoming.billDate,
+        sourceType = incoming.sourceType,
+        verificationStatus = incoming.verificationStatus
+    )
+}
+
+internal fun normalizeRemovedGmailSourceIds(sourceMessageIds: List<String>): List<String> =
+    sourceMessageIds
+        .map(String::trim)
+        .filter(String::isNotEmpty)
+        .distinct()
 
 class ShoppingRepository(private val db: AppDatabase) {
     val watchlistItems: Flow<List<WatchlistItem>> = db.watchlistDao().getAllWatchlistItems()
@@ -18,24 +44,47 @@ class ShoppingRepository(private val db: AppDatabase) {
     suspend fun updateWatchlistItem(item: WatchlistItem) = db.watchlistDao().updateItem(item)
 
     suspend fun addInvoice(invoice: InvoiceItem) = db.invoiceDao().insertInvoice(invoice)
+
+    suspend fun upsertObservedGmailInvoice(invoice: InvoiceItem) {
+        val sourceMessageId = invoice.sourceMessageId?.trim().orEmpty()
+        if (sourceMessageId.isEmpty()) {
+            db.invoiceDao().insertInvoice(invoice)
+            return
+        }
+
+        val existing = db.invoiceDao().findBySourceMessageId(sourceMessageId)
+        if (existing != null) {
+            db.invoiceDao().updateInvoice(mergeObservedGmailInvoice(existing, invoice))
+            return
+        }
+
+        val insertedId = db.invoiceDao().insertInvoice(invoice)
+        if (insertedId == -1L) {
+            // Defensive race recovery: another coroutine may have inserted the same Gmail
+            // source between the lookup and INSERT IGNORE.
+            db.invoiceDao().findBySourceMessageId(sourceMessageId)?.let { concurrent ->
+                db.invoiceDao().updateInvoice(mergeObservedGmailInvoice(concurrent, invoice))
+            }
+        }
+    }
+
+    suspend fun deleteObservedGmailInvoicesBySourceIds(sourceMessageIds: List<String>) {
+        val normalized = normalizeRemovedGmailSourceIds(sourceMessageIds)
+        if (normalized.isEmpty()) return
+        db.invoiceDao().deleteObservedGmailInvoicesBySourceIds(normalized)
+    }
+
     suspend fun updateInvoice(invoice: InvoiceItem) = db.invoiceDao().updateInvoice(invoice)
     suspend fun deleteInvoice(id: Long) = db.invoiceDao().deleteInvoice(id)
 
+    /**
+     * Records local interest only. No provider or external system is contacted.
+     */
     suspend fun requestProviderSwitch(invoice: InvoiceItem) {
         db.invoiceDao().updateInvoice(
             invoice.copy(
                 isSwitchRequested = true,
-                status = "מעבר בטיפול - בקשה נשלחה"
-            )
-        )
-        // Record saved amount in savings DAO
-        db.savingsDao().insertSavings(
-            SavingsRecord(
-                title = "מעבר ספק: ${invoice.category} - ${invoice.recommendedAlternative}",
-                storeName = invoice.providerName,
-                amountSaved = invoice.potentialAnnualSavings,
-                category = invoice.category,
-                note = "בקשת מעבר בקליק נשלחה בהצלחה"
+                status = "התעניינות נשמרה מקומית - לא נשלחה לספק"
             )
         )
     }
@@ -50,98 +99,8 @@ class ShoppingRepository(private val db: AppDatabase) {
 
     suspend fun addSavings(record: SavingsRecord) = db.savingsDao().insertSavings(record)
 
-    suspend fun seedSampleDataIfNeeded() {
-        if (db.invoiceDao().getCount() == 0) {
-            val sampleInvoices = listOf(
-                InvoiceItem(
-                    providerName = "חברת החשמל (IEC)",
-                    category = "חשמל",
-                    monthlyCost = 520.00,
-                    recommendedAlternative = "אלקטרה פאוור - 7% הנחה קבועה בחשבון החשמל",
-                    alternativeMonthlyCost = 483.60,
-                    potentialMonthlySavings = 36.40,
-                    status = "פוענח - הצעה מוכנה",
-                    isSwitchRequested = false,
-                    accountNumber = "7894201",
-                    billDate = "07/2026"
-                ),
-                InvoiceItem(
-                    providerName = "סלקום סלולר",
-                    category = "סלולר",
-                    monthlyCost = 149.00,
-                    recommendedAlternative = "פרטנר 5G - חבילה זוגית 200GB ב-89 ₪ לחודש",
-                    alternativeMonthlyCost = 89.00,
-                    potentialMonthlySavings = 60.00,
-                    status = "פוענח - הצעה מוכנה",
-                    isSwitchRequested = false,
-                    accountNumber = "9928130",
-                    billDate = "07/2026"
-                ),
-                InvoiceItem(
-                    providerName = "בזק אינטרנט סיבים",
-                    category = "אינטרנט",
-                    monthlyCost = 120.00,
-                    recommendedAlternative = "סלקום פייבר 1000Mb - כולל נתב ב-89 ₪ לחודש",
-                    alternativeMonthlyCost = 89.00,
-                    potentialMonthlySavings = 31.00,
-                    status = "פוענח - הצעה מוכנה",
-                    isSwitchRequested = false,
-                    accountNumber = "4310294",
-                    billDate = "06/2026"
-                ),
-                InvoiceItem(
-                    providerName = "הראל ביטוח בריאות",
-                    category = "ביטוח",
-                    monthlyCost = 340.00,
-                    recommendedAlternative = "מגדל ביטוח - ביטול כפילויות וכיסוי מורחב ב-255 ₪",
-                    alternativeMonthlyCost = 255.00,
-                    potentialMonthlySavings = 85.00,
-                    status = "פוענח - הצעה מוכנה",
-                    isSwitchRequested = false,
-                    accountNumber = "POL-88320",
-                    billDate = "07/2026"
-                ),
-                InvoiceItem(
-                    providerName = "yes / HOT טלוויזיה",
-                    category = "טלוויזיה",
-                    monthlyCost = 199.00,
-                    recommendedAlternative = "FreeTV / stingTV - חבילת ערוצים וספורט ב-59 ₪",
-                    alternativeMonthlyCost = 59.00,
-                    potentialMonthlySavings = 140.00,
-                    status = "פוענח - הצעה מוכנה",
-                    isSwitchRequested = false,
-                    accountNumber = "TV-10928",
-                    billDate = "07/2026"
-                )
-            )
-            db.invoiceDao().insertInvoices(sampleInvoices)
-        }
-
-        if (db.savingsDao().getCount() == 0) {
-            val sampleSavings = listOf(
-                SavingsRecord(
-                    title = "הוזלת חשבון חשמל במעבר לאלקטרה פאוור",
-                    storeName = "חשמל",
-                    amountSaved = 436.80,
-                    category = "חשמל",
-                    note = "מעבר מוצלח דרך Click & Save AI"
-                ),
-                SavingsRecord(
-                    title = "איחוד חבילת סלולר משפחתית 5G",
-                    storeName = "סלולר",
-                    amountSaved = 720.00,
-                    category = "סלולר",
-                    note = "מעבר לפרטנר 5G ב-₪29 לקו"
-                ),
-                SavingsRecord(
-                    title = "ביטול כפילויות ביטוח בריאות",
-                    storeName = "ביטוח",
-                    amountSaved = 1020.00,
-                    category = "ביטוח",
-                    note = "הוזלה בעקבות סריקת הר הביטוח"
-                )
-            )
-            sampleSavings.forEach { db.savingsDao().insertSavings(it) }
-        }
-    }
+    /**
+     * Production builds must start empty. Demo data belongs in previews, fixtures or tests.
+     */
+    suspend fun seedSampleDataIfNeeded() = Unit
 }
