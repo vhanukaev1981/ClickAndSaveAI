@@ -64,7 +64,7 @@ test("5 v1 cleanup identity and trigger semantics remain exact", () => {
   has(cleanup, /require\(["']firebase-functions\/v1["']\)/);
   has(cleanup, new RegExp(esc(v1)));
   has(cleanup, new RegExp(`projectID\\s*\\.\\s*equals\\(\\s*["']${esc(prod)}["']\\s*\\)`));
-  has(cleanup, /thenElse\(PRODUCTION_AUTH_CLEANUP_SERVICE_ACCOUNT,\s*["']default["']\)/);
+  has(cleanup, /thenElse\(PRODUCTION_AUTH_CLEANUP_SERVICE_ACCOUNT,\s*["']default["']\s*\)/);
   has(cleanup, /runWith\(\{\s*serviceAccount:\s*authCleanupServiceAccount\s*\}\)/);
   has(cleanup, /exports\.onPushAccountDeleted\s*=\s*functions[\s\S]*?\.auth\.user\(\)\.onDelete/);
 });
@@ -102,9 +102,9 @@ test("9 deployer actAs is individual-SA only and covers v1/v2 runtime identities
   has(verifier, /project-wide roles\/iam\.serviceAccountUser exists/);
 });
 
-test("10 Cloud Build enabled-service state is established before default identity discovery", () => {
+test("10 Cloud Build exact enabled-service state is established before default identity discovery", () => {
   has(verifier, new RegExp(`CLOUD_BUILD_SERVICE=["']${esc(cloudBuildService)}["']`));
-  has(verifier, /gcloud services list --project="\$P" --enabled --filter="config\.name:\$CLOUD_BUILD_SERVICE" --format='value\(config\.name\)'/);
+  has(verifier, /gcloud services list --project="\$P" --enabled --filter="config\.name=\$CLOUD_BUILD_SERVICE" --format='value\(config\.name\)'/);
   has(verifier, /gcloud builds get-default-service-account --project="\$P" --region="\$REGION" --format='value\(serviceAccountEmail\)'/);
   assert.ok(
     verifier.indexOf("gcloud services list --project=\"$P\" --enabled") <
