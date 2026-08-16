@@ -216,37 +216,55 @@ CLOUD_BUILD_SERVICE_ENABLED=false
 BUILD_IDENTITY_DISCOVERY_ATTEMPTED=false
 BUILD_SA=""
 PRODUCTION_BUILD_IDENTITY_STATUS="$BUILD_DEFERRED_STATUS"
+CLOUD_BUILD_SERVICE_STATE="UNKNOWN"
 
 set +e
-SERVICE_ROWS="$(gcloud services list --project="$P" --enabled --filter="config.name:$CLOUD_BUILD_SERVICE" --format='value(config.name)' 2>"$SE")"
+SERVICE_ROWS="$(gcloud services list --project="$P" --enabled --filter="config.name=$CLOUD_BUILD_SERVICE" --format='value(config.name)' 2>"$SE")"
 SS=$?
 set -e
 SERVICE_STATE_ERROR="$(tr '\n' ' ' <"$SE")"
 [[ $SS -eq 0 ]] || fatal "Cloud Build service-state query failed; no API was enabled. gcloud: $SERVICE_STATE_ERROR"
 mapfile -t ENABLED_BUILD_SERVICES < <(printf '%s\n' "$SERVICE_ROWS" | sed '/^$/d' | sort -u)
 
-if [[ ${#ENABLED_BUILD_SERVICES[@]} -eq 0 ]]; then
-  pass 'Cloud Build service is not enabled; build identity deferred without API enablement'
-elif [[ ${#ENABLED_BUILD_SERVICES[@]} -eq 1 && "${ENABLED_BUILD_SERVICES[0]}" == "$CLOUD_BUILD_SERVICE" ]]; then
-  CLOUD_BUILD_SERVICE_ENABLED=true
-  BUILD_IDENTITY_DISCOVERY_ATTEMPTED=true
-  set +e
-  BR="$(gcloud builds get-default-service-account --project="$P" --region="$REGION" --format='value(serviceAccountEmail)' 2>"$BE")"
-  BS=$?
-  set -e
-  BUILD_DISCOVERY_ERROR="$(tr '\n' ' ' <"$BE")"
-  [[ $BS -eq 0 ]] || fatal "Cloud Build default service-account discovery failed after enabled-service verification; no API was enabled. gcloud: $BUILD_DISCOVERY_ERROR"
-  BUILD_SA="${BR#projects/$P/serviceAccounts/}"
-  BUILD_SA="${BUILD_SA//$'\r'/}"
-  BUILD_SA="${BUILD_SA//$'\n'/}"
-  if [[ -z "$BUILD_SA" ]]; then
-    pass 'Cloud Build service enabled but discovery returned no default identity; build identity deferred without API enablement'
-  else
-    PRODUCTION_BUILD_IDENTITY_STATUS="READY"
-  fi
-else
-  fatal "Cloud Build enabled-service inventory is ambiguous: ${ENABLED_BUILD_SERVICES[*]}"
-fi
+case ${#ENABLED_BUILD_SERVICES[@]} in
+  0)
+    CLOUD_BUILD_SERVICE_STATE="DISABLED"
+    ;;
+  1)
+    [[ "${ENABLED_BUILD_SERVICES[0]}" == "$CLOUD_BUILD_SERVICE" ]] || fatal "Cloud Build enabled-service inventory is ambiguous: ${ENABLED_BUILD_SERVICES[*]}"
+    CLOUD_BUILD_SERVICE_STATE="ENABLED"
+    ;;
+  *)
+    fatal "Cloud Build enabled-service inventory is ambiguous: ${ENABLED_BUILD_SERVICES[*]}"
+    ;;
+esac
+
+case "$CLOUD_BUILD_SERVICE_STATE" in
+  DISABLED)
+    pass 'Cloud Build service is not enabled; build identity deferred without API enablement'
+    ;;
+  ENABLED)
+    CLOUD_BUILD_SERVICE_ENABLED=true
+    BUILD_IDENTITY_DISCOVERY_ATTEMPTED=true
+    set +e
+    BR="$(gcloud builds get-default-service-account --project="$P" --region="$REGION" --format='value(serviceAccountEmail)' 2>"$BE")"
+    BS=$?
+    set -e
+    BUILD_DISCOVERY_ERROR="$(tr '\n' ' ' <"$BE")"
+    [[ $BS -eq 0 ]] || fatal "Cloud Build default service-account discovery failed after enabled-service verification; no API was enabled. gcloud: $BUILD_DISCOVERY_ERROR"
+    BUILD_SA="${BR#projects/$P/serviceAccounts/}"
+    BUILD_SA="${BUILD_SA//$'\r'/}"
+    BUILD_SA="${BUILD_SA//$'\n'/}"
+    if [[ -z "$BUILD_SA" ]]; then
+      pass 'Cloud Build service enabled but discovery returned no default identity; build identity deferred without API enablement'
+    else
+      PRODUCTION_BUILD_IDENTITY_STATUS="READY"
+    fi
+    ;;
+  *)
+    fatal "internal Cloud Build service state is invalid: $CLOUD_BUILD_SERVICE_STATE"
+    ;;
+esac
 
 if [[ "$PRODUCTION_BUILD_IDENTITY_STATUS" == "READY" ]]; then
   valid_sa "$BUILD_SA"
