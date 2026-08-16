@@ -13,7 +13,7 @@ Replace the absent default 2nd-generation runtime identity dependency with one d
 - Repository ID: `1314210715`
 - Approved parent SHA: `21a3ab694a8e9218152e13fa7e6e9bf1808ec608`
 - Approved parent branch: `agent/production-enablement-block3b3b-v1-runtime-identity`
-- Parent PR: `#68`, Draft/Open/Unmerged`
+- Parent PR: `#68`, Draft/Open/Unmerged
 - Block 3B.3C branch: `agent/production-enablement-block3b3c-v2-runtime-identity`
 
 The implementation must fail closed on any project/repository/identity mismatch. It must not use `clickandsaveai`, `clickandsaveai-staging`, legacy identities, staging identities, or alternate repositories.
