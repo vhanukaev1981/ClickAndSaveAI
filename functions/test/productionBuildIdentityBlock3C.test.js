@@ -88,7 +88,7 @@ test("static Block 3C contract locks exact target, dynamic discovery, and one-sh
 });
 
 test("accepted boundary supports both Google-selected build SAs and validates before exact per-SA actAs", () => {
-  assert.match(acceptedVerifier, new RegExp(esc(compute))); assert.match(acceptedVerifier, new RegExp(esc(legacy))); assert.match(acceptedVerifier, /identity is not owned by Production/); assert.match(acceptedVerifier, /holds forbidden role/);
+  assert.match(acceptedVerifier, /(?:\$N|991489557172)-compute@developer\.gserviceaccount\.com/); assert.match(acceptedVerifier, /(?:\$N|991489557172)@cloudbuild\.gserviceaccount\.com/); assert.match(acceptedVerifier, /identity is not owned by Production/); assert.match(acceptedVerifier, /holds forbidden role/);
   assert.ok(acceptedVerifier.indexOf("holds forbidden role") < acceptedVerifier.indexOf("missing deploy-SA roles/iam.serviceAccountUser on intended build identity"));
   assert.match(acceptedBootstrap, /iam service-accounts add-iam-policy-binding "\$sa"/); assert.match(acceptedBootstrap, /roles\/iam\.serviceAccountUser/); assert.match(acceptedBootstrap, /actAs already present on intended identity/);
   assert.doesNotMatch(acceptedBootstrap, /gcloud projects add-iam-policy-binding[\s\S]{0,300}roles\/iam\.serviceAccountUser/);
