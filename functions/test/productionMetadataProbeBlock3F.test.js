@@ -77,7 +77,8 @@ test("dedicated probe uses the protected Production environment without OIDC or 
     "GCP_WORKLOAD_IDENTITY_PROVIDER",
     "GCP_DEPLOY_SERVICE_ACCOUNT",
   ]) {
-    assert.ok(probe.includes(`${name}: ${{ vars.${name} }}`), `missing protected variable mapping: ${name}`);
+    const expectedMapping = `${name}: ` + "${{ vars." + name + " }}";
+    assert.ok(probe.includes(expectedMapping), `missing protected variable mapping: ${name}`);
   }
 
   for (const name of [
@@ -86,7 +87,8 @@ test("dedicated probe uses the protected Production environment without OIDC or 
     "PRODUCTION_UPLOAD_STORE_PASSWORD",
     "PRODUCTION_UPLOAD_KEY_PASSWORD",
   ]) {
-    assert.ok(probe.includes(`${name}: ${{ secrets.${name} }}`), `missing protected secret mapping: ${name}`);
+    const expectedMapping = `${name}: ` + "${{ secrets." + name + " }}";
+    assert.ok(probe.includes(expectedMapping), `missing protected secret mapping: ${name}`);
   }
 });
 
