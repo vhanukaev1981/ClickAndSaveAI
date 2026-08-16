@@ -247,10 +247,7 @@ case "$CLOUD_BUILD_SERVICE_STATE" in
     CLOUD_BUILD_SERVICE_ENABLED=true
     BUILD_IDENTITY_DISCOVERY_ATTEMPTED=true
     set +e
-    BR="$(timeout 30s gcloud builds get-default-service-account \
-      --project="$P" \
-      --region="$REGION" \
-      --format='value(serviceAccountEmail)' 2>"$BE")"
+    BR="$(timeout 30s gcloud builds get-default-service-account --project="$P" --region="$REGION" --format='value(serviceAccountEmail)' 2>"$BE")"
     BS=$?
     set -e
     BUILD_DISCOVERY_ERROR="$(tr '\r\n' '  ' <"$BE" | sed -E 's/[^[:print:]\t]/?/g; s/[[:space:]]+/ /g; s/^ //; s/ $//')"
