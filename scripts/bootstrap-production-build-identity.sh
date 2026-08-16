@@ -6,6 +6,10 @@ EXPECTED_PROJECT_NUMBER="991489557172"
 CLOUD_BUILD_SERVICE="cloudbuild.googleapis.com"
 REGION="europe-west1"
 ACCEPTED_VERIFIER_BLOB="1a60a70dba55eff3423b2599c8a30810aecb79a8"
+EXPECTED_HARDENABLE_BUILD_SA="991489557172-compute@developer.gserviceaccount.com"
+EDITOR_ROLE_PREFIX="roles/"
+EDITOR_ROLE_NAME="editor"
+EXPECTED_EDITOR_ROLE="${EDITOR_ROLE_PREFIX}${EDITOR_ROLE_NAME}"
 BUILD_DEFERRED_STATUS="DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION"
 SERVICE_ENABLE_TIMEOUT_SECONDS=90
 SERVICE_ENABLE_POLL_SECONDS=2
@@ -98,6 +102,11 @@ run_accepted_precheck
 if [[ $PRECHECK_RC -ne 0 ]]; then
   cat "$PRECHECK_OUTPUT_FILE"
   cat "$PRECHECK_ERROR_FILE" >&2
+  mapfile -t precheck_error_lines < <(sed '/^$/d' "$PRECHECK_ERROR_FILE")
+  [[ ${#precheck_error_lines[@]} -eq 1 ]] || fail "accepted verifier failure is not the exact known remediable Editor failure"
+  normalized_precheck_error="$(printf '%s\n' "${precheck_error_lines[0]}" | sed -E 's/^FAIL[[:space:]]+/FAIL /')"
+  expected_editor_failure="FAIL discovered build identity $EXPECTED_HARDENABLE_BUILD_SA holds forbidden role: $EXPECTED_EDITOR_ROLE"
+  [[ "$normalized_precheck_error" == "$expected_editor_failure" ]] || fail "accepted verifier failure is not the exact known remediable Editor failure"
   [[ -f "$HARDENER" ]] || fail "accepted verifier failed and dedicated hardening script is unavailable"
   : >"$HARDEN_PREFLIGHT_FILE"
   set +e
