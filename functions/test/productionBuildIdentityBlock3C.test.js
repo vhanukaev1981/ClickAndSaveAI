@@ -34,10 +34,37 @@ function bootScenario(o = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "block3c-b-")), scripts = path.join(dir, "scripts"), bin = path.join(dir, "bin"), state = path.join(dir, "state");
   fs.mkdirSync(scripts); fs.mkdirSync(bin); fs.mkdirSync(state);
   exe(path.join(scripts, "bootstrap-production-build-identity.sh"), bootstrap);
-  exe(path.join(scripts, "verify-production-build-identity.sh"), "#!/usr/bin/env bash\nset -euo pipefail\nn=$(cat \"$FAKE_STATE/closure\"); echo $((n+1)) >\"$FAKE_STATE/closure\"\n");
-  exe(path.join(scripts, "bootstrap-production-runtime-build-actas.sh"), "#!/usr/bin/env bash\nset -euo pipefail\nn=$(cat \"$FAKE_STATE/runtime\"); echo $((n+1)) >\"$FAKE_STATE/runtime\"\nprintf 'runtime-bootstrap %s\\n' \"$(cat \"$FAKE_STATE/last\")\" >>\"$FAKE_STATE/events\"\n");
-  exe(path.join(scripts, "verify-production-runtime-build-actas.sh"), `#!/usr/bin/env bash\nset -euo pipefail\ncat >"$DISCOVERY_OUTPUT" <<STATE\nRUNTIME_SAS=("v1@${prod}.iam.gserviceaccount.com" "v2@${prod}.iam.gserviceaccount.com")\nBUILD_SA="${o.preSa || ""}"\nPRODUCTION_BUILD_IDENTITY_STATUS="${o.preStatus || ((o.enabled && o.preSa) ? "READY" : deferred)}"\nCLOUD_BUILD_SERVICE_ENABLED=${o.enabled ? "true" : "false"}\nBUILD_IDENTITY_DISCOVERY_ATTEMPTED=${o.enabled ? "true" : "false"}\nSTATE\n`);
-  for (const [f, v] of [["enabled", o.enabled ? 1 : 0], ["enable", 0], ["init", 0], ["runtime", 0], ["closure", 0], ["clock", 0]]) set(path.join(state, f), v);
+  exe(path.join(scripts, "verify-production-build-identity.sh"), "#!/usr/bin/env bash\nset -euo pipefail\n[[ \"$(cat \"$FAKE_STATE/build-actas\")\" == 1 ]] || exit 70\nn=$(cat \"$FAKE_STATE/closure\"); echo $((n+1)) >\"$FAKE_STATE/closure\"\necho closure >>\"$FAKE_STATE/events\"\n");
+  exe(path.join(scripts, "bootstrap-production-runtime-build-actas.sh"), "#!/usr/bin/env bash\nset -euo pipefail\nn=$(cat \"$FAKE_STATE/runtime\"); echo $((n+1)) >\"$FAKE_STATE/runtime\"\necho 1 >\"$FAKE_STATE/build-actas\"\nprintf 'runtime-bootstrap %s\\n' \"$(cat \"$FAKE_STATE/last\")\" >>\"$FAKE_STATE/events\"\n");
+  exe(path.join(scripts, "verify-production-runtime-build-actas.sh"), `#!/usr/bin/env bash
+set -euo pipefail
+runtime_actas=true
+[[ "$(cat "$FAKE_STATE/runtime-v1-actas")" == 1 && "$(cat "$FAKE_STATE/runtime-v2-actas")" == 1 ]] || runtime_actas=false
+build_actas=true
+[[ "$(cat "$FAKE_STATE/build-actas")" == 1 ]] || build_actas=false
+printf 'pre-verifier allow-missing=%s runtime-actas=%s build-actas=%s\\n' "\${ALLOW_MISSING_ACTAS:-0}" "$runtime_actas" "$build_actas" >>"$FAKE_STATE/events"
+if [[ "\${ALLOW_MISSING_ACTAS:-0}" == 0 ]]; then
+  [[ "$runtime_actas" == true ]] || exit 61
+  if [[ "${o.preStatus || ((o.enabled && o.preSa) ? "READY" : deferred)}" == READY ]]; then
+    [[ "$build_actas" == true ]] || exit 62
+  fi
+fi
+cat >"$DISCOVERY_OUTPUT" <<STATE
+RUNTIME_SAS=("v1@${prod}.iam.gserviceaccount.com" "v2@${prod}.iam.gserviceaccount.com")
+BUILD_SA="${o.preSa || ""}"
+PRODUCTION_BUILD_IDENTITY_STATUS="${o.preStatus || ((o.enabled && o.preSa) ? "READY" : deferred)}"
+CLOUD_BUILD_SERVICE_ENABLED=${o.enabled ? "true" : "false"}
+BUILD_IDENTITY_DISCOVERY_ATTEMPTED=${o.enabled ? "true" : "false"}
+STATE
+printf 'Production runtime/build actAs verification PASSED.\\n'
+printf 'productionRuntimeActAsConfigured=%s\\n' "$runtime_actas"
+printf 'productionBuildActAsConfigured=%s\\n' "$build_actas"
+`);
+  for (const [f, v] of [
+    ["enabled", o.enabled ? 1 : 0], ["enable", 0], ["init", 0], ["runtime", 0], ["closure", 0], ["clock", 0],
+    ["runtime-v1-actas", o.runtimeV1ActAs === false ? 0 : 1], ["runtime-v2-actas", o.runtimeV2ActAs === false ? 0 : 1],
+    ["build-actas", o.buildActAs === false ? 0 : 1],
+  ]) set(path.join(state, f), v);
   fs.writeFileSync(path.join(state, "last"), ""); fs.writeFileSync(path.join(state, "events"), "");
   fs.writeFileSync(path.join(state, "queue"), (o.reads || [`SA:${compute}`]).join("\n") + "\n");
   fs.writeFileSync(path.join(state, "init-exit"), String(o.initExit || 0));
@@ -83,6 +110,7 @@ test("static Block 3C contract locks exact target, dynamic discovery, and one-sh
   assert.match(bootstrap, /EXPECTED_PROJECT_ID="click-save-ai-production"/); assert.match(bootstrap, /EXPECTED_PROJECT_NUMBER="991489557172"/); assert.match(bootstrap, /REGION="europe-west1"/);
   assert.match(bootstrap, /CLOUD_BUILD_SERVICE="cloudbuild\.googleapis\.com"/); assert.equal((bootstrap.match(/gcloud services enable/g) || []).length, 1); assert.match(bootstrap, /gcloud builds get-default-service-account/);
   assert.match(bootstrap, /MAX_INITIALIZATION_BUILDS=1/); assert.match(bootstrap, /--no-source/); assert.match(bootstrap, /args:\s*\["-ceu",\s*"true"\]/);
+  assert.match(bootstrap, /ALLOW_MISSING_ACTAS=1/); assert.match(bootstrap, /productionRuntimeActAsConfigured=true/);
   assert.doesNotMatch(`${bootstrap}\n${closure}`, /firebase deploy|gcloud functions deploy|gcloud run deploy|gcloud app create|service-accounts keys (?:create|delete)|roles\/(?:owner|editor)|roles\/iam\.serviceAccountTokenCreator/);
   assert.doesNotMatch(`${bootstrap}\n${closure}`, /add-iam-policy-binding/);
 });
@@ -102,6 +130,32 @@ test("non-Production targets and verifier-blob mismatch fail before mutation", (
 test("Cloud Build API enables exactly once when disabled and never duplicates when enabled", () => {
   let s = bootScenario({ reads: [`SA:${compute}`] }); let r = s.run(); assert.equal(r.status, 0, r.stderr); assert.equal(s.n("enable"), 1);
   s = bootScenario({ enabled: true, preSa: compute, reads: [`SA:${compute}`] }); r = s.run(); assert.equal(r.status, 0, r.stderr); assert.equal(s.n("enable"), 0);
+});
+
+test("READY build identity with missing build actAs resumes through the accepted bootstrap", () => {
+  const s = bootScenario({ enabled: true, preSa: compute, buildActAs: false, reads: [`SA:${compute}`] });
+  const r = s.run();
+  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+  assert.equal(s.n("enable"), 0);
+  assert.equal(s.n("init"), 0);
+  assert.equal(s.n("runtime"), 1);
+  assert.equal(s.n("closure"), 1);
+  assert.equal(s.n("build-actas"), 1);
+  assert.match(s.text("events"), /pre-verifier allow-missing=1 runtime-actas=true build-actas=false/);
+  assert.match(s.text("events"), new RegExp(`runtime-bootstrap ${esc(compute)}[\\s\\S]*closure`));
+});
+
+test("missing runtime actAs fails before Cloud Build enablement or any bootstrap mutation", () => {
+  for (const missing of ["runtimeV1ActAs", "runtimeV2ActAs"]) {
+    const s = bootScenario({ [missing]: false, reads: [`SA:${compute}`] });
+    const r = s.run();
+    assert.equal(r.status, 1, `${missing} unexpectedly passed: ${r.stdout}\n${r.stderr}`);
+    assert.equal(s.n("enable"), 0);
+    assert.equal(s.n("init"), 0);
+    assert.equal(s.n("runtime"), 0);
+    assert.equal(s.n("closure"), 0);
+    assert.match(s.text("events"), /pre-verifier allow-missing=1 runtime-actas=false/);
+  }
 });
 
 test("immediate identity skips initialization; empty identity polls bounded then submits at most one no-source build", () => {
