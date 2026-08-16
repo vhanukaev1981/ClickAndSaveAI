@@ -2,7 +2,7 @@
 
 ## Goal
 
-Replace the absent default 2nd-generation runtime identity dependency with one dedicated Production user-managed v2 runtime service account, while preserving the dedicated v1 auth-cleanup identity and allowing Cloud Build identity discovery to defer safely when Cloud Build is not initialized.
+Replace the absent default 2nd-generation runtime identity dependency with one dedicated Production user-managed v2 runtime service account, while preserving the dedicated v1 auth-cleanup identity and allowing Cloud Build identity discovery to defer safely when the build service is not enabled or has not yet produced a default build identity.
 
 ## Locked execution target
 
@@ -105,7 +105,17 @@ The bootstrap must not create service-account keys, enable APIs, initialize App 
 
 ## Cloud Build identity sequencing
 
-Cloud Build identity discovery remains authoritative and must use exactly:
+Cloud Build service state must be established before any default build-service-account discovery. The verifier must first run exactly the Production-scoped enabled-service query:
+
+```bash
+gcloud services list \
+  --project=click-save-ai-production \
+  --enabled \
+  --filter='config.name:cloudbuild.googleapis.com' \
+  --format='value(config.name)'
+```
+
+Only when `cloudbuild.googleapis.com` is confirmed enabled may the verifier invoke the authoritative default build identity discovery command:
 
 ```bash
 gcloud builds get-default-service-account \
@@ -114,13 +124,18 @@ gcloud builds get-default-service-account \
   --format='value(serviceAccountEmail)'
 ```
 
-Outcomes are separated from runtime identity readiness:
+The state machine is deterministic and independent of gcloud error prose:
 
-- `READY`: discovery succeeds with a non-empty Production-owned identity; normal build identity validation and per-service-account deployer `actAs` checks apply.
-- `DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION`: the command returns no identity or fails specifically because Cloud Build is not initialized/enabled. No API is enabled, no substitute identity is created, no build `actAs` mutation occurs, and runtime bootstrap/verification continues.
-- Any unrelated discovery error (authorization, malformed command, unexpected service error, target mismatch, etc.) remains a hard failure.
+1. **Service-state query fails** → hard FAIL. No API is enabled.
+2. **`cloudbuild.googleapis.com` is not enabled** → `productionCloudBuildServiceEnabled=false`, `productionBuildIdentityDiscoveryAttempted=false`, `BUILD_SA` remains empty, and `productionBuildIdentityStatus=DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION`. The default build identity discovery command must not be invoked and build `actAs` verification/mutation is skipped.
+3. **Cloud Build service is enabled** → set `productionCloudBuildServiceEnabled=true`, set `productionBuildIdentityDiscoveryAttempted=true`, and only then run `gcloud builds get-default-service-account`.
+4. **Enabled-service identity discovery command fails** → hard FAIL independent of the command's stderr wording.
+5. **Enabled-service identity discovery succeeds with an empty identity** → `productionBuildIdentityStatus=DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION`; no substitute identity is created or inferred and build `actAs` is skipped.
+6. **Enabled-service identity discovery returns a non-empty Production-owned identity** → `productionBuildIdentityStatus=READY`; normal build identity validation and per-service-account deployer `actAs` checks apply.
 
-The verifier must emit `productionBuildIdentityStatus` explicitly and must not collapse a deferred build identity into a runtime failure.
+The retired prose-based build-service classifier must not be present. Disabled-service deferral is determined solely by the explicit enabled-service query, not by matching `SERVICE_DISABLED`, "not initialized", "has not been used", or other gcloud error text.
+
+The verifier must export and print the truth flags `CLOUD_BUILD_SERVICE_ENABLED`, `BUILD_IDENTITY_DISCOVERY_ATTEMPTED`, `PRODUCTION_BUILD_IDENTITY_STATUS`, `BUILD_SA`, `productionCloudBuildServiceEnabled`, `productionBuildIdentityDiscoveryAttempted`, and `productionBuildIdentityStatus`. Runtime identity readiness must remain independent from build identity readiness.
 
 ## Runtime privilege audit
 
@@ -150,7 +165,11 @@ Static and executable tests must prove:
 - v2 creation/reuse, zero user-managed keys, and zero project roles;
 - per-service-account deployer `actAs` only;
 - no project-wide Service Account User;
-- Cloud Build READY versus DEFERRED behavior;
+- Cloud Build service-state-before-discovery ordering;
+- disabled-service deferral without invoking build identity discovery;
+- enabled-service discovery failure as a hard failure independent of error prose;
+- enabled-service empty identity versus `READY` behavior;
+- explicit service/discovery/build truth flags;
 - no Compute/App Engine/API initialization commands;
 - no deployment commands;
 - no service-account key creation;
