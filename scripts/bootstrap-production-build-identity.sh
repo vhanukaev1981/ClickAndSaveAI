@@ -42,10 +42,11 @@ PNUM="$(gcloud projects describe "$EXPECTED_PROJECT_ID" --format='value(projectN
 umask 077
 DISCOVERY_FILE="$(mktemp)"
 DISCOVERY_ERROR_FILE="$(mktemp)"
+PRECHECK_OUTPUT_FILE="$(mktemp)"
 INIT_CONFIG=""
 INIT_OUTPUT_FILE="$(mktemp)"
 cleanup() {
-  rm -f "$DISCOVERY_FILE" "$DISCOVERY_ERROR_FILE" "$INIT_OUTPUT_FILE"
+  rm -f "$DISCOVERY_FILE" "$DISCOVERY_ERROR_FILE" "$PRECHECK_OUTPUT_FILE" "$INIT_OUTPUT_FILE"
   [[ -z "$INIT_CONFIG" ]] || rm -f "$INIT_CONFIG"
 }
 trap cleanup EXIT
@@ -137,11 +138,20 @@ discover_build_sa_bounded() {
 }
 
 printf 'Running accepted pre-mutation runtime/build verification...\n'
+: >"$PRECHECK_OUTPUT_FILE"
+set +e
 PROJECT_ID="$PROJECT_ID" \
-ALLOW_MISSING_ACTAS=0 \
+ALLOW_MISSING_ACTAS=1 \
 ALLOW_RUNTIME_BOOTSTRAP_GAP=0 \
 DISCOVERY_OUTPUT="$DISCOVERY_FILE" \
-  bash "$BASE_VERIFIER"
+  bash "$BASE_VERIFIER" >"$PRECHECK_OUTPUT_FILE"
+precheck_rc=$?
+set -e
+cat "$PRECHECK_OUTPUT_FILE"
+[[ $precheck_rc -eq 0 ]] || fail "accepted pre-mutation runtime/build verification failed with exit code $precheck_rc"
+mapfile -t runtime_actas_truth < <(grep '^productionRuntimeActAsConfigured=' "$PRECHECK_OUTPUT_FILE" || true)
+[[ ${#runtime_actas_truth[@]} -eq 1 && "${runtime_actas_truth[0]}" == "productionRuntimeActAsConfigured=true" ]] || \
+  fail "accepted pre-mutation verifier did not prove productionRuntimeActAsConfigured=true"
 # shellcheck disable=SC1090
 source "$DISCOVERY_FILE"
 : "${CLOUD_BUILD_SERVICE_ENABLED:?accepted verifier did not emit CLOUD_BUILD_SERVICE_ENABLED}"
