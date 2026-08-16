@@ -1,0 +1,64 @@
+{
+  "policyVersion": 1,
+  "activationState": "REPOSITORY_POLICY_ONLY",
+  "legalApprovalState": "LEGAL_APPROVAL_REQUIRED",
+  "defaultRule": "FAIL_CLOSED_AND_ESCALATE_UNCLASSIFIED_DATA",
+  "dataFamilies": [
+    {
+      "id": "firebase_auth_identity",
+      "disposition": "DELETE",
+      "trigger": "confirmed_account_deletion",
+      "rationale": "Authentication identity is removed after dependent application data and required provider cleanup complete.",
+      "policyState": "REPOSITORY_READY"
+    },
+    {
+      "id": "gmail_oauth_credentials",
+      "disposition": "DELETE",
+      "trigger": "confirmed_gmail_disconnect_or_account_deletion_after_provider_cleanup",
+      "rationale": "Encrypted Gmail credentials are deleted after provider revocation is confirmed; retry-required cleanup may retain only the encrypted credential until cleanup can be completed.",
+      "policyState": "REPOSITORY_READY"
+    },
+    {
+      "id": "gmail_imported_data",
+      "disposition": "DELETE",
+      "trigger": "imported_data_deletion_or_account_deletion",
+      "rationale": "Imported Gmail-derived records are user-scoped application data and are removed by the existing destructive lifecycle operations.",
+      "policyState": "REPOSITORY_READY"
+    },
+    {
+      "id": "derived_financial_state",
+      "disposition": "DELETE",
+      "trigger": "imported_data_deletion_or_account_deletion",
+      "rationale": "Derived financial context based on deleted imported data must not survive or be recreated by deletion-triggered processing.",
+      "policyState": "REPOSITORY_READY"
+    },
+    {
+      "id": "push_registration_tokens",
+      "disposition": "DELETE",
+      "trigger": "sign_out_token_revocation_or_account_deletion",
+      "rationale": "Notification delivery registrations are operational endpoints and are removed when the associated session/account is revoked.",
+      "policyState": "REPOSITORY_READY"
+    },
+    {
+      "id": "provider_commerce_records",
+      "disposition": "DELETE",
+      "trigger": "confirmed_account_deletion",
+      "rationale": "User-scoped provider leads, dispatch queue entries, commerce matches and commerce events are removed by the existing account-deletion lifecycle. Any future legal retention exception would require a separately designed non-user-content audit record and owner/legal approval.",
+      "policyState": "REPOSITORY_READY"
+    },
+    {
+      "id": "operational_logs_metrics",
+      "disposition": "ANONYMIZE",
+      "trigger": "operational_event_emitted",
+      "rationale": "Operational evidence should use pseudonymous actor references and exclude direct identifiers/secrets; exact retention window requires owner security/privacy policy.",
+      "policyState": "OWNER_POLICY_REQUIRED"
+    },
+    {
+      "id": "release_recovery_evidence",
+      "disposition": "RETAIN",
+      "trigger": "release_or_recovery_evidence_created",
+      "rationale": "Release identities, immutable source SHAs, artifact digests, approvals and recovery evidence are required for operational traceability and must not contain user content or secret values; exact retention duration requires owner policy.",
+      "policyState": "OWNER_POLICY_REQUIRED"
+    }
+  ]
+}

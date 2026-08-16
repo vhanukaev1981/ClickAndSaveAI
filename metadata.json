@@ -1,6 +1,6 @@
 {
   "name": "Click & Save AI",
-  "description": "מנוע ה-AI להוזלת הוצאות משק הבית בישראל: חשמל, סלולר, אינטרנט סיבים, ביטוחים ומנויים.",
+  "description": "אב-טיפוס Android לניהול חשבוניות. אינטגרציות Gmail, AI ומעבר ספקים אינן פעילות עדיין.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }

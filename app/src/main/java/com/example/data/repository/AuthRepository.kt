@@ -1,5 +1,6 @@
 package com.example.data.repository
 
+import android.app.Activity
 import android.content.Context
 import android.util.Log
 import androidx.credentials.CredentialManager
@@ -7,10 +8,11 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetCredentialResponse
 import androidx.credentials.exceptions.GetCredentialException
+import com.example.PushTokenLifecycle
+import com.example.data.local.AppDatabase
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,34 +24,17 @@ data class UserSession(
     val email: String = "",
     val displayName: String = "",
     val photoUrl: String = "",
-    val idToken: String = "",
-    val gmailOAuthAccessToken: String? = null,
     val isAuthenticated: Boolean = false
 )
 
 sealed class AuthState {
-    object Idle : AuthState()
-    object Loading : AuthState()
+    data object Idle : AuthState()
+    data object Loading : AuthState()
     data class Authenticated(val session: UserSession) : AuthState()
     data class Error(val message: String) : AuthState()
 }
 
-class AuthRepository(private val context: Context) {
-
-    private fun getFirebaseAuthSafe(): FirebaseAuth? {
-        return try {
-            if (com.google.firebase.FirebaseApp.getApps(context).isEmpty()) {
-                com.google.firebase.FirebaseApp.initializeApp(context)
-            }
-            FirebaseAuth.getInstance()
-        } catch (e: Exception) {
-            Log.w("AuthRepository", "FirebaseApp not initialized: ${e.localizedMessage}")
-            null
-        }
-    }
-
-    private val credentialManager by lazy { CredentialManager.create(context) }
-
+class AuthRepository(private val applicationContext: Context) {
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
 
@@ -60,36 +45,44 @@ class AuthRepository(private val context: Context) {
         checkCurrentUser()
     }
 
-    fun checkCurrentUser() {
-        val auth = getFirebaseAuthSafe()
-        val currentUser = auth?.currentUser
-        if (currentUser != null) {
-            val session = UserSession(
-                uid = currentUser.uid,
-                email = currentUser.email ?: "",
-                displayName = currentUser.displayName ?: "משתמש רשום",
-                photoUrl = currentUser.photoUrl?.toString() ?: "",
-                isAuthenticated = true
-            )
-            _userSession.value = session
-            _authState.value = AuthState.Authenticated(session)
-        } else {
-            // Default active session for seamless onboarding
-            val fallbackSession = UserSession(
-                uid = "prod_user_001",
-                email = "vadim.hanukaev1981@gmail.com",
-                displayName = "ישראל ישראלי",
-                isAuthenticated = true
-            )
-            _userSession.value = fallbackSession
-            _authState.value = AuthState.Authenticated(fallbackSession)
+    private fun getFirebaseAuthSafe(): FirebaseAuth? {
+        return try {
+            if (com.google.firebase.FirebaseApp.getApps(applicationContext).isEmpty()) {
+                com.google.firebase.FirebaseApp.initializeApp(applicationContext)
+            }
+            FirebaseAuth.getInstance()
+        } catch (e: Exception) {
+            Log.w("AuthRepository", "Firebase is unavailable: ${e.localizedMessage}")
+            null
         }
     }
 
-    /**
-     * Signs in using Google Credentials Manager and Firebase Authentication
-     */
-    suspend fun signInWithGoogle(webClientId: String): Result<UserSession> {
+    fun checkCurrentUser() {
+        val currentUser = getFirebaseAuthSafe()?.currentUser
+        if (currentUser == null) {
+            _userSession.value = UserSession()
+            _authState.value = AuthState.Idle
+            return
+        }
+
+        val session = UserSession(
+            uid = currentUser.uid,
+            email = currentUser.email.orEmpty(),
+            displayName = currentUser.displayName.orEmpty(),
+            photoUrl = currentUser.photoUrl?.toString().orEmpty(),
+            isAuthenticated = true
+        )
+        _userSession.value = session
+        _authState.value = AuthState.Authenticated(session)
+    }
+
+    suspend fun signInWithGoogle(activity: Activity, webClientId: String): Result<UserSession> {
+        if (webClientId.isBlank()) {
+            val message = "Google Sign-In is not configured: google_web_client_id is required."
+            _authState.value = AuthState.Error(message)
+            return Result.failure(IllegalStateException(message))
+        }
+
         _authState.value = AuthState.Loading
         return try {
             val googleIdOption = GetGoogleIdOption.Builder()
@@ -102,76 +95,76 @@ class AuthRepository(private val context: Context) {
                 .addCredentialOption(googleIdOption)
                 .build()
 
-            val result: GetCredentialResponse = credentialManager.getCredential(
+            val result: GetCredentialResponse = CredentialManager.create(activity).getCredential(
                 request = request,
-                context = context
+                context = activity
             )
 
             val credential = result.credential
-            if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-                val idToken = googleIdTokenCredential.idToken
-
-                val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
-                val auth = getFirebaseAuthSafe()
-                val authResult = auth?.signInWithCredential(firebaseCredential)?.await()
-                val user = authResult?.user
-
-                if (user != null) {
-                    val session = UserSession(
-                        uid = user.uid,
-                        email = user.email ?: "",
-                        displayName = user.displayName ?: "ישראל ישראלי",
-                        photoUrl = user.photoUrl?.toString() ?: "",
-                        idToken = idToken,
-                        isAuthenticated = true
-                    )
-                    _userSession.value = session
-                    _authState.value = AuthState.Authenticated(session)
-                    Result.success(session)
-                } else {
-                    val err = "שגיאה ברישום משתמש ב-Firebase"
-                    _authState.value = AuthState.Error(err)
-                    Result.failure(Exception(err))
-                }
-            } else {
-                val err = "סוג האימות שהתקבל אינו נתמך"
-                _authState.value = AuthState.Error(err)
-                Result.failure(Exception(err))
+            if (credential !is CustomCredential ||
+                credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+            ) {
+                throw IllegalStateException("Unsupported Google credential type")
             }
+
+            val googleCredential = GoogleIdTokenCredential.createFrom(credential.data)
+            val firebaseCredential = GoogleAuthProvider.getCredential(googleCredential.idToken, null)
+            val auth = getFirebaseAuthSafe()
+                ?: throw IllegalStateException("Firebase Authentication is not configured")
+            val user = auth.signInWithCredential(firebaseCredential).await().user
+                ?: throw IllegalStateException("Firebase returned no authenticated user")
+
+            val session = UserSession(
+                uid = user.uid,
+                email = user.email.orEmpty(),
+                displayName = user.displayName.orEmpty(),
+                photoUrl = user.photoUrl?.toString().orEmpty(),
+                isAuthenticated = true
+            )
+            _userSession.value = session
+            _authState.value = AuthState.Authenticated(session)
+            Result.success(session)
         } catch (e: GetCredentialException) {
-            Log.e("AuthRepository", "Google Sign In Failed", e)
-            val errMsg = "התחברות Google בוטלה או נכשלה: ${e.localizedMessage}"
-            _authState.value = AuthState.Error(errMsg)
+            Log.e("AuthRepository", "Google Sign-In failed", e)
+            val message = "Google Sign-In was cancelled or failed."
+            _authState.value = AuthState.Error(message)
             Result.failure(e)
         } catch (e: Exception) {
-            Log.e("AuthRepository", "Authentication Exception", e)
-            val errMsg = "שגיאת התחברות: ${e.localizedMessage}"
-            _authState.value = AuthState.Error(errMsg)
+            Log.e("AuthRepository", "Authentication failed", e)
+            val message = e.localizedMessage ?: "Authentication failed"
+            _authState.value = AuthState.Error(message)
             Result.failure(e)
         }
     }
 
-    /**
-     * Updates stored OAuth Access Token for Gmail API calls
-     */
-    fun updateGmailOAuthAccessToken(token: String) {
-        val updated = _userSession.value.copy(gmailOAuthAccessToken = token)
-        _userSession.value = updated
-        _authState.value = AuthState.Authenticated(updated)
+    suspend fun purgeImportedFinancialDataLocally() {
+        AppDatabase.getDatabase(applicationContext).invoiceDao().deleteAllInvoices()
     }
 
-    /**
-     * Complete user Sign Out
-     */
-    fun signOut() {
-        try {
-            getFirebaseAuthSafe()?.signOut()
-        } catch (e: Exception) {
-            Log.e("AuthRepository", "Error signing out", e)
-        }
-        val emptySession = UserSession()
-        _userSession.value = emptySession
+    suspend fun signOut() {
+        // Sign-out is intentionally distinct from Gmail disconnect and account deletion.
+        // Revoke this device's push registration while Auth is still valid.
+        PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut().getOrThrow()
+
+        // Account-derived invoice data must be gone before the local authenticated session ends.
+        // Failure is a hard gate so another account cannot inherit stale financial data.
+        purgeImportedFinancialDataLocally()
+
+        getFirebaseAuthSafe()?.signOut()
+
+        _userSession.value = UserSession()
+        _authState.value = AuthState.Idle
+    }
+
+    suspend fun completeAccountDeletionLocalCleanup() {
+        // The server already removed every push registration under the deleted account. Local FCM
+        // deletion is therefore secondary cleanup and must not resurrect or call the deleted user.
+        PushTokenLifecycle.deleteLocalTokenAfterAccountDeletion()
+            .onFailure { Log.w("AuthRepository", "Local FCM cleanup after account deletion failed", it) }
+
+        purgeImportedFinancialDataLocally()
+        getFirebaseAuthSafe()?.signOut()
+        _userSession.value = UserSession()
         _authState.value = AuthState.Idle
     }
 }

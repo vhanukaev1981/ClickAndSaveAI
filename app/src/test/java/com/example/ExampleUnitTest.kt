@@ -1,16 +1,21 @@
 package com.example
 
-import org.junit.Assert.*
+import com.example.data.local.InvoiceItem
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/**
- * Example local unit test, which will execute on the development machine (host).
- *
- * See [testing documentation](http://d.android.com/tools/testing).
- */
 class ExampleUnitTest {
-  @Test
-  fun addition_isCorrect() {
-    assertEquals(4, 2 + 2)
-  }
+    @Test
+    fun annualSavingsUsesMonthlySavings() {
+        val invoice = InvoiceItem(
+            providerName = "Test provider",
+            category = "Test",
+            monthlyCost = 100.0,
+            recommendedAlternative = "Unverified",
+            alternativeMonthlyCost = 90.0,
+            potentialMonthlySavings = 10.0
+        )
+
+        assertEquals(120.0, invoice.potentialAnnualSavings, 0.0)
+    }
 }

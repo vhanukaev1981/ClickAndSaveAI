@@ -1,0 +1,294 @@
+name: Android and Backend CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  BLOCK5_APPROVED_SHA: eb63dd4aba38e570c9dc0a502bf31c872b2fdee7
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: functions
+
+    steps:
+      - name: Check out exact candidate source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Verify exact source and Block 5 lineage
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          test "$ACTUAL_SHA" = "$SOURCE_SHA"
+          git merge-base --is-ancestor "$BLOCK5_APPROVED_SHA" "$ACTUAL_SHA"
+          echo "Verified exact candidate source: $ACTUAL_SHA"
+
+      - name: Guard tracked secret material
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git grep -nE -- '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|"private_key"[[:space:]]*:|"client_secret"[[:space:]]*:' -- ':!*.md' ':!*.example' ':!functions/test/**'; then
+            echo 'Tracked private credential material detected.' >&2
+            exit 1
+          fi
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Install backend dependencies
+        run: npm install --ignore-scripts
+
+      - name: Run backend tests
+        run: npm test
+
+      - name: Audit production dependency severity gate
+        run: npm audit --omit=dev --audit-level=high
+
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      STAGING_DEBUG_KEYSTORE_B64: ${{ secrets.STAGING_DEBUG_KEYSTORE_B64 }}
+      STAGING_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.STAGING_DEBUG_KEYSTORE_PASSWORD }}
+      STAGING_GOOGLE_SERVICES_JSON_B64: ${{ secrets.STAGING_GOOGLE_SERVICES_JSON_B64 }}
+
+    steps:
+      - name: Check out exact candidate source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Verify exact source and Block 5 lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          test "$ACTUAL_SHA" = "$SOURCE_SHA"
+          git merge-base --is-ancestor "$BLOCK5_APPROVED_SHA" "$ACTUAL_SHA"
+          echo "Verified exact candidate source: $ACTUAL_SHA"
+
+      - name: Restore and verify staging Firebase config
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$STAGING_GOOGLE_SERVICES_JSON_B64" ]]; then
+            echo 'STAGING_FIREBASE_READY=false' >> "$GITHUB_ENV"
+            if [[ -n "$STAGING_DEBUG_KEYSTORE_B64" && -n "$STAGING_DEBUG_KEYSTORE_PASSWORD" ]]; then
+              echo 'A certificate-verified OAuth E2E APK also requires STAGING_GOOGLE_SERVICES_JSON_B64.' >&2
+              exit 1
+            fi
+            echo '::notice::Staging Firebase config is not configured. CI can compile, but will not publish an OAuth E2E-ready APK.'
+            exit 0
+          fi
+
+          printf '%s' "$STAGING_GOOGLE_SERVICES_JSON_B64" | base64 --decode > app/google-services.json
+          node <<'NODE'
+          const fs = require('fs');
+          const config = JSON.parse(fs.readFileSync('app/google-services.json', 'utf8'));
+          if (config?.project_info?.project_id !== 'clickandsaveai-staging') {
+            throw new Error('google-services.json does not target clickandsaveai-staging');
+          }
+          const clients = Array.isArray(config.client) ? config.client : [];
+          const hasPackage = clients.some(
+            (client) => client?.client_info?.android_client_info?.package_name === 'com.aistudio.clickandsaveai.app'
+          );
+          if (!hasPackage) {
+            throw new Error('google-services.json does not contain com.aistudio.clickandsaveai.app');
+          }
+          NODE
+          echo 'STAGING_FIREBASE_READY=true' >> "$GITHUB_ENV"
+
+      - name: Verify staging OAuth isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          STAGING_CLIENT_ID='716864421960-hnt5709tqk9qp79si8ggplf5jif1ulfu.apps.googleusercontent.com'
+          if grep -R --fixed-strings "$STAGING_CLIENT_ID" app/src/main; then
+            echo 'Staging OAuth client ID must not exist in main/release Android resources.' >&2
+            exit 1
+          fi
+          grep -q --fixed-strings "$STAGING_CLIENT_ID" app/src/debug/res/values/strings.xml
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install required Android SDK packages
+        run: sdkmanager 'platforms;android-36.1' 'build-tools;36.0.0'
+
+      - name: Restore and verify staging debug signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$STAGING_DEBUG_KEYSTORE_B64" || -z "$STAGING_DEBUG_KEYSTORE_PASSWORD" ]]; then
+            echo 'STAGING_SIGNING_READY=false' >> "$GITHUB_ENV"
+            echo '::notice::Stable staging debug signing secrets are not configured. CI will build with the runner debug key and will not publish an OAuth E2E APK artifact.'
+            exit 0
+          fi
+
+          KEYSTORE="$RUNNER_TEMP/clickandsaveai-staging.jks"
+          printf '%s' "$STAGING_DEBUG_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+
+          EXPECTED_SHA256='E7275C2B8BB8FD1559CB2A4439F44DEF5257C101EC8B7FF91587023A9D3F9AD2'
+          CERT_OUTPUT="$(keytool -list -v -keystore "$KEYSTORE" -storepass "$STAGING_DEBUG_KEYSTORE_PASSWORD" -alias clickandsaveai-staging)"
+          NORMALIZED_CERT_OUTPUT="$(printf '%s' "$CERT_OUTPUT" | tr '[:lower:]' '[:upper:]' | tr -d ':')"
+          if ! printf '%s' "$NORMALIZED_CERT_OUTPUT" | grep -q "$EXPECTED_SHA256"; then
+            echo 'Staging debug keystore SHA-256 does not match the fingerprint registered in Firebase.' >&2
+            exit 1
+          fi
+
+          echo "STAGING_DEBUG_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          echo 'STAGING_SIGNING_READY=true' >> "$GITHUB_ENV"
+
+      - name: Set up Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Run Android unit tests
+        run: gradle --no-daemon testDebugUnitTest --stacktrace
+
+      - name: Run Android lint
+        run: gradle --no-daemon lintDebug --stacktrace
+
+      - name: Assemble debug APK
+        run: gradle --no-daemon assembleDebug --stacktrace
+
+      - name: Verify staging debug APK signing certificate
+        if: ${{ env.STAGING_SIGNING_READY == 'true' && env.STAGING_FIREBASE_READY == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          if [[ -z "$APK" ]]; then
+            echo 'Debug APK was not found.' >&2
+            exit 1
+          fi
+
+          CERT_OUTPUT="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK")"
+          EXPECTED_SHA256='e7275c2b8bb8fd1559cb2a4439f44def5257c101ec8b7ff91587023a9d3f9ad2'
+          NORMALIZED_CERT_OUTPUT="$(printf '%s' "$CERT_OUTPUT" | tr '[:upper:]' '[:lower:]' | tr -d ':')"
+          if ! printf '%s' "$NORMALIZED_CERT_OUTPUT" | grep -q "$EXPECTED_SHA256"; then
+            echo 'Built debug APK is not signed with the Firebase-registered staging certificate.' >&2
+            exit 1
+          fi
+
+      - name: Record exact staging debug APK identity
+        if: ${{ env.STAGING_SIGNING_READY == 'true' && env.STAGING_FIREBASE_READY == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          mkdir -p "$RUNNER_TEMP/block6-debug-evidence"
+          APK_SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          cat > "$RUNNER_TEMP/block6-debug-evidence/identity.txt" <<EOF
+          source_sha=$SOURCE_SHA
+          variant=debug
+          environment=staging
+          apk_file=$(basename "$APK")
+          apk_sha256=$APK_SHA256
+          signing_cert_sha256=e7275c2b8bb8fd1559cb2a4439f44def5257c101ec8b7ff91587023a9d3f9ad2
+          release_approved=false
+          EOF
+          cp "$APK" "$RUNNER_TEMP/block6-debug-evidence/"
+
+      - name: Upload exact-SHA staging debug APK evidence
+        if: ${{ env.STAGING_SIGNING_READY == 'true' && env.STAGING_FIREBASE_READY == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: clickandsaveai-staging-debug-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/block6-debug-evidence
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove staging Firebase config before release-variant audit
+        shell: bash
+        run: rm -f app/google-services.json
+
+      - name: Build release-variant APK and AAB for readiness audit
+        run: gradle --no-daemon assembleRelease bundleRelease --stacktrace
+
+      - name: Produce exact-SHA release artifact audit manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
+          AAB="$(find app/build/outputs/bundle/release -maxdepth 1 -name '*.aab' -print -quit)"
+          if [[ -z "$APK" || -z "$AAB" ]]; then
+            echo 'Release-variant APK/AAB was not found.' >&2
+            exit 1
+          fi
+
+          OUT="$RUNNER_TEMP/block6-release-audit"
+          mkdir -p "$OUT"
+          cp "$APK" "$OUT/"
+          cp "$AAB" "$OUT/"
+          APK_SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          AAB_SHA256="$(sha256sum "$AAB" | awk '{print $1}')"
+
+          SIGNING_STATUS='UNSIGNED'
+          CERT_SHA256='NONE'
+          if CERT_OUTPUT="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK" 2>/dev/null)"; then
+            SIGNING_STATUS='SIGNED'
+            CERT_SHA256="$(printf '%s\n' "$CERT_OUTPUT" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1 | tr '[:upper:]' '[:lower:]')"
+            [[ -n "$CERT_SHA256" ]] || CERT_SHA256='PRESENT_BUT_UNPARSED'
+          fi
+
+          PROD_OAUTH_STATUS='MISSING'
+          if ! grep -Eq '<string name="google_web_client_id"[^>]*>[[:space:]]*</string>' app/src/main/res/values/strings.xml; then
+            PROD_OAUTH_STATUS='CONFIGURED_IN_SOURCE'
+          fi
+
+          cat > "$OUT/identity.txt" <<EOF
+          source_sha=$SOURCE_SHA
+          variant=release
+          apk_file=$(basename "$APK")
+          apk_sha256=$APK_SHA256
+          aab_file=$(basename "$AAB")
+          aab_sha256=$AAB_SHA256
+          signing_status=$SIGNING_STATUS
+          signing_cert_sha256=$CERT_SHA256
+          production_web_oauth=$PROD_OAUTH_STATUS
+          production_firebase_config=NOT_MATERIALIZED_IN_CI
+          release_approved=false
+          EOF
+
+          echo "Release audit: signing=$SIGNING_STATUS production_web_oauth=$PROD_OAUTH_STATUS"
+
+      - name: Upload exact-SHA release-variant audit artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: clickandsaveai-release-audit-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/block6-release-audit
+          if-no-files-found: error
+          retention-days: 14

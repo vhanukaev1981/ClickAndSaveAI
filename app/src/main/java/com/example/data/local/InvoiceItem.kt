@@ -1,22 +1,29 @@
 package com.example.data.local
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "invoice_items")
+@Entity(
+    tableName = "invoice_items",
+    indices = [Index(value = ["sourceMessageId"], unique = true)]
+)
 data class InvoiceItem(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val providerName: String, // e.g. "חברת החשמל", "סלקום", "בזק", "הראל ביטוח"
-    val category: String, // "חשמל", "סלולר", "אינטרנט", "ביטוח", "קניות"
-    val monthlyCost: Double, // Current monthly bill amount (e.g. 480.0)
-    val recommendedAlternative: String, // e.g. "אלקטרה פאוור - 7% הנחה"
-    val alternativeMonthlyCost: Double, // e.g. 446.4
-    val potentialMonthlySavings: Double, // e.g. 33.6
-    val status: String = "פוענח - הצעה מוכנה", // "פוענח - הצעה מוכנה", "ממתין לפענוח", "מעבר בטיפול"
+    val providerName: String,
+    val category: String,
+    val monthlyCost: Double,
+    val recommendedAlternative: String = "טרם בוצעה השוואה מאומתת",
+    val alternativeMonthlyCost: Double = 0.0,
+    val potentialMonthlySavings: Double = 0.0,
+    val status: String = "ממתין לאימות",
     val isSwitchRequested: Boolean = false,
     val dateAdded: Long = System.currentTimeMillis(),
-    val accountNumber: String = "8934201",
-    val billDate: String = "07/2026"
+    val accountNumber: String = "",
+    val billDate: String = "",
+    val sourceMessageId: String? = null,
+    val sourceType: String = "MANUAL",
+    val verificationStatus: String = "UNVERIFIED"
 ) {
     val potentialAnnualSavings: Double
         get() = potentialMonthlySavings * 12
