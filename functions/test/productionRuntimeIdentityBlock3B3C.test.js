@@ -102,14 +102,14 @@ test("9 deployer actAs is individual-SA only and covers v1/v2 runtime identities
   has(verifier, /project-wide roles\/iam\.serviceAccountUser exists/);
 });
 
-test("10 Cloud Build exact enabled-service state is established before default identity discovery", () => {
+test("10 Cloud Build exact enabled-service state is established before bounded default identity discovery", () => {
   has(verifier, new RegExp(`CLOUD_BUILD_SERVICE=["']${esc(cloudBuildService)}["']`));
   has(verifier, /gcloud services list --project="\$P" --enabled --filter="config\.name=\$CLOUD_BUILD_SERVICE" --format='value\(config\.name\)'/);
-  has(verifier, /gcloud builds get-default-service-account --project="\$P" --region="\$REGION" --format='value\(serviceAccountEmail\)'/);
+  has(verifier, /timeout 30s gcloud builds get-default-service-account\s*\\?\s*--project="\$P"\s*\\?\s*--region="\$REGION"\s*\\?\s*--format='value\(serviceAccountEmail\)'/);
   assert.ok(
     verifier.indexOf("gcloud services list --project=\"$P\" --enabled") <
-      verifier.indexOf("gcloud builds get-default-service-account"),
-    "Cloud Build enabled-service query must occur before default service-account discovery"
+      verifier.indexOf("timeout 30s gcloud builds get-default-service-account"),
+    "Cloud Build enabled-service query must occur before bounded default service-account discovery"
   );
 });
 
@@ -130,8 +130,12 @@ test("12 empty Cloud Build identity after enabled-service discovery defers witho
   no(verifier, new RegExp(`BUILD_SA=.*${esc(defaultComputeRuntime)}`));
 });
 
-test("13 enabled-service Cloud Build discovery errors are hard failures independent of error prose", () => {
-  has(verifier, /Cloud Build default service-account discovery failed after enabled-service verification/);
+test("13 enabled-service Cloud Build discovery errors are hard failures with exact exit handling", () => {
+  has(verifier, /BS=\$\?/);
+  has(verifier, /\[\[ \$BS -eq 124 \]\]/);
+  has(verifier, /Cloud Build default service-account discovery timed out after 30 seconds/);
+  has(verifier, /Cloud Build default service-account discovery failed with exit code \$BS after enabled-service verification/);
+  has(verifier, /BUILD_DISCOVERY_ERROR=/);
   no(verifier, /is_build_service_uninitialized/);
 });
 
