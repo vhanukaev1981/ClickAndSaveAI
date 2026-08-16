@@ -5,7 +5,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
-const { defineSecret, defineString } = require("firebase-functions/params");
+const { defineSecret, defineString, projectID } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const {
   collectPdfAttachments,
@@ -16,12 +16,19 @@ const {
 const { decryptToken, encryptToken } = require("./tokenCrypto");
 const { validateDealQuery, validateLeadInput } = require("./validation");
 
+const PRODUCTION_V2_SERVICE_ACCOUNT =
+  "clicksave-v2-runtime@click-save-ai-production.iam.gserviceaccount.com";
+const productionV2ServiceAccount = projectID
+  .equals("click-save-ai-production")
+  .thenElse(PRODUCTION_V2_SERVICE_ACCOUNT, "default");
+
 initializeApp();
 setGlobalOptions({
   region: "europe-west1",
   maxInstances: 10,
   memory: "256MiB",
   timeoutSeconds: 60,
+  serviceAccount: productionV2ServiceAccount,
 });
 
 const db = getFirestore();
