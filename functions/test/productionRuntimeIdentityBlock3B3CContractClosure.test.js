@@ -15,7 +15,23 @@ const docs = `${design}\n${plan}`;
 
 const serviceQuery = "gcloud services list";
 const identityDiscovery = "gcloud builds get-default-service-account";
+const boundedIdentityDiscovery = "timeout 30s gcloud builds get-default-service-account";
 const deferred = "DEFERRED_UNTIL_BUILD_SERVICE_INITIALIZATION";
+
+const getServiceStateSections = () => {
+  const stateCase = verifier.indexOf('case "$CLOUD_BUILD_SERVICE_STATE" in');
+  const disabledBranch = verifier.indexOf("DISABLED)", stateCase);
+  const enabledBranch = verifier.indexOf("ENABLED)", disabledBranch);
+  const caseEnd = verifier.indexOf("\nesac", enabledBranch);
+  return {
+    stateCase,
+    disabledBranch,
+    enabledBranch,
+    caseEnd,
+    disabledSection: verifier.slice(disabledBranch, enabledBranch),
+    enabledSection: verifier.slice(enabledBranch, caseEnd),
+  };
+};
 
 test("Block 3B.3C contract documents require service-state-before-build-identity discovery", () => {
   for (const source of [design, plan]) {
@@ -61,15 +77,81 @@ test("runtime verifier uses an explicit Cloud Build service-state machine", () =
 });
 
 test("runtime verifier keeps build identity discovery inside the ENABLED state only", () => {
-  const stateCase = verifier.indexOf('case "$CLOUD_BUILD_SERVICE_STATE" in');
-  const disabledBranch = verifier.indexOf("DISABLED)", stateCase);
-  const enabledBranch = verifier.indexOf("ENABLED)", disabledBranch);
+  const { stateCase, disabledBranch, enabledBranch, caseEnd } = getServiceStateSections();
   const discovery = verifier.indexOf(identityDiscovery, stateCase);
-  const caseEnd = verifier.indexOf("esac", enabledBranch);
 
   assert.ok(stateCase >= 0, "explicit service-state case is required");
   assert.ok(disabledBranch > stateCase, "DISABLED branch is required");
   assert.ok(enabledBranch > disabledBranch, "ENABLED branch must follow DISABLED");
   assert.ok(discovery > enabledBranch, "build identity discovery must occur only after entering ENABLED");
   assert.ok(caseEnd > discovery, "build identity discovery must remain inside the service-state case");
+});
+
+test("build identity discovery has exactly one hard 30 second timeout and only in ENABLED", () => {
+  const { disabledSection, enabledSection } = getServiceStateSections();
+  assert.equal((verifier.match(/timeout 30s gcloud builds get-default-service-account/g) || []).length, 1);
+  assert.doesNotMatch(disabledSection, /\btimeout\b|get-default-service-account/);
+  assert.match(enabledSection, /timeout 30s gcloud builds get-default-service-account/);
+  assert.match(enabledSection, /BS=\$\?/);
+  assert.match(enabledSection, /\[\[ \$BS -eq 124 \]\]/);
+  assert.match(enabledSection, /fatal ['"]Cloud Build default service-account discovery timed out after 30 seconds['"]/);
+  assert.match(enabledSection, /Cloud Build default service-account discovery failed with exit code \$BS/);
+  assert.match(enabledSection, /BUILD_DISCOVERY_ERROR=/);
+});
+
+test("verifier emits all five exact boolean truth keys on successful output paths", () => {
+  for (const key of [
+    "productionRuntimeIdentityConfigured",
+    "productionRuntimeActAsConfigured",
+    "productionBuildIdentityConfigured",
+    "productionBuildActAsConfigured",
+    "productionRuntimeBuildActAsConfigured",
+  ]) {
+    assert.match(verifier, new RegExp(`printf '${key}=%s\\\\n'`));
+  }
+  assert.match(verifier, /productionRuntimeIdentityStatus=%s/);
+});
+
+test("runtime identity truth is false by default and true only after both exact runtimes validated", () => {
+  assert.match(verifier, /PRODUCTION_RUNTIME_IDENTITY_CONFIGURED=false/);
+  assert.match(
+    verifier,
+    /if \[\[ -n "\$V1_EMAIL" && -n "\$V2_EMAIL" \]\]; then\s+PRODUCTION_RUNTIME_IDENTITY_CONFIGURED=true\s+fi/
+  );
+});
+
+test("runtime actAs truth requires configured runtimes and both exact individual bindings", () => {
+  assert.match(verifier, /PRODUCTION_RUNTIME_ACTAS_CONFIGURED=false/);
+  assert.match(
+    verifier,
+    /if \[\[ "\$PRODUCTION_RUNTIME_IDENTITY_CONFIGURED" == true \]\] && has_actas "\$V1_RUNTIME_SA" && has_actas "\$V2_RUNTIME_SA"; then\s+PRODUCTION_RUNTIME_ACTAS_CONFIGURED=true\s+fi/
+  );
+});
+
+test("build identity and build actAs truth remain false while deferred and require READY plus exact binding", () => {
+  assert.match(verifier, /PRODUCTION_BUILD_IDENTITY_CONFIGURED=false/);
+  assert.match(
+    verifier,
+    /if \[\[ "\$PRODUCTION_BUILD_IDENTITY_STATUS" == "READY" && -n "\$BUILD_SA" \]\]; then\s+PRODUCTION_BUILD_IDENTITY_CONFIGURED=true\s+fi/
+  );
+  assert.match(verifier, /PRODUCTION_BUILD_ACTAS_CONFIGURED=false/);
+  assert.match(
+    verifier,
+    /if \[\[ "\$PRODUCTION_BUILD_IDENTITY_CONFIGURED" == true \]\] && has_actas "\$BUILD_SA"; then\s+PRODUCTION_BUILD_ACTAS_CONFIGURED=true\s+fi/
+  );
+});
+
+test("aggregate runtime/build actAs truth is the logical AND of the four component booleans", () => {
+  assert.match(verifier, /PRODUCTION_RUNTIME_BUILD_ACTAS_CONFIGURED=false/);
+  assert.match(
+    verifier,
+    /if \[\[ "\$PRODUCTION_RUNTIME_IDENTITY_CONFIGURED" == true &&\s+"\$PRODUCTION_RUNTIME_ACTAS_CONFIGURED" == true &&\s+"\$PRODUCTION_BUILD_IDENTITY_CONFIGURED" == true &&\s+"\$PRODUCTION_BUILD_ACTAS_CONFIGURED" == true \]\]; then\s+PRODUCTION_RUNTIME_BUILD_ACTAS_CONFIGURED=true\s+fi/
+  );
+});
+
+test("verifier implementation performs no API enablement, App Engine initialization, deployment, or key creation", () => {
+  assert.doesNotMatch(verifier, /gcloud\s+services\s+enable/);
+  assert.doesNotMatch(verifier, /gcloud\s+app\s+create/);
+  assert.doesNotMatch(verifier, /firebase\s+deploy|gcloud\s+functions\s+deploy/);
+  assert.doesNotMatch(verifier, /service-accounts\s+keys\s+create/);
 });
