@@ -5,6 +5,7 @@ const CANONICAL_PROJECT_ID = "click-save-ai-production";
 const CANONICAL_PROJECT_NUMBER = "991489557172";
 const CANONICAL_PACKAGE = "com.aistudio.clickandsaveai.app";
 const UNKNOWN = "UNKNOWN_NO_ACCESS";
+const MAX_ANDROID_APP_PAGES = 100;
 
 function linesFor({
   projectAuthority = UNKNOWN,
@@ -43,6 +44,42 @@ async function readJson(url, accessToken, fetchImpl) {
   } catch {
     return { available: false, status: 0, body: null };
   }
+}
+
+async function listAllAndroidApps(projectPath, accessToken, fetchImpl) {
+  const baseUrl = `${FIREBASE_MANAGEMENT_BASE}${projectPath}/androidApps`;
+  const apps = [];
+  const seenPageTokens = new Set();
+  let pageToken = "";
+
+  for (let page = 0; page < MAX_ANDROID_APP_PAGES; page += 1) {
+    const url = pageToken
+      ? `${baseUrl}?pageToken=${encodeURIComponent(pageToken)}`
+      : baseUrl;
+    const pageRead = await readJson(url, accessToken, fetchImpl);
+    if (!pageRead.available) {
+      return { available: false, apps: [] };
+    }
+
+    if (Array.isArray(pageRead.body?.apps)) {
+      apps.push(...pageRead.body.apps);
+    }
+
+    const nextPageToken =
+      typeof pageRead.body?.nextPageToken === "string"
+        ? pageRead.body.nextPageToken.trim()
+        : "";
+    if (!nextPageToken) {
+      return { available: true, apps };
+    }
+    if (seenPageTokens.has(nextPageToken)) {
+      return { available: false, apps: [] };
+    }
+    seenPageTokens.add(nextPageToken);
+    pageToken = nextPageToken;
+  }
+
+  return { available: false, apps: [] };
 }
 
 function safeDecodeConfig(encoded) {
@@ -111,17 +148,12 @@ export async function probeFirebaseAuthority({
     projectIdentity: "VERIFIED_MATCH",
   };
 
-  const appsRead = await readJson(
-    `${FIREBASE_MANAGEMENT_BASE}${projectPath}/androidApps`,
-    accessToken,
-    fetchImpl
-  );
+  const appsRead = await listAllAndroidApps(projectPath, accessToken, fetchImpl);
   if (!appsRead.available) {
     return { exitCode: 0, lines: linesFor(projectVerified) };
   }
 
-  const apps = Array.isArray(appsRead.body?.apps) ? appsRead.body.apps : [];
-  const matches = apps.filter((app) => app?.packageName === expectedPackage);
+  const matches = appsRead.apps.filter((app) => app?.packageName === expectedPackage);
   if (matches.length === 0) {
     return {
       exitCode: 0,
