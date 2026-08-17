@@ -10,9 +10,9 @@ const REQUESTED_PERMISSIONS = Object.freeze([
 ]);
 
 const OUTPUT_KEYS = Object.freeze({
-  "firebase.projects.get": "firebase_iam_permission_firebase_projects_get",
-  "firebase.clients.list": "firebase_iam_permission_firebase_clients_list",
-  "firebase.clients.get": "firebase_iam_permission_firebase_clients_get",
+  "firebase.projects.get": "firebase_permission_projects_get",
+  "firebase.clients.list": "firebase_permission_clients_list",
+  "firebase.clients.get": "firebase_permission_clients_get",
 });
 
 const TRANSPORT = Object.freeze({
@@ -32,8 +32,17 @@ function transportLine(transport) {
   return `firebase_iam_permission_test_transport=${transport}`;
 }
 
-function transportOnly(exitCode, transport) {
-  return { exitCode, lines: [transportLine(transport)] };
+function unknownLines(transport) {
+  return [
+    "firebase_permission_projects_get=UNKNOWN_NO_ACCESS",
+    "firebase_permission_clients_list=UNKNOWN_NO_ACCESS",
+    "firebase_permission_clients_get=UNKNOWN_NO_ACCESS",
+    transportLine(transport),
+  ];
+}
+
+function failClosed(exitCode, transport) {
+  return { exitCode, lines: unknownLines(transport) };
 }
 
 function classifyHttpStatus(status) {
@@ -74,7 +83,7 @@ function validateGrantedPermissions(body) {
 
 function permissionLines(granted) {
   const lines = REQUESTED_PERMISSIONS.map((permission) => {
-    const status = granted.has(permission) ? "PRESENT" : "ABSENT";
+    const status = granted.has(permission) ? "GRANTED" : "NOT_GRANTED";
     return `${OUTPUT_KEYS[permission]}=${status}`;
   });
   lines.push(transportLine(TRANSPORT.SUCCESS_2XX));
@@ -93,7 +102,7 @@ export async function probeFirebaseIamPermissions({
     typeof fetchImpl !== "function" ||
     !validateExpectedInputs(expectedProjectId, expectedProjectNumber)
   ) {
-    return transportOnly(1, TRANSPORT.NOT_ATTEMPTED_GUARD_FAILURE);
+    return failClosed(1, TRANSPORT.NOT_ATTEMPTED_GUARD_FAILURE);
   }
 
   const url = `${RESOURCE_MANAGER_BASE}/projects/${encodeURIComponent(
@@ -112,7 +121,7 @@ export async function probeFirebaseIamPermissions({
       body: JSON.stringify({ permissions: [...REQUESTED_PERMISSIONS] }),
     });
   } catch {
-    return transportOnly(0, TRANSPORT.NETWORK_ERROR);
+    return failClosed(0, TRANSPORT.NETWORK_ERROR);
   }
 
   if (
@@ -120,23 +129,23 @@ export async function probeFirebaseIamPermissions({
     typeof response.ok !== "boolean" ||
     !Number.isInteger(response.status)
   ) {
-    return transportOnly(0, TRANSPORT.INVALID_JSON);
+    return failClosed(1, TRANSPORT.INVALID_JSON);
   }
 
   if (!response.ok) {
-    return transportOnly(0, classifyHttpStatus(response.status));
+    return failClosed(0, classifyHttpStatus(response.status));
   }
 
   let body;
   try {
     body = await response.json();
   } catch {
-    return transportOnly(0, TRANSPORT.INVALID_JSON);
+    return failClosed(1, TRANSPORT.INVALID_JSON);
   }
 
   const granted = validateGrantedPermissions(body);
   if (!granted) {
-    return transportOnly(1, TRANSPORT.INVALID_JSON);
+    return failClosed(1, TRANSPORT.INVALID_JSON);
   }
 
   return { exitCode: 0, lines: permissionLines(granted) };
