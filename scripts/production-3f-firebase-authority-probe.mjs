@@ -5,6 +5,7 @@ const CANONICAL_PROJECT_ID = "click-save-ai-production";
 const CANONICAL_PROJECT_NUMBER = "991489557172";
 const CANONICAL_PACKAGE = "com.aistudio.clickandsaveai.app";
 const UNKNOWN = "UNKNOWN_NO_ACCESS";
+const EXTERNAL_AUTHORITY = "EXTERNALLY_AUTHORITATIVE_VERIFIED";
 const MAX_ANDROID_APP_PAGES = 100;
 
 function linesFor({
@@ -144,7 +145,7 @@ export async function probeFirebaseAuthority({
   }
 
   const projectVerified = {
-    projectAuthority: "VERIFIED_PRESENT",
+    projectAuthority: EXTERNAL_AUTHORITY,
     projectIdentity: "VERIFIED_MATCH",
   };
 
@@ -199,7 +200,7 @@ export async function probeFirebaseAuthority({
 
   const appVerified = {
     ...projectVerified,
-    appAuthority: "VERIFIED_PRESENT",
+    appAuthority: EXTERNAL_AUTHORITY,
     packageIdentity: "VERIFIED_MATCH",
   };
   const configRead = await readJson(
@@ -230,7 +231,7 @@ export async function probeFirebaseAuthority({
       exitCode: 1,
       lines: linesFor({
         ...appVerified,
-        configAuthority: "VERIFIED_PRESENT",
+        configAuthority: EXTERNAL_AUTHORITY,
         configProject: configProjectMatches ? "VERIFIED_MATCH" : "MISMATCH",
         configPackage: configPackagePresent ? "VERIFIED_MATCH" : "MISMATCH",
       }),
@@ -241,7 +242,7 @@ export async function probeFirebaseAuthority({
     exitCode: 0,
     lines: linesFor({
       ...appVerified,
-      configAuthority: "VERIFIED_PRESENT",
+      configAuthority: EXTERNAL_AUTHORITY,
       configProject: "VERIFIED_MATCH",
       configPackage: "VERIFIED_MATCH",
     }),
