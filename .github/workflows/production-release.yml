@@ -26,6 +26,11 @@ on:
         required: true
         default: NO_3F_PROBE
         type: string
+      authorize_3f_external_authority_probe:
+        description: Type PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY only when a separately authorized Block 3F Firebase external-authority read-only probe is intended
+        required: true
+        default: NO_3F_EXTERNAL_PROBE
+        type: string
 
 concurrency:
   group: clickandsaveai-production-release
@@ -33,7 +38,7 @@ concurrency:
 
 jobs:
   production-candidate:
-    if: ${{ inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' }}
+    if: ${{ inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_3f_external_authority_probe != 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
@@ -228,7 +233,7 @@ jobs:
           rm -f app/src/release/google-services.json "$PRODUCTION_GOOGLE_SERVICES_JSON_PATH" "$PRODUCTION_UPLOAD_KEYSTORE_PATH"
 
   production-wif-auth-proof:
-    if: ${{ inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_wif_auth_proof == 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
+    if: ${{ inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_3f_external_authority_probe != 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_wif_auth_proof == 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
@@ -326,7 +331,7 @@ jobs:
             'credential_type=external_account'
 
   production-3f-metadata-probe:
-    if: ${{ inputs.authorize_3f_metadata_probe == 'PROBE_3F_METADATA_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.authorize_wif_auth_proof == 'NO_WIF_PROOF' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
+    if: ${{ inputs.authorize_3f_metadata_probe == 'PROBE_3F_METADATA_ONLY' && inputs.authorize_3f_external_authority_probe != 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.authorize_wif_auth_proof == 'NO_WIF_PROOF' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
@@ -431,9 +436,90 @@ jobs:
         run: |
           rm -f "$BLOCK3F_GOOGLE_CONFIG_PATH" "$BLOCK3F_UPLOAD_KEYSTORE_PATH"
 
+  production-3f-firebase-authority-probe:
+    if: ${{ inputs.authorize_3f_external_authority_probe == 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.authorize_wif_auth_proof == 'NO_WIF_PROOF' && inputs.authorize_3f_metadata_probe == 'NO_3F_PROBE' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      EXPECTED_REPOSITORY: vhanukaev1981/ClickAndSaveAI
+      EXPECTED_REPOSITORY_ID: '1314210715'
+      EXPECTED_REPOSITORY_OWNER_ID: '64756523'
+      EXPECTED_ENVIRONMENT: production
+      EXPECTED_REF: refs/heads/main
+      EXPECTED_WORKFLOW_REF: vhanukaev1981/ClickAndSaveAI/.github/workflows/production-release.yml@refs/heads/main
+      EXPECTED_PROJECT_ID: click-save-ai-production
+      EXPECTED_PROJECT_NUMBER: '991489557172'
+      EXPECTED_PACKAGE: com.aistudio.clickandsaveai.app
+      EXPECTED_DEPLOY_SA: clickandsaveai-github-deployer@click-save-ai-production.iam.gserviceaccount.com
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+    steps:
+      - name: Guard exact Block 3F Firebase external-authority read-only boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ '${{ inputs.authorize_3f_external_authority_probe }}' == 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' ]] || { echo 'Block 3F external-authority probe authorization phrase mismatch.' >&2; exit 1; }
+          [[ '${{ inputs.authorize_firebase_deploy }}' == 'NO_DEPLOY' ]] || { echo 'External-authority probe requires authorize_firebase_deploy=NO_DEPLOY.' >&2; exit 1; }
+          [[ '${{ inputs.authorize_wif_auth_proof }}' == 'NO_WIF_PROOF' ]] || { echo 'External-authority probe requires authorize_wif_auth_proof=NO_WIF_PROOF.' >&2; exit 1; }
+          [[ '${{ inputs.authorize_3f_metadata_probe }}' == 'NO_3F_PROBE' ]] || { echo 'External-authority probe requires authorize_3f_metadata_probe=NO_3F_PROBE.' >&2; exit 1; }
+          [[ '${{ inputs.confirm_environment }}' == 'CLICKANDSAVEAI_PRODUCTION' ]] || { echo 'Production confirmation phrase mismatch.' >&2; exit 1; }
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'source_sha must be an exact lowercase 40-character commit SHA.' >&2; exit 1; }
+          [[ '${{ github.sha }}' == "$SOURCE_SHA" ]] || { echo 'External-authority probe source must equal the workflow main HEAD.' >&2; exit 1; }
+          [[ '${{ github.repository }}' == "$EXPECTED_REPOSITORY" ]] || { echo 'Repository identity mismatch.' >&2; exit 1; }
+          [[ '${{ github.repository_id }}' == "$EXPECTED_REPOSITORY_ID" ]] || { echo 'Repository ID mismatch.' >&2; exit 1; }
+          [[ '${{ github.repository_owner_id }}' == "$EXPECTED_REPOSITORY_OWNER_ID" ]] || { echo 'Repository owner ID mismatch.' >&2; exit 1; }
+          [[ '${{ github.ref }}' == "$EXPECTED_REF" ]] || { echo 'Git ref mismatch.' >&2; exit 1; }
+          [[ '${{ github.workflow_ref }}' == "$EXPECTED_WORKFLOW_REF" ]] || { echo 'Workflow ref mismatch.' >&2; exit 1; }
+          [[ "$EXPECTED_ENVIRONMENT" == 'production' ]] || { echo 'Environment boundary mismatch.' >&2; exit 1; }
+          [[ "$EXPECTED_PROJECT_ID" == 'click-save-ai-production' ]] || { echo 'Firebase project boundary mismatch.' >&2; exit 1; }
+          [[ "$EXPECTED_PROJECT_NUMBER" == '991489557172' ]] || { echo 'Firebase project-number boundary mismatch.' >&2; exit 1; }
+          [[ "$EXPECTED_PACKAGE" == 'com.aistudio.clickandsaveai.app' ]] || { echo 'Android package boundary mismatch.' >&2; exit 1; }
+          [[ -n "$GCP_WORKLOAD_IDENTITY_PROVIDER" ]] || { echo 'Required WIF provider variable is unavailable.' >&2; exit 1; }
+          [[ -n "$GCP_DEPLOY_SERVICE_ACCOUNT" ]] || { echo 'Required deploy service-account variable is unavailable.' >&2; exit 1; }
+          [[ "$GCP_DEPLOY_SERVICE_ACCOUNT" == "$EXPECTED_DEPLOY_SA" ]] || { echo 'Deploy service-account identity mismatch.' >&2; exit 1; }
+          [[ "$GCP_WORKLOAD_IDENTITY_PROVIDER" =~ ^projects/${EXPECTED_PROJECT_NUMBER}/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$ ]] || { echo 'WIF provider project-number boundary mismatch.' >&2; exit 1; }
+
+      - name: Check out exact Firebase authority probe source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Node.js 22 for Firebase authority read
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Authenticate Firebase authority read-only identity
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          create_credentials_file: 'true'
+          cleanup_credentials: 'true'
+          export_environment_variables: 'false'
+          project_id: ${{ env.EXPECTED_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: 'access_token'
+          access_token_lifetime: '600s'
+          access_token_scopes: 'https://www.googleapis.com/auth/firebase.readonly'
+
+      - name: Read Firebase external authority and emit sanitized truth
+        env:
+          BLOCK3F_FIREBASE_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: node scripts/production-3f-firebase-authority-probe.mjs
+
   deploy-firebase-production:
     needs: production-candidate
-    if: ${{ inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_firebase_deploy == 'DEPLOY_FIREBASE_PRODUCTION' }}
+    if: ${{ inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_3f_external_authority_probe != 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_firebase_deploy == 'DEPLOY_FIREBASE_PRODUCTION' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 30
