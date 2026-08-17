@@ -702,6 +702,7 @@ jobs:
     env:
       SOURCE_SHA: ${{ inputs.source_sha }}
       PRODUCTION_FIREBASE_PROJECT_ID: ${{ vars.PRODUCTION_FIREBASE_PROJECT_ID }}
+      PRODUCTION_GOOGLE_WEB_CLIENT_ID: ${{ vars.PRODUCTION_GOOGLE_WEB_CLIENT_ID }}
 
     steps:
       - name: Check out exact approved candidate
@@ -716,7 +717,8 @@ jobs:
           set -euo pipefail
           [[ '${{ inputs.confirm_environment }}' == 'CLICKANDSAVEAI_PRODUCTION' ]] || exit 1
           [[ -n "$PRODUCTION_FIREBASE_PROJECT_ID" ]] || { echo 'PRODUCTION_FIREBASE_PROJECT_ID is missing.' >&2; exit 1; }
-          [[ "$PRODUCTION_FIREBASE_PROJECT_ID" != 'clickandsaveai-staging' ]] || { echo 'Refusing production deployment to staging project.' >&2; exit 1; }
+          [[ "$PRODUCTION_FIREBASE_PROJECT_ID" == 'click-save-ai-production' ]] || { echo 'Refusing Firebase deployment outside the exact Production project.' >&2; exit 1; }
+          [[ -n "$PRODUCTION_GOOGLE_WEB_CLIENT_ID" ]] || { echo 'PRODUCTION_GOOGLE_WEB_CLIENT_ID is missing.' >&2; exit 1; }
           [[ "$(git rev-parse HEAD)" == "$SOURCE_SHA" ]] || exit 1
 
       - name: Authenticate production deploy identity with GitHub OIDC
@@ -746,6 +748,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          RUNTIME_PARAMS_FILE="functions/.env.${PRODUCTION_FIREBASE_PROJECT_ID}"
+          [[ ! -e "$RUNTIME_PARAMS_FILE" ]] || { echo 'Refusing to overwrite an existing Production runtime parameter file.' >&2; exit 1; }
+          umask 077
+          printf 'GOOGLE_OAUTH_CLIENT_ID=%s\n' "$PRODUCTION_GOOGLE_WEB_CLIENT_ID" > "$RUNTIME_PARAMS_FILE"
+          trap 'rm -f "$RUNTIME_PARAMS_FILE"' EXIT
           firebase deploy \
             --project "$PRODUCTION_FIREBASE_PROJECT_ID" \
             --only firestore:rules,firestore:indexes,functions \
