@@ -109,7 +109,7 @@ fun DashboardScreen(
             FinancialSyncState.Recovering -> item {
                 HomeStatusCard(
                     title = "המידע הפיננסי עדיין נטען",
-                    body = "אנחנו משחזרים את המידע המאומת מהשרת. עד שהבדיקה תסתיים לא נציג אפס במקום ערך שעדיין אינו ידוע."
+                    body = "אנחנו טוענים מחדש את המידע המאומת. עד שהבדיקה תסתיים לא נציג אפס במקום ערך שעדיין אינו ידוע."
                 )
             }
 
@@ -126,7 +126,7 @@ fun DashboardScreen(
                 item {
                     HomeStatusCard(
                         title = "המידע האחרון נשמר",
-                        body = "חלק מהסנכרון אינו זמין כרגע. אנחנו מציגים רק מידע סמכותי שכבר אומת, ושומרים את השאר כלא ידוע."
+                        body = "חלק מהסנכרון אינו זמין כרגע. אנחנו מציגים רק מידע שכבר אומת, ושומרים את השאר כלא ידוע."
                     )
                 }
                 if (financialHome != null) {
@@ -145,7 +145,7 @@ fun DashboardScreen(
             is FinancialSyncState.Failed -> item {
                 HomeStatusCard(
                     title = "לא הצלחנו להשלים את הסנכרון",
-                    body = "לא הומצאו נתונים חלופיים. אפשר לנסות שוב כשהחיבור זמין."
+                    body = "לא נציג נתונים משוערים במקום מידע שחסר. אפשר לנסות שוב כשהחיבור זמין."
                 ) {
                     Button(onClick = { viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY) }) {
                         Text("נסה שוב")
@@ -185,7 +185,7 @@ fun DashboardScreen(
                 )
                 DashboardActionButton(
                     text = "פעילות וסנכרון",
-                    subtitle = "מצב השחזור והפעילות שניתן לאמת",
+                    subtitle = "העדכונים והפעילות שניתן לאמת",
                     icon = Icons.Outlined.CloudSync,
                     onClick = { onNavigateToTab(3) }
                 )
@@ -234,7 +234,7 @@ fun DashboardScreen(
                 item {
                     HomeStatusCard(
                         title = "אין כרגע חשבונות מזוהים להצגה",
-                        body = "זהו מצב ריק מהסריקה הסמכותית האחרונה, לא ערך שנוצר כברירת מחדל."
+                        body = "בסריקה האחרונה לא נמצאו חשבונות להצגה."
                     )
                 }
             }
@@ -276,7 +276,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItem
         item {
             HomeStatusCard(
                 title = "אין כרגע הזדמנות חיסכון מאומתת",
-                body = "המערכת בדקה את ההקשר הפיננסי הזמין. חיסכון יוצג רק לאחר שתימצא הצעה עדכנית ומתאימה שניתן לאמת."
+                body = "המערכת בדקה את המידע הפיננסי הזמין. חיסכון יוצג רק לאחר שתימצא הצעה עדכנית ומתאימה שניתן לאמת."
             )
         }
     }
@@ -309,12 +309,12 @@ private fun AuthoritativeSummaryCard(home: FinancialHomeResult) {
                     modifier = Modifier.weight(1f),
                     title = "שירותים חוזרים",
                     value = context.recurringServiceCount?.toString() ?: "לא ידוע",
-                    supporting = "לפי ההקשר הסמכותי"
+                    supporting = "לפי המידע שאומת"
                 )
             }
             if (context.sourceCoverage.isNotEmpty()) {
                 Text(
-                    text = "מקור נתונים: ${context.sourceCoverage.joinToString()}",
+                    text = "הנתונים מבוססים על המקורות המחוברים שאומתו.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
