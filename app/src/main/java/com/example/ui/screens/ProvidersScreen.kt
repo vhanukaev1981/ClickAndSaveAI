@@ -109,7 +109,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                     item {
                         MessageCard(
                             title = "עדיין אין מספיק מידע",
-                            body = "יש להשלים חיבור מאומת לפני שניתן להציג הזדמנויות חיסכון סמכותיות."
+                            body = "יש להשלים חיבור מאומת לפני שניתן להציג הזדמנויות חיסכון שנבדקו."
                         )
                     }
                 }
@@ -130,7 +130,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                     item {
                         MessageCard(
                             title = "לא ניתן להשלים את הבדיקה",
-                            body = "המידע הפיננסי אינו זמין כרגע. לא הומצאו ערכי חיסכון חלופיים."
+                            body = "המידע הפיננסי אינו זמין כרגע. לא נציג ערכי חיסכון משוערים במקום מידע שחסר."
                         )
                     }
                 }
@@ -139,7 +139,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                     item {
                         MessageCard(
                             title = "עדיין אין מספיק מידע",
-                            body = "הסנכרון חלקי ואין כרגע הקשר פיננסי מאומת להצגת חיסכון."
+                            body = "הסנכרון חלקי ואין כרגע מספיק מידע מאומת להצגת חיסכון."
                         )
                     }
                 }
@@ -172,9 +172,8 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                                                 }.onSuccess {
                                                     error = ""
                                                     selectedOpportunity = opportunity
-                                                }.onFailure { throwable ->
-                                                    error = throwable.localizedMessage
-                                                        ?: "לא ניתן להתחיל את בקשת החיסכון כרגע. ההצעה תיבדק מחדש לפני ניסיון נוסף."
+                                                }.onFailure {
+                                                    error = "לא ניתן להתחיל את בקשת החיסכון כרגע. ההצעה תיבדק מחדש לפני ניסיון נוסף."
                                                 }
                                             }
                                         }
@@ -219,9 +218,8 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                             actionMessage = actionHandoffMessage(result)
                             error = ""
                             viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY)
-                        }.onFailure { throwable ->
-                            error = throwable.localizedMessage
-                                ?: "ההצעה השתנתה, אינה זמינה או שאין כרגע מסלול מעבר מאומת."
+                        }.onFailure {
+                            error = "ההצעה השתנתה, אינה זמינה או שאין כרגע מסלול מעבר מאומת."
                         }
                     }
                 }
@@ -285,13 +283,17 @@ private fun OpportunityCard(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    "אימות: ${matched.verificationState} • טריות: ${matched.freshnessState} • התאמה: ${matched.eligibilityState}",
+                    offerTrustText(
+                        verification = matched.verificationState,
+                        freshness = matched.freshnessState,
+                        eligibility = matched.eligibilityState
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 if (matched.verifiedAt.isBlank()) {
                     Text(
-                        "מועד אימות ההצעה אינו ידוע",
+                        "מועד בדיקת ההצעה אינו ידוע",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -364,15 +366,12 @@ private fun OpportunityCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (opportunity.offerVerificationState == "UNKNOWN") {
-                    Text(
-                        "סטטוס אימות ההצעה לא ידוע",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
                 Text(
-                    "אימות: ${opportunity.offerVerificationState} • טריות: ${opportunity.offerFreshnessState} • התאמה: ${opportunity.userEligibilityState}",
+                    offerTrustText(
+                        verification = opportunity.offerVerificationState,
+                        freshness = opportunity.offerFreshnessState,
+                        eligibility = opportunity.userEligibilityState
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -394,6 +393,19 @@ private fun authoritativeMatchedOffer(opportunity: FinancialOpportunity) =
             offer.freshnessState == "FRESH" &&
             offer.eligibilityState == "ELIGIBLE"
     }
+
+private fun offerTrustText(
+    verification: String,
+    freshness: String,
+    eligibility: String
+): String = when {
+    verification == "VERIFIED" && freshness == "FRESH" && eligibility == "ELIGIBLE" ->
+        "ההצעה אומתה, עדכנית ומתאימה לנתונים שלך."
+    verification != "VERIFIED" -> "אימות ההצעה עדיין לא הושלם."
+    freshness != "FRESH" -> "ההצעה דורשת בדיקה מחדש לפני פעולה."
+    eligibility != "ELIGIBLE" -> "ההתאמה להצעה עדיין לא הושלמה."
+    else -> "ההצעה עדיין בבדיקה."
+}
 
 private fun opportunityLifecycleLocked(opportunity: FinancialOpportunity): Boolean {
     if (opportunity.completionState == "DEAL_REJECTED" ||
