@@ -72,7 +72,7 @@ fun ProfileScreen(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("אני", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(
-                    "זהות החשבון, מצב Gmail ופעולות פרטיות נשמרים כמחזורי חיים נפרדים.",
+                    "כאן מנהלים את החשבון, חיבור Gmail ופעולות הפרטיות.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -108,7 +108,7 @@ fun ProfileScreen(
     when (pendingConfirmation) {
         CONFIRM_DISCONNECT_GMAIL -> PrivacyConfirmationDialog(
             title = "ניתוק Gmail",
-            text = "הפעולה תפסיק ייבוא עתידי מ-Gmail ותבצע ניקוי watch והרשאת Google בשרת. היא לא מוחקת את הנתונים שכבר יובאו, לא מוציאה אותך מהחשבון ולא מוחקת את החשבון.",
+            text = "הפעולה תפסיק ייבוא עתידי מ-Gmail ותסיר את הרשאת הקריאה. היא לא מוחקת את הנתונים שכבר יובאו, לא מוציאה אותך מהחשבון ולא מוחקת את החשבון.",
             confirmLabel = "נתק Gmail",
             onConfirm = {
                 pendingConfirmation = null
@@ -118,7 +118,7 @@ fun ProfileScreen(
         )
         CONFIRM_DELETE_IMPORTED_DATA -> PrivacyConfirmationDialog(
             title = "מחיקת נתונים מיובאים",
-            text = "הפעולה תמחק את הנתונים הפיננסיים שיובאו מ-Gmail ואת הנתונים הנגזרים מהם. החשבון יישאר קיים ו-Gmail יישאר מחובר, ולכן סריקה עתידית יכולה ליצור נתונים חדשים.",
+            text = "הפעולה תמחק את הנתונים הפיננסיים שיובאו מ-Gmail ואת הנתונים שנוצרו מהם. החשבון יישאר קיים ו-Gmail יישאר מחובר, ולכן סריקה עתידית יכולה ליצור נתונים חדשים.",
             confirmLabel = "מחק נתונים מיובאים",
             onConfirm = {
                 pendingConfirmation = null
@@ -128,7 +128,7 @@ fun ProfileScreen(
         )
         CONFIRM_DELETE_ACCOUNT -> PrivacyConfirmationDialog(
             title = "מחיקת חשבון",
-            text = "הפעולה תמחק את חשבון Click & Save AI ואת הנתונים שבבעלות החשבון, תסיר רישומי Push ותבצע את ניקוי Gmail הנדרש. אם ניקוי Google לא ניתן לאימות, המחיקה תיעצר ותישאר ניתנת לניסיון חוזר במקום לדווח הצלחה חלקית.",
+            text = "הפעולה תמחק את חשבון Click & Save AI ואת הנתונים שבבעלות החשבון ותסיר את חיבור Gmail. אם לא נוכל להשלים את כל שלבי המחיקה, נציג שגיאה ונאפשר לנסות שוב.",
             confirmLabel = "מחק חשבון",
             onConfirm = {
                 pendingConfirmation = null
@@ -153,8 +153,8 @@ private fun AccountCard(
                 Text("חשבון", fontWeight = FontWeight.Bold)
             }
             when (authState) {
-                AuthState.Loading -> Text("זהות החשבון עדיין נטענת.")
-                is AuthState.Error -> Text("מצב החשבון לא ידוע: ${authState.message}")
+                AuthState.Loading -> Text("מצב החשבון עדיין נטען.")
+                is AuthState.Error -> Text("לא הצלחנו לטעון את מצב החשבון כרגע. נסו שוב בעוד רגע.")
                 AuthState.Idle -> {
                     Text("לא מחובר לחשבון.")
                     Button(onClick = onGoogleSignIn, modifier = Modifier.fillMaxWidth()) {
@@ -168,7 +168,7 @@ private fun AccountCard(
                     Text(session.displayName.ifBlank { "שם לא זמין" }, fontWeight = FontWeight.Bold)
                     Text(session.email.ifBlank { "כתובת דוא״ל לא זמינה" })
                     Text(
-                        "התחברות לחשבון אינה הוכחה ש-Gmail מחובר.",
+                        "התחברות לחשבון וחיבור Gmail הם שני מצבים נפרדים.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -178,7 +178,7 @@ private fun AccountCard(
                         Text("יציאה מהחשבון")
                     }
                     Text(
-                        "יציאה מסיימת את ה-session המקומי ומנקה את רישום ה-Push של המכשיר. היא אינה מוצגת כניתוק Gmail או כמחיקת חשבון.",
+                        "יציאה מהחשבון אינה מנתקת Gmail ואינה מוחקת את החשבון.",
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
@@ -205,25 +205,21 @@ private fun GmailAuthorityCard(
                 Text("Gmail", fontWeight = FontWeight.Bold)
             }
             when (financialSyncState) {
-                FinancialSyncState.Unauthenticated -> Text("מצב Gmail לא ידוע ללא חשבון מחובר.")
+                FinancialSyncState.Unauthenticated -> Text("יש להתחבר לחשבון כדי לבדוק את מצב Gmail.")
                 FinancialSyncState.CheckingConnection,
-                FinancialSyncState.Recovering -> Text("מצב Gmail לא ידוע — הבדיקה עדיין מתבצעת.")
-                FinancialSyncState.Disconnected -> Text("Gmail מנותק לפי בדיקת השרת האחרונה.")
-                is FinancialSyncState.Failed -> Text("מצב Gmail לא ידוע: ${financialSyncState.reason}")
+                FinancialSyncState.Recovering -> Text("בודקים את מצב החיבור ל-Gmail.")
+                FinancialSyncState.Disconnected -> Text("Gmail אינו מחובר.")
+                is FinancialSyncState.Failed -> Text("לא הצלחנו לבדוק את מצב Gmail כרגע. נסו שוב בעוד רגע.")
                 is FinancialSyncState.Ready,
                 is FinancialSyncState.Partial -> {
                     if (connection == null) {
-                        Text("מצב Gmail לא ידוע.")
+                        Text("מצב Gmail עדיין לא ידוע.")
                     } else if (connection.connected) {
                         Text("Gmail מחובר", fontWeight = FontWeight.SemiBold)
                         if (connection.email.isNotBlank()) Text(connection.email)
                         Text("הרשאה: קריאה בלבד")
-                        Text(
-                            "גרסת הסכמה: ${connection.consentVersion.ifBlank { "לא ידוע" }}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
                     } else {
-                        Text("Gmail מנותק לפי מצב השרת.")
+                        Text("Gmail אינו מחובר.")
                     }
                 }
             }
@@ -267,16 +263,16 @@ private fun PrivacyAuthorityCard(
             val connection = financialSyncState.gmailConnectionOrNull
             Text(
                 when {
-                    connection?.connected == true -> "Gmail מחובר לקריאה בלבד לפי מצב השרת."
-                    financialSyncState == FinancialSyncState.Disconnected -> "אין כרגע ייבוא Gmail פעיל לפי מצב האפליקציה."
-                    else -> "מצב Gmail המלא אינו ידוע כרגע."
+                    connection?.connected == true -> "Gmail מחובר לקריאה בלבד."
+                    financialSyncState == FinancialSyncState.Disconnected -> "אין כרגע ייבוא פעיל מ-Gmail."
+                    else -> "מצב Gmail עדיין לא ידוע במלואו."
                 }
             )
 
             when (privacyOperationState) {
                 PrivacyOperationUiState.Idle -> Unit
                 is PrivacyOperationUiState.Working -> Text(
-                    "הפעולה מתבצעת בשרת. אין לסגור אותה כהצלחה לפני אישור השרת.",
+                    "הפעולה מתבצעת. נציג הצלחה רק לאחר שתושלם.",
                     style = MaterialTheme.typography.bodySmall
                 )
                 is PrivacyOperationUiState.Success -> Text(
@@ -285,7 +281,7 @@ private fun PrivacyAuthorityCard(
                     fontWeight = FontWeight.SemiBold
                 )
                 is PrivacyOperationUiState.Error -> Text(
-                    privacyOperationState.message,
+                    "לא הצלחנו להשלים את הפעולה. אפשר לנסות שוב.",
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -300,7 +296,7 @@ private fun PrivacyAuthorityCard(
                     Text("נתק Gmail")
                 }
                 Text(
-                    "מפסיק ייבוא עתידי ומנקה הרשאת Gmail; אינו מוחק נתונים שכבר יובאו.",
+                    "מפסיק ייבוא עתידי ומסיר את הרשאת Gmail; אינו מוחק נתונים שכבר יובאו.",
                     style = MaterialTheme.typography.labelSmall
                 )
 
@@ -312,7 +308,7 @@ private fun PrivacyAuthorityCard(
                     Text("מחק נתונים מיובאים")
                 }
                 Text(
-                    "מוחק נתונים מיובאים ונגזרים בלבד; החשבון ו-Gmail נשמרים.",
+                    "מוחק נתונים מיובאים ונתונים שנוצרו מהם בלבד; החשבון ו-Gmail נשמרים.",
                     style = MaterialTheme.typography.labelSmall
                 )
 
@@ -324,18 +320,18 @@ private fun PrivacyAuthorityCard(
                     Text("מחק חשבון")
                 }
                 Text(
-                    "מחיקת חשבון היא מחזור חיים נפרד ומחייבת ניקוי שרתי לפני סיום ה-session המקומי.",
+                    "מוחק את החשבון, הנתונים וחיבור Gmail לאחר אישור מפורש.",
                     style = MaterialTheme.typography.labelSmall
                 )
             } else {
                 Text(
-                    "יש להתחבר לחשבון כדי לבצע פעולות פרטיות סמכותיות.",
+                    "יש להתחבר לחשבון כדי לבצע פעולות פרטיות.",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
 
             Text(
-                "Gmail מנותק אינו שווה לנתונים שנמחקו, ונתונים שנמחקו אינם שווים לחשבון שנמחק.",
+                "ניתוק Gmail, מחיקת נתונים ומחיקת חשבון הן פעולות שונות.",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold
             )
