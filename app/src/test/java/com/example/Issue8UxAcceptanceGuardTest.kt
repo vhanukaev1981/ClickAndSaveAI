@@ -101,7 +101,7 @@ class Issue8UxAcceptanceGuardTest {
     }
 
     @Test
-    fun gmailFirstConnectionUiIsNotRepeatedForConnectedState() {
+    fun gmailFirstConnectionUiIsNotRepeatedForConnectedOrUnknownState() {
         val dashboard = source("src/main/java/com/example/ui/screens/DashboardScreen.kt")
         val profile = source("src/main/java/com/example/ui/screens/ProfileScreen.kt")
 
@@ -109,6 +109,7 @@ class Issue8UxAcceptanceGuardTest {
         assertTrue(dashboard.contains("FinancialSyncState.Disconnected -> item"))
         assertTrue(Regex("InitialGmailOnboardingCard\\(").findAll(dashboard).count() == 3)
         assertTrue(dashboard.contains("is FinancialSyncState.Ready ->"))
-        assertTrue(profile.contains("connection?.connected != true"))
+        assertTrue(profile.contains("financialSyncState == FinancialSyncState.Disconnected"))
+        assertFalse(profile.contains("connection?.connected != true"))
     }
 }
