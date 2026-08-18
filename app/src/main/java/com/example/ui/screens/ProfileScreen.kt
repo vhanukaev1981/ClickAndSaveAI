@@ -213,7 +213,7 @@ private fun GmailAuthorityCard(
                 is FinancialSyncState.Ready,
                 is FinancialSyncState.Partial -> {
                     if (connection == null) {
-                        Text("מצב Gmail עדיין לא ידוע.")
+                        Text("מצב Gmail לא ידוע כרגע.")
                     } else if (connection.connected) {
                         Text("Gmail מחובר", fontWeight = FontWeight.SemiBold)
                         if (connection.email.isNotBlank()) Text(connection.email)
