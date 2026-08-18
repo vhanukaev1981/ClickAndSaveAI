@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
             .onFailure { error ->
                 Log.e("MainActivity", "Gmail authorization result failed", error)
                 viewModel.reportGmailAuthorizationError(
-                    error.localizedMessage ?: "לא ניתן היה להשלים את הרשאת Gmail."
+                    "לא הצלחנו להשלים את חיבור Gmail. נסו שוב בעוד רגע."
                 )
             }
     }
@@ -92,7 +92,7 @@ class MainActivity : ComponentActivity() {
                             val clientId = getString(R.string.google_web_client_id).trim()
                             if (clientId.isBlank()) {
                                 viewModel.reportGmailAuthorizationError(
-                                    "חסר google_web_client_id. יש להשלים את הגדרת Firebase/OAuth."
+                                    "לא הצלחנו להתחיל את ההתחברות כרגע. נסו שוב בעוד רגע."
                                 )
                             } else {
                                 viewModel.signInWithGoogle(this, clientId)
@@ -153,7 +153,7 @@ class MainActivity : ComponentActivity() {
         val clientId = getString(R.string.google_web_client_id).trim()
         if (clientId.isBlank()) {
             viewModel.reportGmailAuthorizationError(
-                "חסר google_web_client_id. יש להשלים את הגדרת Firebase/OAuth."
+                "לא הצלחנו להתחיל את חיבור Gmail כרגע. נסו שוב בעוד רגע."
             )
             return
         }
@@ -169,7 +169,7 @@ class MainActivity : ComponentActivity() {
                 if (authorizationResult.hasResolution()) {
                     val pendingIntent = authorizationResult.pendingIntent
                     if (pendingIntent == null) {
-                        viewModel.reportGmailAuthorizationError("Google לא החזיר מסך הרשאה תקף.")
+                        viewModel.reportGmailAuthorizationError("לא הצלחנו לפתוח את מסך ההרשאה של Google. נסו שוב.")
                         return@addOnSuccessListener
                     }
                     gmailAuthorizationLauncher.launch(
@@ -182,20 +182,20 @@ class MainActivity : ComponentActivity() {
             .addOnFailureListener { error ->
                 Log.e("MainActivity", "Gmail authorization failed", error)
                 viewModel.reportGmailAuthorizationError(
-                    error.localizedMessage ?: "בקשת הרשאת Gmail נכשלה."
+                    "לא הצלחנו להתחיל את חיבור Gmail. נסו שוב בעוד רגע."
                 )
             }
     }
 
     private fun handleGmailAuthorizationResult(result: AuthorizationResult) {
         if (!result.grantedScopes.contains(GMAIL_READONLY_SCOPE)) {
-            viewModel.reportGmailAuthorizationError("הרשאת gmail.readonly לא אושרה.")
+            viewModel.reportGmailAuthorizationError("הרשאת הקריאה ל-Gmail לא אושרה.")
             return
         }
         val serverAuthCode = result.serverAuthCode?.takeIf { it.isNotBlank() }
         if (serverAuthCode == null) {
             viewModel.reportGmailAuthorizationError(
-                "Google לא החזיר קוד שרת. יש לנתק את ההרשאה ולאשר מחדש."
+                "לא הצלחנו להשלים את חיבור Gmail. נסו לנתק ולחבר מחדש."
             )
             return
         }
