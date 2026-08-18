@@ -401,7 +401,7 @@ private fun offerTrustText(
 ): String = when {
     verification == "VERIFIED" && freshness == "FRESH" && eligibility == "ELIGIBLE" ->
         "ההצעה אומתה, עדכנית ומתאימה לנתונים שלך."
-    verification != "VERIFIED" -> "אימות ההצעה עדיין לא הושלם."
+    verification != "VERIFIED" -> "סטטוס אימות ההצעה לא ידוע. ההצעה עדיין בבדיקה."
     freshness != "FRESH" -> "ההצעה דורשת בדיקה מחדש לפני פעולה."
     eligibility != "ELIGIBLE" -> "ההתאמה להצעה עדיין לא הושלמה."
     else -> "ההצעה עדיין בבדיקה."
