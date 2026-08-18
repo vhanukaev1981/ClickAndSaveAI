@@ -60,7 +60,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("החשבונות שלי", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(
-                    "חיובים שנצפו במקור הסמכותי המחובר.",
+                    "חיובים שנצפו במקור המחובר שאומת.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -103,9 +103,9 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
             filteredBills.isEmpty() -> item {
                 BillsStateCard(
                     if (selectedCategory == "הכל") {
-                        "הסריקה הסמכותית הזמינה לא החזירה חשבונות מזוהים. זהו מצב ריק ידוע של אותה סריקה."
+                        "בסריקה האחרונה שאומתה לא נמצאו חשבונות להצגה."
                     } else {
-                        "בסריקה הסמכותית הזמינה אין חשבונות בקטגוריה $selectedCategory."
+                        "בסריקה האחרונה שאומתה אין חשבונות בקטגוריה $selectedCategory."
                     }
                 )
             }
@@ -123,7 +123,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                     Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = TechBluePrimary)
                     Spacer(Modifier.size(10.dp))
                     Text(
-                        "רשומה מוצגת רק כאשר היא קיימת בתוצאת הסריקה הסמכותית. שדות חסרים נשארים לא ידועים.",
+                        "רשומה מוצגת רק כאשר היא קיימת בתוצאת סריקה שאומתה. שדות חסרים נשארים לא ידועים.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -161,12 +161,12 @@ private fun AuthoritativeBillCard(
                 style = MaterialTheme.typography.bodySmall
             )
             Text(
-                "מקור: Gmail קריאה בלבד • ${bill.verificationStatus}",
+                "מקור: Gmail בקריאה בלבד • ${verificationLabel(bill.verificationStatus)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (opportunity != null) {
-                Text("מצב הזדמנות: ${opportunity.status}", style = MaterialTheme.typography.bodySmall)
+                Text("מצב ההזדמנות: ${opportunityStatusLabel(opportunity.status)}", style = MaterialTheme.typography.bodySmall)
                 opportunity.potentialMonthlySaving?.let { saving ->
                     Text("חיסכון פוטנציאלי: ${money(saving)} לחודש", style = MaterialTheme.typography.bodySmall)
                 }
@@ -189,7 +189,7 @@ private fun BillsStateCard(message: String) {
 private fun unknownBillsMessage(state: FinancialSyncState): String = when (state) {
     FinancialSyncState.Unauthenticated -> "נדרשת התחברות כדי לדעת אילו חשבונות קיימים."
     FinancialSyncState.CheckingConnection -> "מצב החשבונות עדיין לא ידוע; בודקים את החיבור."
-    FinancialSyncState.Disconnected -> "Gmail אינו מחובר, ולכן אין כרגע מקור סמכותי לחשבונות."
+    FinancialSyncState.Disconnected -> "Gmail אינו מחובר, ולכן אין כרגע מקור מחובר לחשבונות."
     FinancialSyncState.Recovering -> "החשבונות עדיין נטענים; רשימה ריקה לא תוצג כמידע אמיתי."
     is FinancialSyncState.Partial -> "כיסוי החשבונות עדיין אינו ידוע במלואו."
     is FinancialSyncState.Failed -> "טעינת החשבונות נכשלה; לא נציג רשימה ריקה במקום שגיאה."
@@ -197,11 +197,26 @@ private fun unknownBillsMessage(state: FinancialSyncState): String = when (state
 }
 
 private fun financialTruthStatus(state: FinancialSyncState): String = when (state) {
-    FinancialSyncState.Unauthenticated -> "נדרשת התחברות כדי לטעון מידע סמכותי."
+    FinancialSyncState.Unauthenticated -> "נדרשת התחברות כדי לטעון מידע מאומת."
     FinancialSyncState.CheckingConnection -> "בודקים את מקור המידע."
-    FinancialSyncState.Disconnected -> "המקור הפיננסי אינו מחובר."
-    FinancialSyncState.Recovering -> "המידע הסמכותי עדיין נטען."
+    FinancialSyncState.Disconnected -> "מקור החשבונות אינו מחובר."
+    FinancialSyncState.Recovering -> "המידע המאומת עדיין נטען."
     is FinancialSyncState.Partial -> "המידע חלקי; ערכים חסרים נשארים לא ידועים."
     is FinancialSyncState.Failed -> "הסנכרון נכשל; ערכים חסרים נשארים לא ידועים."
-    is FinancialSyncState.Ready -> "הנתונים מבוססים על הסנכרון הסמכותי האחרון."
+    is FinancialSyncState.Ready -> "הנתונים מבוססים על הסנכרון המאומת האחרון."
+}
+
+private fun verificationLabel(status: String): String = when (status.uppercase()) {
+    "VERIFIED" -> "אומת"
+    "UNVERIFIED", "PENDING" -> "ממתין לאימות"
+    else -> "מצב האימות עדיין לא ידוע"
+}
+
+private fun opportunityStatusLabel(status: String): String = when (status.uppercase()) {
+    "MATCHED", "READY", "AVAILABLE" -> "הצעה זמינה לבדיקה"
+    "USER_ACCEPTED", "REQUEST_CREATED" -> "בקשת חיסכון נוצרה"
+    "PROVIDER_PROCESSING", "SUBMITTED" -> "הבקשה בטיפול"
+    "ACTIVATED", "DEAL_COMPLETED", "COMPLETED" -> "התהליך הושלם"
+    "PROVIDER_REJECTED", "DEAL_REJECTED" -> "הבקשה לא הושלמה"
+    else -> "מצב ההזדמנות בבדיקה"
 }
