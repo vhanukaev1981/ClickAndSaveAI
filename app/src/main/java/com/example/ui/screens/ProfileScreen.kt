@@ -223,7 +223,10 @@ private fun GmailAuthorityCard(
                     }
                 }
             }
-            if (authState is AuthState.Authenticated && connection?.connected != true) {
+            if (
+                authState is AuthState.Authenticated &&
+                financialSyncState == FinancialSyncState.Disconnected
+            ) {
                 OutlinedButton(
                     onClick = onRequestGmailAuthorization,
                     modifier = Modifier.fillMaxWidth()
