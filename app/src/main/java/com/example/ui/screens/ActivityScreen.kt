@@ -39,7 +39,7 @@ import com.example.ui.MainViewModel
 fun ActivityScreen(viewModel: MainViewModel) {
     val financialSyncState by viewModel.financialSyncState.collectAsState()
     val authoritativeFinancialActivity by viewModel.authoritativeFinancialActivity.collectAsState()
-    val ledger = financialSyncState.activityOrNull ?: authoritativeFinancialActivity
+    val activityHistory = financialSyncState.activityOrNull ?: authoritativeFinancialActivity
 
     Column(
         modifier = Modifier
@@ -50,41 +50,44 @@ fun ActivityScreen(viewModel: MainViewModel) {
     ) {
         Text("פעילות", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(
-            "כאן מוצגים רק אירועים שנשמרו במקור הסמכותי. מצב UI נוכחי אינו הופך אוטומטית להיסטוריה.",
+            "כאן מוצגים רק אירועים שנשמרו ואומתו. אירוע שלא תועד לא יוצג כאילו התרחש.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        when (val state = financialSyncState) {
+        when (financialSyncState) {
             FinancialSyncState.Unauthenticated -> ActivityStatusCard(
                 "החשבון אינו מחובר",
-                "לא ניתן לדעת את פעילות החשבון לפני התחברות מאומתת."
+                "יש להתחבר כדי לראות את פעילות החשבון."
             )
             FinancialSyncState.CheckingConnection -> ActivityStatusCard(
                 "בודקים את החיבור",
-                "יומן הפעילות עדיין לא ידוע."
+                "הפעילות עדיין נטענת."
             )
             FinancialSyncState.Disconnected -> ActivityStatusCard(
                 "Gmail אינו מחובר",
-                "אין כרגע מקור Gmail מחובר שממנו ניתן לשחזר אירועים חדשים."
+                "לא ניתן לזהות פעילות חדשה מ-Gmail עד לחיבור מחדש."
             )
             FinancialSyncState.Recovering -> ActivityStatusCard(
-                "משחזרים את יומן הפעילות",
-                "לא יוצגו אירועים משוערים בזמן הטעינה."
+                "טוענים את הפעילות",
+                "נציג רק אירועים שניתן לאמת."
             )
             is FinancialSyncState.Failed -> {
-                ActivityStatusCard("טעינת הפעילות נכשלה", state.reason)
+                ActivityStatusCard(
+                    "טעינת הפעילות נכשלה",
+                    "לא הצלחנו לעדכן את הפעילות כרגע. אפשר לנסות שוב בעוד רגע."
+                )
                 RetryActivity(viewModel)
             }
             is FinancialSyncState.Partial -> {
                 ActivityStatusCard(
-                    "הכיסוי חלקי",
-                    "ייתכן שחסרים אירועים חדשים. מוצגים רק אירועים שכבר קיימים ב-ledger הסמכותי."
+                    "הפעילות עשויה להיות חלקית",
+                    "ייתכן שחסרים אירועים חדשים. מוצגים רק אירועים שכבר אומתו."
                 )
-                AuthoritativeLedger(ledger)
+                VerifiedActivityHistory(activityHistory)
                 RetryActivity(viewModel)
             }
-            is FinancialSyncState.Ready -> AuthoritativeLedger(ledger)
+            is FinancialSyncState.Ready -> VerifiedActivityHistory(activityHistory)
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -92,18 +95,18 @@ fun ActivityScreen(viewModel: MainViewModel) {
 }
 
 @Composable
-private fun AuthoritativeLedger(activity: FinancialActivityResult?) {
+private fun VerifiedActivityHistory(activity: FinancialActivityResult?) {
     if (activity == null) {
-        ActivityStatusCard("מצב הפעילות לא ידוע", "לא התקבלה תשובת ledger סמכותית.")
+        ActivityStatusCard("הפעילות עדיין לא זמינה", "לא הצלחנו לטעון את היסטוריית הפעילות כרגע.")
         return
     }
     if (activity.events.isEmpty()) {
         ActivityStatusCard(
-            "אין אירועים מתועדים בחלון הכיסוי הזמין",
+            "אין אירועים מתועדים בתקופה הזמינה",
             if (activity.isCompleteHistory) {
-                "המקור הסמכותי מסמן שההיסטוריה המכוסה מלאה."
+                "לא נמצאה פעילות נוספת בתקופה שנבדקה."
             } else {
-                "היסטוריה מלאה אינה ידועה; רשימה זו אינה הוכחה שמעולם לא הייתה פעילות."
+                "ייתכן שקיימת פעילות מחוץ לתקופה שנבדקה."
             }
         )
         return
@@ -112,7 +115,7 @@ private fun AuthoritativeLedger(activity: FinancialActivityResult?) {
     activity.events.forEach { event -> ActivityEventCard(event) }
     if (!activity.isCompleteHistory) {
         Text(
-            "כיסוי היסטורי חלקי • ${activity.sourceCoverage.joinToString()}",
+            "מוצגת פעילות חלקית לפי המידע הזמין כרגע.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -126,16 +129,15 @@ private fun ActivityEventCard(event: FinancialActivityEvent) {
         "SCAN_COMPLETED" -> "סריקת Gmail הושלמה"
         "BILL_DETECTED" -> "זוהה חשבון"
         "RECURRING_SERVICE_DETECTED" -> "זוהה שירות חוזר"
-        "OPPORTUNITY_FOUND" -> "נמצאה הזדמנות"
-        else -> event.type
+        "OPPORTUNITY_FOUND" -> "נמצאה הזדמנות חיסכון"
+        else -> "פעילות בחשבון"
     }
     val details = buildList {
-        add("מצב: ${event.status}")
+        add(activityStatusLabel(event.status))
         event.providerName?.let { add("ספק: $it") }
         event.category?.let { add("קטגוריה: $it") }
         event.observedAmount?.let { add("סכום שנצפה: ${money(it)}") }
-        event.verificationStatus?.let { add("אימות: $it") }
-        add("יעד: ${event.destination}")
+        event.verificationStatus?.let { add(verificationLabel(it)) }
     }.joinToString(" • ")
 
     Card(
@@ -158,6 +160,19 @@ private fun ActivityEventCard(event: FinancialActivityEvent) {
             }
         }
     }
+}
+
+private fun activityStatusLabel(status: String): String = when (status.uppercase()) {
+    "COMPLETED", "READY", "SUCCESS" -> "הושלם"
+    "PENDING", "PROCESSING", "IN_PROGRESS" -> "בטיפול"
+    "FAILED", "ERROR" -> "לא הושלם"
+    else -> "מצב הפעילות בבדיקה"
+}
+
+private fun verificationLabel(status: String): String = when (status.uppercase()) {
+    "VERIFIED" -> "המידע אומת"
+    "UNVERIFIED", "PENDING" -> "המידע ממתין לאימות"
+    else -> "מצב האימות עדיין לא ידוע"
 }
 
 @Composable
