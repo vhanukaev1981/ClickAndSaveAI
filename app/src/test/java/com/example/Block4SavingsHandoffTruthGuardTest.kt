@@ -10,23 +10,27 @@ class Block4SavingsHandoffTruthGuardTest {
     fun acceptedOpportunityUsesProofOrientedProviderHandoffFields() {
         val repository = File("src/main/java/com/example/data/repository/OpportunityActionRepository.kt").readText()
         listOf(
-            "offerVerificationState",
-            "offerFreshnessState",
-            "userEligibilityState",
+            "potentialMonthlySaving",
+            "potentialAnnualSaving",
+            "consentState",
+            "requestState",
+            "deliveryAttemptState",
+            "submissionState",
             "deliveryState",
             "providerContactState",
             "completionState",
-            "dealObserved",
-            "savingRealizationState"
+            "savingRealizationState",
+            "realizedMonthlySaving",
+            "realizedAnnualSaving"
         ).forEach { contract ->
-            assertTrue("missing proof field: $contract", repository.contains(contract))
+            assertTrue("missing action result field: $contract", repository.contains(contract))
         }
-        assertTrue(repository.contains("require(request.htmlCode in 200..299)"))
-        assertTrue(repository.contains("payload[\"offerId\"]"))
-        assertTrue(repository.contains("payload[\"contactName\"]"))
-        assertTrue(repository.contains("payload[\"contactEmail\"]"))
-        assertTrue(repository.contains("payload[\"phone\"]"))
-        assertTrue(repository.contains("payload[\"consentAccepted\"] = true"))
+        assertTrue(repository.contains("require(consentAccepted)"))
+        assertTrue(repository.contains("\"expectedOfferId\" to expectedOfferId"))
+        assertTrue(repository.contains("\"contactName\" to contactName"))
+        assertTrue(repository.contains("\"contactEmail\" to contactEmail"))
+        assertTrue(repository.contains("\"phone\" to phone"))
+        assertTrue(repository.contains("\"consentAccepted\" to consentAccepted"))
     }
 
     @Test
