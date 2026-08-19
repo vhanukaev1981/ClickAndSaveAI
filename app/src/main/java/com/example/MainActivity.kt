@@ -13,19 +13,28 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
@@ -35,11 +44,13 @@ import com.example.data.repository.FinancialRefreshReason
 import com.example.ui.MainViewModel
 import com.example.ui.components.BottomNavBar
 import com.example.ui.screens.ActivityScreen
+import com.example.ui.screens.AiAssistantScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.InvoicesScreen
 import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.ProvidersScreen
 import com.example.ui.theme.ClickAndSaveTheme
+import com.example.ui.v3.V3SecondarySurface
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
@@ -217,6 +228,11 @@ fun MainAppStructure(
 ) {
     val selectedTab by viewModel.selectedTab.collectAsState()
     val session by viewModel.userSession.collectAsState()
+    var secondarySurfaceName by rememberSaveable { mutableStateOf<String?>(null) }
+    val secondarySurface = secondarySurfaceName?.let { savedName ->
+        V3SecondarySurface.entries.firstOrNull { it.name == savedName }
+    }
+    val closeSecondarySurface = { secondarySurfaceName = null }
 
     LaunchedEffect(session.uid) {
         if (session.isAuthenticated) {
@@ -228,55 +244,80 @@ fun MainAppStructure(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding(),
-                color = MaterialTheme.colorScheme.secondaryContainer
-            ) {
-                Text(
-                    text = "Click&SaveAI עובדת ברקע ומחפשת התייעלויות עבורך",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
+            if (secondarySurface == V3SecondarySurface.INVOICES) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding(),
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = closeSecondarySurface) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "חזרה")
+                            Text("חזרה")
+                        }
+                        Text(
+                            text = "החשבונות שלי",
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         },
         bottomBar = {
-            BottomNavBar(
-                selectedTab = selectedTab.coerceIn(0, 4),
-                onTabSelected = viewModel::setTab
-            )
+            if (secondarySurface == null) {
+                BottomNavBar(
+                    selectedTab = selectedTab.coerceIn(0, 4),
+                    onTabSelected = { tab ->
+                        closeSecondarySurface()
+                        viewModel.setTab(tab)
+                    }
+                )
+            }
         }
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
-            when (selectedTab) {
-                0 -> DashboardScreen(
-                    viewModel = viewModel,
-                    onNavigateToTab = viewModel::setTab,
-                    onOpenReceiptScan = viewModel::reportReceiptScanUnavailable,
-                    onGoogleSignIn = onGoogleSignIn,
-                    onRequestGmailAuthorization = onRequestGmailAuthorization
-                )
-                1 -> InvoicesScreen(
+            if (secondarySurface == V3SecondarySurface.INVOICES) {
+                InvoicesScreen(
                     viewModel = viewModel,
                     onOpenReceiptScan = viewModel::reportReceiptScanUnavailable
                 )
-                2 -> ProvidersScreen(viewModel)
-                3 -> ActivityScreen(viewModel)
-                4 -> ProfileScreen(
-                    viewModel = viewModel,
-                    onGoogleSignIn = onGoogleSignIn,
-                    onRequestGmailAuthorization = onRequestGmailAuthorization
-                )
-                else -> DashboardScreen(
-                    viewModel = viewModel,
-                    onNavigateToTab = viewModel::setTab,
-                    onOpenReceiptScan = viewModel::reportReceiptScanUnavailable,
-                    onGoogleSignIn = onGoogleSignIn,
-                    onRequestGmailAuthorization = onRequestGmailAuthorization
-                )
+            } else {
+                when (selectedTab) {
+                    0 -> DashboardScreen(
+                        viewModel = viewModel,
+                        onNavigateToTab = viewModel::setTab,
+                        onOpenInvoices = {
+                            secondarySurfaceName = V3SecondarySurface.INVOICES.name
+                        },
+                        onOpenReceiptScan = viewModel::reportReceiptScanUnavailable,
+                        onGoogleSignIn = onGoogleSignIn,
+                        onRequestGmailAuthorization = onRequestGmailAuthorization
+                    )
+                    1 -> ProvidersScreen(viewModel)
+                    2 -> AiAssistantScreen(viewModel)
+                    3 -> ActivityScreen(viewModel)
+                    4 -> ProfileScreen(
+                        viewModel = viewModel,
+                        onGoogleSignIn = onGoogleSignIn,
+                        onRequestGmailAuthorization = onRequestGmailAuthorization
+                    )
+                    else -> DashboardScreen(
+                        viewModel = viewModel,
+                        onNavigateToTab = viewModel::setTab,
+                        onOpenInvoices = {
+                            secondarySurfaceName = V3SecondarySurface.INVOICES.name
+                        },
+                        onOpenReceiptScan = viewModel::reportReceiptScanUnavailable,
+                        onGoogleSignIn = onGoogleSignIn,
+                        onRequestGmailAuthorization = onRequestGmailAuthorization
+                    )
+                }
             }
         }
     }

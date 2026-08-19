@@ -1,15 +1,15 @@
 package com.example.ui.components
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Savings
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Savings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -30,7 +30,7 @@ fun BottomNavBar(
     NavigationBar(
         modifier = Modifier.testTag("bottom_nav_bar"),
         containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 8.dp
+        tonalElevation = 4.dp
     ) {
         NavigationBarItem(
             selected = selectedTab == 0,
@@ -38,12 +38,12 @@ fun BottomNavBar(
             icon = {
                 Icon(
                     if (selectedTab == 0) Icons.Filled.Dashboard else Icons.Outlined.Dashboard,
-                    contentDescription = "המצב הפיננסי"
+                    contentDescription = "בית"
                 )
             },
             label = { Text("בית") },
             colors = navColors(),
-            modifier = Modifier.testTag("nav_dashboard")
+            modifier = Modifier.testTag("nav_home")
         )
 
         NavigationBarItem(
@@ -51,22 +51,8 @@ fun BottomNavBar(
             onClick = { onTabSelected(1) },
             icon = {
                 Icon(
-                    if (selectedTab == 1) Icons.Filled.ReceiptLong else Icons.Outlined.ReceiptLong,
-                    contentDescription = "חשבונות וחיובים"
-                )
-            },
-            label = { Text("חשבונות") },
-            colors = navColors(),
-            modifier = Modifier.testTag("nav_invoices")
-        )
-
-        NavigationBarItem(
-            selected = selectedTab == 2,
-            onClick = { onTabSelected(2) },
-            icon = {
-                Icon(
-                    if (selectedTab == 2) Icons.Filled.Savings else Icons.Outlined.Savings,
-                    contentDescription = "הזדמנויות חיסכון"
+                    if (selectedTab == 1) Icons.Filled.Savings else Icons.Outlined.Savings,
+                    contentDescription = "חיסכון"
                 )
             },
             label = { Text("חיסכון") },
@@ -75,12 +61,26 @@ fun BottomNavBar(
         )
 
         NavigationBarItem(
+            selected = selectedTab == 2,
+            onClick = { onTabSelected(2) },
+            icon = {
+                Icon(
+                    if (selectedTab == 2) Icons.Filled.AutoAwesome else Icons.Outlined.AutoAwesome,
+                    contentDescription = "AI"
+                )
+            },
+            label = { Text("AI") },
+            colors = navColors(),
+            modifier = Modifier.testTag("nav_ai")
+        )
+
+        NavigationBarItem(
             selected = selectedTab == 3,
             onClick = { onTabSelected(3) },
             icon = {
                 Icon(
                     if (selectedTab == 3) Icons.Filled.History else Icons.Outlined.History,
-                    contentDescription = "פעילות וסנכרון"
+                    contentDescription = "פעילות"
                 )
             },
             label = { Text("פעילות") },
@@ -94,7 +94,7 @@ fun BottomNavBar(
             icon = {
                 Icon(
                     if (selectedTab == 4) Icons.Filled.Person else Icons.Outlined.Person,
-                    contentDescription = "פרופיל והגדרות"
+                    contentDescription = "אני"
                 )
             },
             label = { Text("אני") },
@@ -108,7 +108,7 @@ fun BottomNavBar(
 private fun navColors() = NavigationBarItemDefaults.colors(
     selectedIconColor = MaterialTheme.colorScheme.primary,
     selectedTextColor = MaterialTheme.colorScheme.primary,
-    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
 )

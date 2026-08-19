@@ -52,6 +52,7 @@ import com.example.ui.theme.TechBluePrimary
 fun DashboardScreen(
     viewModel: MainViewModel,
     onNavigateToTab: (Int) -> Unit,
+    onOpenInvoices: () -> Unit = {},
     onOpenReceiptScan: () -> Unit,
     onGoogleSignIn: () -> Unit,
     onRequestGmailAuthorization: () -> Unit
@@ -175,13 +176,13 @@ fun DashboardScreen(
                     text = "החשבונות שלי",
                     subtitle = "החשבוניות והחיובים שהמערכת זיהתה",
                     icon = Icons.Default.ReceiptLong,
-                    onClick = { onNavigateToTab(1) }
+                    onClick = onOpenInvoices
                 )
                 DashboardActionButton(
                     text = "הזדמנויות חיסכון",
                     subtitle = "השוואות שנבדקו מול השירותים שלך",
                     icon = Icons.Default.Storefront,
-                    onClick = { onNavigateToTab(2) }
+                    onClick = { onNavigateToTab(1) }
                 )
                 DashboardActionButton(
                     text = "פעילות וסנכרון",
@@ -230,6 +231,11 @@ fun DashboardScreen(
                         }
                     }
                 }
+                item {
+                    TextButton(onClick = onOpenInvoices, modifier = Modifier.fillMaxWidth()) {
+                        Text("כל החשבונות")
+                    }
+                }
             } else {
                 item {
                     HomeStatusCard(
@@ -266,7 +272,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItem
         }
         item {
             TextButton(
-                onClick = { onNavigateToTab(2) },
+                onClick = { onNavigateToTab(1) },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("לכל הזדמנויות החיסכון")
