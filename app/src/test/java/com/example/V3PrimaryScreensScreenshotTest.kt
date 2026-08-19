@@ -114,6 +114,27 @@ class V3PrimaryScreensScreenshotTest {
     }
 
     @Test
+    @Config(qualifiers = "w360dp-h640dp-xhdpi", sdk = [36])
+    fun onboardingPrivacyStepFitsCompactRtlWidth() {
+        composeTestRule.setContent {
+            ClickAndSaveTheme {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    V3OnboardingContent(
+                        step = 2,
+                        authenticated = true,
+                        onNext = {},
+                        onGoogleSignIn = {},
+                        onConnectGmail = {}
+                    )
+                }
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage(
+            filePath = "src/test/screenshots/v3-onboarding-step-3-compact-rtl.png"
+        )
+    }
+
+    @Test
     fun firstSyncUsesNeutralTruthSafePresentation() {
         composeTestRule.setContent {
             ClickAndSaveTheme {
