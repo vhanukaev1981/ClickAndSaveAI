@@ -13,7 +13,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -44,7 +43,16 @@ import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.OpportunityActionRepository
 import com.example.data.repository.OpportunityActionResult
 import com.example.ui.MainViewModel
+import com.example.ui.components.OpportunityLifecycleChip
+import com.example.ui.components.SavingsHero
+import com.example.ui.components.V3EmptyState
+import com.example.ui.components.V3SectionHeader
+import com.example.ui.components.VerificationBadge
 import com.example.ui.theme.TechBluePrimary
+import com.example.ui.v3.asV3Money
+import com.example.ui.v3.hasAuthoritativeV3Offer
+import com.example.ui.v3.toV3SavingsSummary
+import com.example.ui.v3.v3LifecycleLabel
 import kotlinx.coroutines.launch
 
 private const val IN_APP_PROVIDER_REQUEST = "IN_APP_PROVIDER_REQUEST"
@@ -74,32 +82,32 @@ fun ProvidersScreen(viewModel: MainViewModel) {
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 100.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                    shape = RoundedCornerShape(22.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = TechBluePrimary)
-                            Spacer(modifier = Modifier.size(8.dp))
-                            Text(
-                                "הזדמנויות ש-Click&SaveAI מצאה",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Text(
-                            "המערכת מדרגת הזדמנויות לפי הערך הפוטנציאלי עבורך. חיסכון מוצג כהערכה עד שהוא מתממש בפועל. יצירת בקשה אינה אישור שהפרטים נמסרו לספק.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "החיסכון שלך",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "מצאנו הזדמנויות. אתה מחליט במה לטפל.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            financialHome?.let { home ->
+                val summary = home.toV3SavingsSummary()
+                item {
+                    SavingsHero(
+                        realizedMonthly = summary.realizedMonthly,
+                        potentialMonthly = summary.potentialMonthly,
+                        realizedKnownZero = summary.realizedKnownZero
+                    )
                 }
             }
 
@@ -107,9 +115,9 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                 financialSyncState == FinancialSyncState.Unauthenticated ||
                     financialSyncState == FinancialSyncState.Disconnected -> {
                     item {
-                        MessageCard(
+                        V3EmptyState(
                             title = "עדיין אין מספיק מידע",
-                            body = "יש להשלים חיבור מאומת לפני שניתן להציג הזדמנויות חיסכון שנבדקו."
+                            body = "יש להשלים חיבור מאומת לפני שנוכל להציג הזדמנויות חיסכון שנבדקו."
                         )
                     }
                 }
@@ -128,18 +136,20 @@ fun ProvidersScreen(viewModel: MainViewModel) {
 
                 financialSyncState is FinancialSyncState.Failed && financialHome == null -> {
                     item {
-                        MessageCard(
-                            title = "לא ניתן להשלים את הבדיקה",
-                            body = "המידע הפיננסי אינו זמין כרגע. לא נציג ערכי חיסכון משוערים במקום מידע שחסר."
+                        V3EmptyState(
+                            title = "לא הצלחנו להשלים את הבדיקה",
+                            body = "המידע הפיננסי אינו זמין כרגע. לא נציג ערכי חיסכון משוערים במקום מידע שחסר.",
+                            actionLabel = "נסה שוב",
+                            onAction = { viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY) }
                         )
                     }
                 }
 
                 financialSyncState is FinancialSyncState.Partial && financialHome == null -> {
                     item {
-                        MessageCard(
-                            title = "עדיין אין מספיק מידע",
-                            body = "הסנכרון חלקי ואין כרגע מספיק מידע מאומת להצגת חיסכון."
+                        V3EmptyState(
+                            title = "חלק מהמידע עדיין מתעדכן",
+                            body = "אין כרגע מספיק מידע מאומת להצגת חיסכון. מידע קיים לא יוחלף באפס או בהערכה."
                         )
                     }
                 }
@@ -148,17 +158,21 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                     val opportunities = financialHome?.opportunities.orEmpty()
                     if (opportunities.isEmpty()) {
                         item {
-                            MessageCard(
-                                title = "ה-AI ממשיך לבדוק",
-                                body = "כרגע אין צורך לחפש ידנית. אם יזוהה שירות שניתן לייעל או תימצא הצעה מתאימה, היא תופיע כאן אוטומטית."
+                            V3EmptyState(
+                                title = "כרגע אין הזדמנויות מאומתות",
+                                body = "נמשיך לבדוק עבורך כשהמידע יתעדכן."
                             )
                         }
                     } else {
+                        item { V3SectionHeader("הזדמנויות פתוחות") }
                         items(opportunities, key = { it.id }) { opportunity ->
                             OpportunityCard(
                                 opportunity = opportunity,
                                 onAccept = {
-                                    if (opportunity.actionMode == IN_APP_PROVIDER_REQUEST) {
+                                    if (
+                                        opportunity.actionMode == IN_APP_PROVIDER_REQUEST &&
+                                        opportunity.hasAuthoritativeV3Offer()
+                                    ) {
                                         val displayedOfferId = authoritativeMatchedOffer(opportunity)?.offerId.orEmpty()
                                         if (displayedOfferId.isBlank()) {
                                             error = "ההצעה השתנתה, פגה או אינה מאומתת כרגע."
@@ -195,7 +209,10 @@ fun ProvidersScreen(viewModel: MainViewModel) {
     }
 
     selectedOpportunity?.let { opportunity ->
-        if (opportunity.actionMode == IN_APP_PROVIDER_REQUEST) {
+        if (
+            opportunity.actionMode == IN_APP_PROVIDER_REQUEST &&
+            opportunity.hasAuthoritativeV3Offer()
+        ) {
             SavingsActionDialog(
                 opportunity = opportunity,
                 defaultName = session.displayName,
@@ -238,12 +255,22 @@ private fun OpportunityCard(
     val matched = authoritativeMatchedOffer(opportunity)
     val monthlySaving = opportunity.potentialMonthlySaving
     val lifecycleLocked = opportunityLifecycleLocked(opportunity)
-    val inAppActionAvailable = opportunity.actionMode == IN_APP_PROVIDER_REQUEST
+    val authoritativeOffer = opportunity.hasAuthoritativeV3Offer()
+    val inAppActionAvailable = opportunity.actionMode == IN_APP_PROVIDER_REQUEST &&
+        authoritativeOffer &&
+        matched != null &&
+        monthlySaving != null &&
+        monthlySaving > 0.0 &&
+        !lifecycleLocked
 
-    Card(shape = RoundedCornerShape(20.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(9.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -251,37 +278,42 @@ private fun OpportunityCard(
                     contentDescription = null,
                     tint = TechBluePrimary
                 )
-                Spacer(modifier = Modifier.size(8.dp))
+                Spacer(modifier = Modifier.size(9.dp))
                 Column(modifier = Modifier.weight(1f)) {
+                    Text(opportunity.providerName, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "${opportunity.providerName} • ${opportunity.category}",
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "החיוב שנצפה: ${money(opportunity.currentMonthlyCost)} לחודש",
+                        opportunity.category,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                OpportunityLifecycleChip(opportunity.v3LifecycleLabel())
             }
 
-            if (matched != null && monthlySaving != null && monthlySaving > 0.0) {
+            Text(
+                "החיוב שנצפה: ${opportunity.currentMonthlyCost.asV3Money()} לחודש",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            if (authoritativeOffer && matched != null && monthlySaving != null && monthlySaving > 0.0) {
                 val effectiveMonthly = matched.effectiveMonthlyPrice ?: matched.monthlyPrice
                 val annualSaving = opportunity.potentialAnnualSaving
-                val annualSavingText = if (annualSaving != null && annualSaving > 0.0) {
-                    " • ${money(annualSaving)} בשנה"
-                } else {
-                    ""
-                }
                 Text(
-                    "נמצאה הצעה מאומתת ועדכנית של ${matched.providerName} בעלות חודשית אפקטיבית של ${money(effectiveMonthly)}.",
+                    "חלופה שנבדקה: ${matched.providerName} · ${effectiveMonthly.asV3Money()} לחודש",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    "חיסכון פוטנציאלי: ${money(monthlySaving)} בחודש$annualSavingText",
-                    color = TechBluePrimary,
-                    fontWeight = FontWeight.SemiBold
+                    buildString {
+                        append("חיסכון פוטנציאלי: ${monthlySaving.asV3Money()} בחודש")
+                        if (annualSaving != null && annualSaving > 0.0) {
+                            append(" · ${annualSaving.asV3Money()} בשנה")
+                        }
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TechBluePrimary
                 )
+                VerificationBadge("אומת")
                 Text(
                     offerTrustText(
                         verification = matched.verificationState,
@@ -291,74 +323,41 @@ private fun OpportunityCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (matched.verifiedAt.isBlank()) {
+                Text(
+                    if (matched.verifiedAt.isBlank()) {
+                        "מועד בדיקת ההצעה אינו ידוע"
+                    } else {
+                        "ההצעה נבדקה לאחרונה: ${matched.verifiedAt}"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                matched.firstYearCost?.let { firstYearCost ->
                     Text(
-                        "מועד בדיקת ההצעה אינו ידוע",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    Text(
-                        "ההצעה נבדקה לאחרונה: ${matched.verifiedAt}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                matched.firstYearCost?.let {
-                    Text(
-                        "עלות שנה ראשונה: ${money(it)}${matched.oneTimeFees?.takeIf { fee -> fee > 0.0 }?.let { fee -> " • כולל ${money(fee)} עלויות חד-פעמיות" } ?: ""}",
+                        "עלות שנה ראשונה: ${firstYearCost.asV3Money()}${matched.oneTimeFees?.takeIf { fee -> fee > 0.0 }?.let { fee -> " · כולל ${fee.asV3Money()} עלויות חד-פעמיות" } ?: ""}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 matched.requiredRecurringFees?.takeIf { it > 0.0 }?.let { recurringFee ->
                     Text(
-                        "העלות כוללת ${money(recurringFee)} לחודש דמי חובה${matched.requiredRecurringFeesDescription.takeIf { it.isNotBlank() }?.let { description -> " ($description)" } ?: ""}.",
+                        "העלות כוללת ${recurringFee.asV3Money()} לחודש דמי חובה${matched.requiredRecurringFeesDescription.takeIf { it.isNotBlank() }?.let { description -> " ($description)" } ?: ""}.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Text(
-                    "החיסכון הפוטנציאלי הוא הערכה לפי מחיר צרכני מלא לשנה הראשונה. הוא אינו חיסכון ממומש. ההצעה נבדקת מחדש לפני כל פעולה.",
+                    "החיסכון הפוטנציאלי הוא הערכה לפי ההצעה שנבדקה. זה אינו חיסכון ממומש.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-
-                realizedSavingMessage(opportunity)?.let { message ->
-                    Text(message, fontWeight = FontWeight.Bold)
-                }
-                val lifecycleMessage = opportunityHandoffMessage(opportunity)
-                when {
-                    lifecycleLocked -> Text(lifecycleMessage, fontWeight = FontWeight.Bold)
-                    inAppActionAvailable -> {
-                        if (opportunity.completionState == "DEAL_REJECTED" ||
-                            opportunity.status.equals("PROVIDER_REJECTED", ignoreCase = true)
-                        ) {
-                            Text(
-                                "הבקשה הקודמת לא הושלמה. אם ההצעה עדיין בתוקף אפשר לנסות שוב.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Button(onClick = onAccept, modifier = Modifier.fillMaxWidth()) {
-                            Text("בדוק בקשה לחיסכון פוטנציאלי של ${money(monthlySaving)} בחודש")
-                        }
-                    }
-                    else -> {
-                        Text(
-                            "זו ההצעה הטובה ביותר שמצאנו כרגע. מעבר ישיר דרך Click&SaveAI עדיין לא זמין להצעה הזו, ולכן לא נשלח את פרטיך לספק.",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
             } else {
                 val detectionText = if (opportunity.type == "COMPARE_AFTER_PRICE_INCREASE") {
                     opportunity.percentIncrease?.let { percent ->
-                        "זוהתה עליית מחיר של ${String.format("%.1f", percent)}%. Click&SaveAI מחפשת עבורך חלופה מתאימה."
-                    } ?: "זוהה שינוי שמצדיק בדיקה, אך שיעור השינוי אינו ידוע. Click&SaveAI מחפשת עבורך חלופה מתאימה."
+                        "זוהתה עליית מחיר של ${String.format("%.1f", percent)}%. אנחנו ממשיכים לחפש חלופה מתאימה."
+                    } ?: "זוהה שינוי שמצדיק בדיקה, אך שיעור השינוי אינו ידוע."
                 } else {
-                    "זהו שירות חודשי חוזר. Click&SaveAI בודקת באופן יזום אם קיימת חלופה טובה ומתאימה יותר."
+                    "זהו שירות חודשי חוזר. אנחנו בודקים אם קיימת חלופה טובה ומתאימה יותר."
                 }
                 Text(detectionText, style = MaterialTheme.typography.bodyMedium)
                 Text(
@@ -375,9 +374,43 @@ private fun OpportunityCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                val lifecycleMessage = opportunityHandoffMessage(opportunity)
-                if (lifecycleMessage.isNotBlank()) {
-                    Text(lifecycleMessage, fontWeight = FontWeight.Bold)
+            }
+
+            realizedSavingMessage(opportunity)?.let { message ->
+                Text(message, fontWeight = FontWeight.Bold)
+            }
+
+            val lifecycleMessage = opportunityHandoffMessage(opportunity)
+            if (lifecycleMessage.isNotBlank()) {
+                Text(
+                    lifecycleMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (lifecycleLocked) FontWeight.SemiBold else FontWeight.Normal
+                )
+            }
+
+            when {
+                inAppActionAvailable -> {
+                    if (
+                        opportunity.completionState == "DEAL_REJECTED" ||
+                        opportunity.status.equals("PROVIDER_REJECTED", ignoreCase = true)
+                    ) {
+                        Text(
+                            "הבקשה הקודמת לא הושלמה. אם ההצעה עדיין בתוקף אפשר לנסות שוב.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Button(onClick = onAccept, modifier = Modifier.fillMaxWidth()) {
+                        Text("בדיקת ההצעה")
+                    }
+                }
+                authoritativeOffer && matched != null && monthlySaving != null && monthlySaving > 0.0 && !lifecycleLocked -> {
+                    Text(
+                        "מעבר ישיר דרך Click&SaveAI עדיין לא זמין להצעה הזו, ולכן לא נשלח את פרטיך לספק.",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
         }
@@ -408,7 +441,8 @@ private fun offerTrustText(
 }
 
 private fun opportunityLifecycleLocked(opportunity: FinancialOpportunity): Boolean {
-    if (opportunity.completionState == "DEAL_REJECTED" ||
+    if (
+        opportunity.completionState == "DEAL_REJECTED" ||
         opportunity.status.equals("PROVIDER_REJECTED", ignoreCase = true)
     ) {
         return false
@@ -440,7 +474,7 @@ private fun opportunityHandoffMessage(opportunity: FinancialOpportunity): String
 
 private fun realizedSavingMessage(opportunity: FinancialOpportunity): String? = when {
     opportunity.savingRealizationState == "REALIZED" && opportunity.realizedMonthlySaving != null ->
-        "חיסכון ממומש לפי ראיה שנקלטה: ${money(opportunity.realizedMonthlySaving)} בחודש."
+        "חיסכון ממומש לפי ראיה שנקלטה: ${opportunity.realizedMonthlySaving.asV3Money()} בחודש."
     opportunity.savingRealizationState == "NOT_REALIZED" && opportunity.realizedMonthlySaving == 0.0 ->
         "לפי הראיה שנקלטה, החיסכון הממומש הידוע הוא ₪0.00 בחודש."
     opportunity.savingRealizationState == "UNKNOWN" && opportunity.completionState == "DEAL_COMPLETED" ->
@@ -451,11 +485,11 @@ private fun realizedSavingMessage(opportunity: FinancialOpportunity): String? = 
 private fun actionHandoffMessage(result: OpportunityActionResult): String {
     val potential = result.potentialMonthlySaving
         ?.takeIf { it > 0.0 }
-        ?.let { " החיסכון הפוטנציאלי לפי ההצעה הוא ${money(it)} בחודש; זה אינו חיסכון ממומש." }
+        ?.let { " החיסכון הפוטנציאלי לפי ההצעה הוא ${it.asV3Money()} בחודש; זה אינו חיסכון ממומש." }
         ?: " סכום החיסכון הפוטנציאלי אינו ידוע."
     return when {
         result.savingRealizationState == "REALIZED" && result.realizedMonthlySaving != null ->
-            "קיימת ראיה לחיסכון ממומש של ${money(result.realizedMonthlySaving)} בחודש."
+            "קיימת ראיה לחיסכון ממומש של ${result.realizedMonthlySaving.asV3Money()} בחודש."
         result.savingRealizationState == "NOT_REALIZED" && result.realizedMonthlySaving == 0.0 ->
             "קיימת ראיה לכך שהחיסכון הממומש הידוע הוא ₪0.00 בחודש."
         result.completionState == "DEAL_COMPLETED" ->
@@ -546,5 +580,3 @@ private fun MessageCard(title: String, body: String) {
         }
     }
 }
-
-private fun money(value: Double): String = "₪${String.format("%.2f", value)}"
