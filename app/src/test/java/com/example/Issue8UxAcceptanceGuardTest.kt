@@ -86,8 +86,8 @@ class Issue8UxAcceptanceGuardTest {
             assertFalse(screen.contains("TODO", ignoreCase = true))
         }
 
+        assertTrue(dashboard.contains("onOpenInvoices"))
         assertTrue(dashboard.contains("onNavigateToTab(1)"))
-        assertTrue(dashboard.contains("onNavigateToTab(2)"))
         assertTrue(dashboard.contains("onNavigateToTab(3)"))
         assertTrue(dashboard.contains("onNavigateToTab(4)"))
         assertTrue(dashboard.contains("FinancialRefreshReason.RETRY"))
