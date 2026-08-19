@@ -14,8 +14,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -34,10 +34,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.repository.BackendInvoice
-import com.example.data.repository.FinancialHomeResult
 import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.latestScanOrNull
 import com.example.ui.MainViewModel
+import com.example.ui.components.V3SectionHeader
 import com.example.ui.theme.TechBluePrimary
 
 @Composable
@@ -52,7 +52,10 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().testTag("invoices_screen"),
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("invoices_screen")
+            .testTag("v3_invoice_list"),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -84,6 +87,8 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
             }
         }
 
+        item { V3SectionHeader("חשבונות שנמצאו") }
+
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(categories) { category ->
@@ -110,7 +115,7 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                 )
             }
             else -> items(filteredBills, key = { it.sourceMessageId }) { bill ->
-                AuthoritativeBillCard(bill = bill, financialHome = financialHome)
+                AuthoritativeBillCard(bill)
             }
         }
 
@@ -120,7 +125,11 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = TechBluePrimary)
+                    Icon(
+                        Icons.AutoMirrored.Filled.ReceiptLong,
+                        contentDescription = null,
+                        tint = TechBluePrimary
+                    )
                     Spacer(Modifier.size(10.dp))
                     Text(
                         "רשומה מוצגת רק כאשר היא קיימת בתוצאת סריקה שאומתה. שדות חסרים נשארים לא ידועים.",
@@ -136,27 +145,20 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
 }
 
 @Composable
-private fun AuthoritativeBillCard(
-    bill: BackendInvoice,
-    financialHome: FinancialHomeResult?
-) {
-    val recurring = financialHome?.context?.recurringServices?.firstOrNull {
-        it.providerName == bill.providerName && it.category == bill.category
-    }
-    val opportunity = financialHome?.opportunities?.firstOrNull {
-        it.providerName == bill.providerName && it.category == bill.category
-    }
-
-    Card(shape = RoundedCornerShape(18.dp)) {
+private fun AuthoritativeBillCard(bill: BackendInvoice) {
+    Card(
+        modifier = Modifier.fillMaxWidth().testTag("v3_invoice_item"),
+        shape = RoundedCornerShape(18.dp)
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(bill.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
             Text(bill.category.ifBlank { "קטגוריה לא ידועה" }, style = MaterialTheme.typography.bodySmall)
             Text("סכום שנצפה: ${money(bill.monthlyCost)}", fontWeight = FontWeight.SemiBold)
             Text(
-                if (recurring != null) {
-                    "חיוב חוזר שזוהה • ${recurring.observationCount} תצפיות"
+                if (bill.receivedDate.isNotBlank()) {
+                    "תאריך שנצפה: ${bill.receivedDate}"
                 } else {
-                    "מצב מחזור החיוב לא ידוע"
+                    "תאריך החיוב לא ידוע"
                 },
                 style = MaterialTheme.typography.bodySmall
             )
@@ -165,12 +167,6 @@ private fun AuthoritativeBillCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (opportunity != null) {
-                Text("מצב ההזדמנות: ${opportunityStatusLabel(opportunity.status)}", style = MaterialTheme.typography.bodySmall)
-                opportunity.potentialMonthlySaving?.let { saving ->
-                    Text("חיסכון פוטנציאלי: ${money(saving)} לחודש", style = MaterialTheme.typography.bodySmall)
-                }
-            }
         }
     }
 }
@@ -210,13 +206,4 @@ private fun verificationLabel(status: String): String = when (status.uppercase()
     "VERIFIED" -> "אומת"
     "UNVERIFIED", "PENDING" -> "ממתין לאימות"
     else -> "מצב האימות עדיין לא ידוע"
-}
-
-private fun opportunityStatusLabel(status: String): String = when (status.uppercase()) {
-    "MATCHED", "READY", "AVAILABLE" -> "הצעה זמינה לבדיקה"
-    "USER_ACCEPTED", "REQUEST_CREATED" -> "בקשת חיסכון נוצרה"
-    "PROVIDER_PROCESSING", "SUBMITTED" -> "הבקשה בטיפול"
-    "ACTIVATED", "DEAL_COMPLETED", "COMPLETED" -> "התהליך הושלם"
-    "PROVIDER_REJECTED", "DEAL_REJECTED" -> "הבקשה לא הושלמה"
-    else -> "מצב ההזדמנות בבדיקה"
 }
