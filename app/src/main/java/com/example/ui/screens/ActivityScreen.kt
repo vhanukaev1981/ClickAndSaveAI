@@ -174,16 +174,36 @@ private fun activityTone(event: FinancialActivityEvent): V3ActivityTone = when (
 private fun activityGroupLabel(timestamp: String, now: Date = Date()): String {
     val datePrefix = timestamp.take(10)
     val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
-    val eventDate = runCatching { formatter.parse(datePrefix) }.getOrNull() ?: return "מוקדם יותר"
-    val today = formatter.format(now)
-    val yesterdayCalendar = Calendar.getInstance().apply {
+    val eventDate = runCatching { formatter.parse(datePrefix) }.getOrNull()
+        ?: return "פעילות קודמת"
+
+    val todayCalendar = Calendar.getInstance().apply {
         time = now
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val eventCalendar = Calendar.getInstance().apply {
+        time = eventDate
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val yesterdayCalendar = (todayCalendar.clone() as Calendar).apply {
         add(Calendar.DAY_OF_YEAR, -1)
     }
-    return when (formatter.format(eventDate)) {
-        today -> "היום"
-        formatter.format(yesterdayCalendar.time) -> "אתמול"
-        else -> "מוקדם יותר"
+    val weekStart = (todayCalendar.clone() as Calendar).apply {
+        val daysFromSunday = (get(Calendar.DAY_OF_WEEK) - Calendar.SUNDAY + 7) % 7
+        add(Calendar.DAY_OF_YEAR, -daysFromSunday)
+    }
+
+    return when {
+        eventCalendar.timeInMillis == todayCalendar.timeInMillis -> "היום"
+        eventCalendar.timeInMillis == yesterdayCalendar.timeInMillis -> "אתמול"
+        !eventCalendar.before(weekStart) && eventCalendar.before(todayCalendar) -> "השבוע"
+        else -> "פעילות קודמת"
     }
 }
 
