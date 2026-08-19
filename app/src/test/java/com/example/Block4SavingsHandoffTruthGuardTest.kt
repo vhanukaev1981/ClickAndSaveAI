@@ -54,16 +54,19 @@ class Block4SavingsHandoffTruthGuardTest {
     }
 
     @Test
-    fun dashboardAlsoRequiresVerifiedFreshEligibleTruthBeforeCallingOfferVerified() {
+    fun dashboardDelegatesVerifiedFreshEligibleTruthToV3PresentationMapper() {
         val dashboard = File("src/main/java/com/example/ui/screens/DashboardScreen.kt").readText()
+        val mapper = File("src/main/java/com/example/ui/v3/V3FinancialPresentation.kt").readText()
+        val homeComponents = File("src/main/java/com/example/ui/components/V3HomeComponents.kt").readText()
 
-        assertTrue(dashboard.contains("opportunity.offerVerificationState == \"VERIFIED\""))
-        assertTrue(dashboard.contains("opportunity.offerFreshnessState == \"FRESH\""))
-        assertTrue(dashboard.contains("opportunity.userEligibilityState == \"ELIGIBLE\""))
-        assertTrue(dashboard.contains("matched.verificationState == \"VERIFIED\""))
-        assertTrue(dashboard.contains("matched.freshnessState == \"FRESH\""))
-        assertTrue(dashboard.contains("matched.eligibilityState == \"ELIGIBLE\""))
-        assertTrue(dashboard.contains("חיסכון פוטנציאלי לפי ההצעה"))
-        assertTrue(dashboard.contains("לא חיסכון ממומש"))
+        assertTrue(dashboard.contains("toV3SavingsSummary"))
+        assertTrue(mapper.contains("offerVerificationState == \"VERIFIED\""))
+        assertTrue(mapper.contains("offerFreshnessState == \"FRESH\""))
+        assertTrue(mapper.contains("userEligibilityState == \"ELIGIBLE\""))
+        assertTrue(mapper.contains("offer.verificationState == \"VERIFIED\""))
+        assertTrue(mapper.contains("offer.freshnessState == \"FRESH\""))
+        assertTrue(mapper.contains("offer.eligibilityState == \"ELIGIBLE\""))
+        assertTrue(homeComponents.contains("חיסכון פוטנציאלי"))
+        assertTrue(homeComponents.contains("אינו חיסכון שכבר מומש"))
     }
 }
