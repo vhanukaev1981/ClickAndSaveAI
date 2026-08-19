@@ -69,6 +69,45 @@ test("production workflow is manual, protected and staging-isolated", () => {
   assert.doesNotMatch(workflow, new RegExp(STAGING_CLIENT.replaceAll(".", "\\.")));
 });
 
+test("production Firebase retry-policy acknowledgement is exact and authorization-bound", () => {
+  const workflow = read(".github/workflows/production-release.yml");
+  const deployJobStart = workflow.indexOf("  deploy-firebase-production:");
+  assert.notEqual(deployJobStart, -1);
+  const deployJob = workflow.slice(deployJobStart);
+
+  assert.match(deployJob, /inputs\.authorize_firebase_deploy == 'DEPLOY_FIREBASE_PRODUCTION'/);
+  assert.match(deployJob, /\[\[ '\$\{\{ inputs\.confirm_environment \}\}' == 'CLICKANDSAVEAI_PRODUCTION' \]\]/);
+  assert.match(deployJob, /\[\[ "\$PRODUCTION_FIREBASE_PROJECT_ID" == 'click-save-ai-production' \]\]/);
+  assert.match(deployJob, /\[\[ "\$\(git rev-parse HEAD\)" == "\$SOURCE_SHA" \]\]/);
+  assert.match(
+    deployJob,
+    /firebase deploy \\\n\s+--project "\$PRODUCTION_FIREBASE_PROJECT_ID" \\\n\s+--only firestore:rules,firestore:indexes,functions \\\n\s+--non-interactive \\\n\s+--force(?:\n|$)/
+  );
+  assert.equal((workflow.match(/--force/g) || []).length, 1);
+  assert.doesNotMatch(workflow.slice(0, deployJobStart), /--force/);
+});
+
+test("retry-enabled Gmail handlers retain source-level idempotency protections", () => {
+  const watch = read("functions/src/gmailWatchFunctions.js");
+  const invoicePush = read("functions/src/gmailInvoiceNotificationFunctions.js");
+
+  assert.match(watch, /exports\.gmailPushNotification = onMessagePublished\([\s\S]*?retry:\s*true,/);
+  assert.match(watch, /collection\("gmailMessageImports"\)\.doc\(messageId\)/);
+  assert.match(watch, /const existingIds = new Set\(currentInvoices\.map\(\(invoice\) => invoice\.sourceMessageId\)\);/);
+  assert.match(watch, /importedCount = parsedInvoices\.filter\(\(invoice\) => !existingIds\.has\(invoice\.sourceMessageId\)\)\.length;/);
+  assert.match(watch, /gmailInvoiceDocumentId\(invoice\.sourceMessageId\)/);
+  assert.match(watch, /watchHistoryId:\s*notificationHistoryId/);
+
+  assert.match(invoicePush, /exports\.onAuthoritativeGmailInvoiceCreated = onDocumentCreated\([\s\S]*?retry:\s*true,/);
+  assert.match(invoicePush, /const eventId = `bill-detected:\$\{sourceMessageId\}`;/);
+  assert.match(invoicePush, /deliveryDocumentId\(eventId\)/);
+  assert.match(invoicePush, /const claimed = await db\.runTransaction/);
+  assert.match(invoicePush, /data\.status === "SENT"/);
+  assert.match(invoicePush, /leaseUntilMs/);
+  assert.match(invoicePush, /status:\s*"PROCESSING"/);
+  assert.match(invoicePush, /status:\s*"RETRYABLE_FAILURE"/);
+});
+
 test("repository includes current-tree and full-history secret audit", () => {
   const scanner = read("scripts/repository-secret-audit.mjs");
   assert.match(scanner, /rev-list/);

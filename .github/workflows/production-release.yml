@@ -756,4 +756,5 @@ jobs:
           firebase deploy \
             --project "$PRODUCTION_FIREBASE_PROJECT_ID" \
             --only firestore:rules,firestore:indexes,functions \
-            --non-interactive
+            --non-interactive \
+            --force
