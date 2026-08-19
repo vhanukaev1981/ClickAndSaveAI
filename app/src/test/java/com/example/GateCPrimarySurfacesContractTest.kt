@@ -16,6 +16,19 @@ class GateCPrimarySurfacesContractTest {
     }
 
     @Test
+    fun homeUsesApprovedV3CommandCenterHierarchy() {
+        val source = File("src/main/java/com/example/ui/screens/DashboardScreen.kt").readText()
+        assertTrue(source.contains("dashboard_screen"))
+        assertTrue(source.contains("v3_savings_hero"))
+        assertTrue(source.contains("v3_next_best_action"))
+        assertTrue(source.contains("v3_monitoring_status"))
+        assertTrue(source.contains("v3_open_invoices"))
+        assertTrue(source.contains("toV3SavingsSummary"))
+        assertTrue(source.contains("הדבר הכי משתלם לעשות עכשיו"))
+        assertFalse(source.contains("viewModel.invoices.collectAsState()"))
+    }
+
+    @Test
     fun billsConsumesAuthoritativeRecoveredBillsWithoutManualOrRoomFallbacks() {
         val source = File("src/main/java/com/example/ui/screens/InvoicesScreen.kt").readText()
         assertTrue(source.contains("viewModel.financialSyncState.collectAsState()"))
