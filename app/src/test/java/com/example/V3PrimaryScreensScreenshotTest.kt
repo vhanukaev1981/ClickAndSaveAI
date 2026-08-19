@@ -5,6 +5,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.LayoutDirection
+import com.example.ui.components.NextBestActionCard
 import com.example.ui.components.SavingsHero
 import com.example.ui.theme.ClickAndSaveTheme
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
@@ -48,6 +49,25 @@ class V3PrimaryScreensScreenshotTest {
         }
         composeTestRule.onRoot().captureRoboImage(
             filePath = "src/test/screenshots/v3-savings-hero-unknown.png"
+        )
+    }
+
+    @Test
+    fun nextBestActionKeepsPotentialExplicit() {
+        composeTestRule.setContent {
+            ClickAndSaveTheme {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    NextBestActionCard(
+                        providerName = "Partner",
+                        category = "אינטרנט",
+                        potentialMonthlyText = "₪40.00",
+                        onClick = {}
+                    )
+                }
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage(
+            filePath = "src/test/screenshots/v3-next-best-action.png"
         )
     }
 }

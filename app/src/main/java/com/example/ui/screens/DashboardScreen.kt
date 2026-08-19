@@ -13,10 +13,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.ErrorOutline
@@ -41,12 +39,21 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.repository.FinancialHomeResult
-import com.example.data.repository.FinancialOpportunity
 import com.example.data.repository.FinancialRefreshReason
 import com.example.data.repository.FinancialSyncState
+import com.example.data.repository.GmailScanResult
+import com.example.data.repository.gmailConnectionOrNull
 import com.example.data.repository.latestScanOrNull
 import com.example.ui.MainViewModel
+import com.example.ui.components.FinancialSnapshot
+import com.example.ui.components.MonitoringStatus
+import com.example.ui.components.NextBestActionCard
+import com.example.ui.components.SavingsHero
+import com.example.ui.components.V3SectionHeader
+import com.example.ui.components.V3SoftStatusCard
 import com.example.ui.theme.TechBluePrimary
+import com.example.ui.v3.asV3Money
+import com.example.ui.v3.toV3SavingsSummary
 
 @Composable
 fun DashboardScreen(
@@ -62,6 +69,7 @@ fun DashboardScreen(
     val latestScan = financialSyncState.latestScanOrNull
     val session by viewModel.userSession.collectAsState()
     val isSyncing by viewModel.isSyncingGmail.collectAsState()
+    val gmailSyncStep by viewModel.gmailSyncStep.collectAsState()
     var showGmailConsent by remember { mutableStateOf(false) }
 
     if (showGmailConsent) {
@@ -82,14 +90,14 @@ fun DashboardScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
-                    text = "החיסכון שלך מתחיל במה שאנחנו יודעים באמת",
+                    text = "הכסף שלך, במבט אחד",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Click&SaveAI מזהה חיובים חוזרים ומציגה הזדמנויות רק כשהנתונים וההצעה ניתנים לאימות.",
+                    text = "מה כבר חסכת, מה עוד אפשר לחסוך ומה כדאי לעשות עכשיו.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -107,11 +115,22 @@ fun DashboardScreen(
             }
 
             FinancialSyncState.CheckingConnection,
-            FinancialSyncState.Recovering -> item {
-                HomeStatusCard(
-                    title = "המידע הפיננסי עדיין נטען",
-                    body = "אנחנו טוענים מחדש את המידע המאומת. עד שהבדיקה תסתיים לא נציג אפס במקום ערך שעדיין אינו ידוע."
-                )
+            FinancialSyncState.Recovering -> {
+                item {
+                    MonitoringStatus(
+                        title = "אנחנו מסדרים את התמונה שלך",
+                        subtitle = gmailSyncStep.takeIf(String::isNotBlank)
+                            ?: "המידע הפיננסי עדיין נטען",
+                        active = false,
+                        modifier = Modifier.testTag("v3_monitoring_status")
+                    )
+                }
+                item {
+                    HomeStatusCard(
+                        title = "המידע הפיננסי עדיין נטען",
+                        body = "לא נציג אפס במקום ערך שעדיין אינו ידוע."
+                    )
+                }
             }
 
             FinancialSyncState.Disconnected -> item {
@@ -125,19 +144,37 @@ fun DashboardScreen(
 
             is FinancialSyncState.Partial -> {
                 item {
-                    HomeStatusCard(
+                    V3SoftStatusCard(
                         title = "המידע האחרון נשמר",
-                        body = "חלק מהסנכרון אינו זמין כרגע. אנחנו מציגים רק מידע שכבר אומת, ושומרים את השאר כלא ידוע."
+                        body = "חלק מהמידע עדיין מתעדכן. אנחנו ממשיכים להציג רק את מה שכבר אומת."
                     )
                 }
-                if (financialHome != null) {
+                val home = financialHome
+                if (home != null) {
                     authoritativeHomeItems(
-                        home = financialHome!!,
-                        onNavigateToTab = onNavigateToTab
+                        home = home,
+                        latestScan = latestScan,
+                        syncState = state,
+                        isSyncing = isSyncing,
+                        gmailSyncStep = gmailSyncStep,
+                        onNavigateToTab = onNavigateToTab,
+                        onOpenInvoices = onOpenInvoices
                     )
+                } else {
+                    item {
+                        MonitoringStatus(
+                            title = "חלק מהמידע עדיין מתעדכן",
+                            subtitle = gmailSyncStep.takeIf(String::isNotBlank),
+                            active = state.gmailConnectionOrNull?.connected == true,
+                            modifier = Modifier.testTag("v3_monitoring_status")
+                        )
+                    }
                 }
                 item {
-                    Button(onClick = { viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY) }) {
+                    TextButton(
+                        onClick = { viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Text("נסה לסנכרן שוב")
                     }
                 }
@@ -145,8 +182,8 @@ fun DashboardScreen(
 
             is FinancialSyncState.Failed -> item {
                 HomeStatusCard(
-                    title = "לא הצלחנו להשלים את הסנכרון",
-                    body = "לא נציג נתונים משוערים במקום מידע שחסר. אפשר לנסות שוב כשהחיבור זמין."
+                    title = "לא הצלחנו להשלים את העדכון",
+                    body = "לא נציג מידע משוער במקום מידע שחסר. אפשר לנסות שוב כשהחיבור זמין."
                 ) {
                     Button(onClick = { viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY) }) {
                         Text("נסה שוב")
@@ -157,92 +194,33 @@ fun DashboardScreen(
             is FinancialSyncState.Ready -> {
                 authoritativeHomeItems(
                     home = state.financialHome,
-                    onNavigateToTab = onNavigateToTab
+                    latestScan = state.latestScan,
+                    syncState = state,
+                    isSyncing = isSyncing,
+                    gmailSyncStep = gmailSyncStep,
+                    onNavigateToTab = onNavigateToTab,
+                    onOpenInvoices = onOpenInvoices
                 )
             }
         }
 
         item {
-            Text(
-                "גישה מהירה",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                DashboardActionButton(
-                    text = "החשבונות שלי",
-                    subtitle = "החשבוניות והחיובים שהמערכת זיהתה",
-                    icon = Icons.Default.ReceiptLong,
-                    onClick = onOpenInvoices
-                )
-                DashboardActionButton(
-                    text = "הזדמנויות חיסכון",
-                    subtitle = "השוואות שנבדקו מול השירותים שלך",
-                    icon = Icons.Default.Storefront,
-                    onClick = { onNavigateToTab(1) }
-                )
-                DashboardActionButton(
-                    text = "פעילות וסנכרון",
-                    subtitle = "העדכונים והפעילות שניתן לאמת",
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                HomeShortcut(
+                    title = "פעילות",
                     icon = Icons.Outlined.CloudSync,
-                    onClick = { onNavigateToTab(3) }
+                    onClick = { onNavigateToTab(3) },
+                    modifier = Modifier.weight(1f)
                 )
-                DashboardActionButton(
-                    text = "אני והעדפות",
-                    subtitle = "חשבון, פרטיות וחיבורים",
+                HomeShortcut(
+                    title = "אני",
                     icon = Icons.Default.Tune,
-                    onClick = { onNavigateToTab(4) }
+                    onClick = { onNavigateToTab(4) },
+                    modifier = Modifier.weight(1f)
                 )
-            }
-        }
-
-        val recentInvoices = latestScan?.invoices
-        if (recentInvoices != null) {
-            if (recentInvoices.isNotEmpty()) {
-                item {
-                    Text(
-                        "חשבונות שזוהו לאחרונה",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                items(recentInvoices.take(3), key = { it.sourceMessageId }) { invoice ->
-                    Card(shape = RoundedCornerShape(18.dp)) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(15.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = TechBluePrimary)
-                            Spacer(modifier = Modifier.size(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(invoice.providerName, fontWeight = FontWeight.Bold)
-                                Text(
-                                    invoice.category,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Text(money(invoice.monthlyCost), fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-                item {
-                    TextButton(onClick = onOpenInvoices, modifier = Modifier.fillMaxWidth()) {
-                        Text("כל החשבונות")
-                    }
-                }
-            } else {
-                item {
-                    HomeStatusCard(
-                        title = "אין כרגע חשבונות מזוהים להצגה",
-                        body = "בסריקה האחרונה לא נמצאו חשבונות להצגה."
-                    )
-                }
             }
         }
     }
@@ -253,123 +231,148 @@ fun DashboardScreen(
 
 private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItems(
     home: FinancialHomeResult,
-    onNavigateToTab: (Int) -> Unit
+    latestScan: GmailScanResult?,
+    syncState: FinancialSyncState,
+    isSyncing: Boolean,
+    gmailSyncStep: String,
+    onNavigateToTab: (Int) -> Unit,
+    onOpenInvoices: () -> Unit
 ) {
-    item {
-        AuthoritativeSummaryCard(home)
+    val summary = home.toV3SavingsSummary()
+    val nextBest = summary.nextBestOpportunityId?.let { id ->
+        home.opportunities.firstOrNull { it.id == id }
     }
 
-    if (home.opportunities.isNotEmpty()) {
+    item {
+        SavingsHero(
+            realizedMonthly = summary.realizedMonthly,
+            potentialMonthly = summary.potentialMonthly,
+            realizedKnownZero = summary.realizedKnownZero,
+            modifier = Modifier.testTag("v3_savings_hero")
+        )
+    }
+
+    if (nextBest != null && nextBest.potentialMonthlySaving != null) {
         item {
-            Text(
-                "מה מצאנו עבורך",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+            NextBestActionCard(
+                providerName = nextBest.providerName,
+                category = nextBest.category,
+                potentialMonthlyText = nextBest.potentialMonthlySaving.asV3Money(),
+                onClick = { onNavigateToTab(1) },
+                modifier = Modifier.testTag("v3_next_best_action")
             )
         }
-        items(home.opportunities.take(3), key = { it.id }) { opportunity ->
-            ProactiveOpportunityCard(opportunity)
+    }
+
+    item {
+        val connection = syncState.gmailConnectionOrNull
+        MonitoringStatus(
+            title = when {
+                isSyncing -> "אנחנו בודקים את החשבונות שלך"
+                connection?.connected == true -> "הניטור פעיל"
+                else -> "מצב החיבור עדיין מתעדכן"
+            },
+            subtitle = gmailSyncStep.takeIf(String::isNotBlank)
+                ?: connection?.email?.takeIf(String::isNotBlank)?.let { "Gmail מחובר לקריאה בלבד" },
+            active = connection?.connected == true && !isSyncing,
+            modifier = Modifier.testTag("v3_monitoring_status")
+        )
+    }
+
+    item {
+        V3SectionHeader(title = "התמונה שלך")
+    }
+
+    item {
+        FinancialSnapshot(
+            recurringSpendText = home.context.observedRecurringMonthlySpend?.asV3Money() ?: "לא ידוע",
+            recurringServicesText = home.context.recurringServiceCount?.toString() ?: "לא ידוע",
+            invoicesText = latestScan?.invoices?.size?.toString() ?: "לא ידוע"
+        )
+    }
+
+    val recentInvoices = latestScan?.invoices
+    if (recentInvoices != null && recentInvoices.isNotEmpty()) {
+        item {
+            V3SectionHeader(
+                title = "זוהה לאחרונה",
+                actionLabel = "כל החשבונות",
+                onAction = onOpenInvoices,
+                modifier = Modifier.testTag("v3_open_invoices")
+            )
+        }
+        items(recentInvoices.take(3), key = { it.sourceMessageId }) { invoice ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(15.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = TechBluePrimary)
+                    Spacer(modifier = Modifier.size(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(invoice.providerName, fontWeight = FontWeight.Bold)
+                        Text(
+                            invoice.category,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(invoice.monthlyCost.asV3Money(), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    } else if (recentInvoices != null) {
+        item {
+            V3SectionHeader(
+                title = "חשבונות",
+                actionLabel = "כל החשבונות",
+                onAction = onOpenInvoices,
+                modifier = Modifier.testTag("v3_open_invoices")
+            )
         }
         item {
-            TextButton(
-                onClick = { onNavigateToTab(1) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("לכל הזדמנויות החיסכון")
-            }
+            V3SoftStatusCard(
+                title = "עדיין לא זיהינו חשבוניות",
+                body = "נמשיך לבדוק את המקורות המחוברים ונציג כאן רק חשבונות שנקלטו בפועל."
+            )
         }
     } else {
         item {
-            HomeStatusCard(
-                title = "אין כרגע הזדמנות חיסכון מאומתת",
-                body = "המערכת בדקה את המידע הפיננסי הזמין. חיסכון יוצג רק לאחר שתימצא הצעה עדכנית ומתאימה שניתן לאמת."
-            )
-        }
-    }
-}
-
-@Composable
-private fun AuthoritativeSummaryCard(home: FinancialHomeResult) {
-    val context = home.context
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("התמונה שזוהתה", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            TextButton(
+                onClick = onOpenInvoices,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("v3_open_invoices")
             ) {
-                MetricCard(
-                    modifier = Modifier.weight(1f),
-                    title = "חיוב חודשי חוזר שזוהה",
-                    value = context.observedRecurringMonthlySpend?.let(::money) ?: "לא ידוע",
-                    supporting = if (context.isCompleteHouseholdSpend) "כיסוי שסומן כמלא" else "כיסוי חלקי מהמקורות המחוברים"
-                )
-                MetricCard(
-                    modifier = Modifier.weight(1f),
-                    title = "שירותים חוזרים",
-                    value = context.recurringServiceCount?.toString() ?: "לא ידוע",
-                    supporting = "לפי המידע שאומת"
-                )
-            }
-            if (context.sourceCoverage.isNotEmpty()) {
-                Text(
-                    text = "הנתונים מבוססים על המקורות המחוברים שאומתו.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text("כל החשבונות")
             }
         }
     }
 }
 
 @Composable
-private fun ProactiveOpportunityCard(opportunity: FinancialOpportunity) {
+private fun HomeShortcut(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.Top
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = TechBluePrimary)
-            Spacer(modifier = Modifier.size(10.dp))
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text("${opportunity.providerName} • ${opportunity.category}", fontWeight = FontWeight.Bold)
-                val offer = opportunity.matchedOffer?.takeIf { matched ->
-                    opportunity.offerVerificationState == "VERIFIED" &&
-                        opportunity.offerFreshnessState == "FRESH" &&
-                        opportunity.userEligibilityState == "ELIGIBLE" &&
-                        matched.verificationState == "VERIFIED" &&
-                        matched.freshnessState == "FRESH" &&
-                        matched.eligibilityState == "ELIGIBLE"
-                }
-                val saving = opportunity.potentialMonthlySaving
-                if (offer != null && saving != null && saving > 0.0) {
-                    val newPrice = offer.effectiveMonthlyPrice ?: offer.monthlyPrice
-                    Text("המחיר הנוכחי שזוהה: ${money(opportunity.currentMonthlyCost)}")
-                    Text("הצעה מאומתת, עדכנית ומתאימה: ${money(newPrice)} לחודש")
-                    Text(
-                        "חיסכון פוטנציאלי לפי ההצעה: ${money(saving)} בחודש — לא חיסכון ממומש",
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                } else {
-                    Text(
-                        "זוהתה אפשרות לבדיקה, אך אין עדיין סכום חיסכון מאומת, עדכני ומתאים להצגה.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            }
+            Icon(icon, contentDescription = null, tint = TechBluePrimary)
+            Text(title, modifier = Modifier.padding(horizontal = 8.dp), fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -405,17 +408,17 @@ private fun InitialGmailOnboardingCard(
     onConnectGmail: () -> Unit
 ) {
     Card(
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
     ) {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Email, contentDescription = null, tint = TechBluePrimary)
                 Spacer(modifier = Modifier.size(9.dp))
-                Text("חיבור מאובטח כדי להתחיל", fontWeight = FontWeight.Bold)
+                Text("מחברים כדי להתחיל לחסוך", fontWeight = FontWeight.Bold)
             }
             Text(
-                "Gmail משמש לקריאה בלבד כדי לזהות מסמכי חיוב. לא נשלח מידע לספק ללא פעולה מפורשת שלך.",
+                "Gmail משמש לקריאה בלבד כדי לזהות חשבוניות וחיובים רלוונטיים. אתה נשאר בשליטה ויכול לנתק בכל עת.",
                 style = MaterialTheme.typography.bodyMedium
             )
             Button(
@@ -424,51 +427,6 @@ private fun InitialGmailOnboardingCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(if (authenticated) "חבר Gmail לקריאה בלבד" else "התחבר עם Google")
-            }
-        }
-    }
-}
-
-@Composable
-private fun MetricCard(
-    modifier: Modifier = Modifier,
-    title: String,
-    value: String,
-    supporting: String
-) {
-    Card(modifier = modifier, shape = RoundedCornerShape(18.dp)) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text(supporting, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-private fun DashboardActionButton(
-    text: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
-) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(15.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, contentDescription = null, tint = TechBluePrimary)
-            Spacer(modifier = Modifier.size(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text, fontWeight = FontWeight.Bold)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -498,5 +456,3 @@ private fun GmailConsentDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("ביטול") } }
     )
 }
-
-private fun money(value: Double): String = "₪${String.format("%,.0f", value)}"
