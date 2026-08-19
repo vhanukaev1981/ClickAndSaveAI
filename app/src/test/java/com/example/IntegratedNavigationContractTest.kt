@@ -35,21 +35,21 @@ class IntegratedNavigationContractTest {
         assertTrue(activity.contains("4 -> ProfileScreen("))
         assertFalse(activity.contains("1 -> InvoicesScreen("))
         assertTrue(activity.contains("V3SecondarySurface.INVOICES"))
-        assertTrue(activity.contains("viewModel.closeSecondarySurface"))
+        assertTrue(activity.contains("closeSecondarySurface"))
         assertTrue(activity.contains("selectedTab.coerceIn(0, 4)"))
         assertFalse(activity.contains("ProductPreview"))
     }
 
     @Test
-    fun selectedPrimaryAndSecondaryDestinationsAreSavedStateOwned() {
+    fun primaryDestinationRemainsViewModelSavedStateWhileSecondaryUiStateIsSaveableLocally() {
         val viewModel = File("src/main/java/com/example/ui/MainViewModel.kt").readText()
+        val activity = File("src/main/java/com/example/MainActivity.kt").readText()
         assertTrue(viewModel.contains("SavedStateHandle"))
         assertTrue(viewModel.contains("getStateFlow(SELECTED_TAB_KEY, 0)"))
         assertTrue(viewModel.contains("savedStateHandle[SELECTED_TAB_KEY]"))
-        assertTrue(viewModel.contains("SECONDARY_SURFACE_KEY"))
-        assertTrue(viewModel.contains("fun openInvoices()"))
-        assertTrue(viewModel.contains("fun closeSecondarySurface()"))
         assertFalse(viewModel.contains("val selectedTab = MutableStateFlow(0)"))
+        assertTrue(activity.contains("rememberSaveable"))
+        assertTrue(activity.contains("V3SecondarySurface.INVOICES.name"))
     }
 
     @Test
