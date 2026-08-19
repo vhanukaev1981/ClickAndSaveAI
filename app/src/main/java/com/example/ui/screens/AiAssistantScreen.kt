@@ -13,9 +13,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Login
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -131,7 +131,7 @@ fun AiAssistantContent(
                         modifier = Modifier.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Login, contentDescription = null, tint = TechBluePrimary)
+                        Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, tint = TechBluePrimary)
                         Spacer(Modifier.size(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text("כדי להשתמש בעוזר צריך להתחבר", fontWeight = FontWeight.Bold)
@@ -278,7 +278,7 @@ fun AiAssistantContent(
                         if (isChatLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         } else {
-                            Icon(Icons.Default.Send, contentDescription = null)
+                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
                         }
                         Spacer(Modifier.size(7.dp))
                         Text(if (isChatLoading) "בודק..." else "שלח")
