@@ -71,7 +71,6 @@ test("production workflow is manual, protected and staging-isolated", () => {
 
 test("production Firebase retry-policy acknowledgement is exact and authorization-bound", () => {
   const workflow = read(".github/workflows/production-release.yml");
-  const stagingWorkflow = read(".github/workflows/deploy-staging.yml");
   const deployJobStart = workflow.indexOf("  deploy-firebase-production:");
   assert.notEqual(deployJobStart, -1);
   const deployJob = workflow.slice(deployJobStart);
@@ -85,7 +84,7 @@ test("production Firebase retry-policy acknowledgement is exact and authorizatio
     /firebase deploy \\\n\s+--project "\$PRODUCTION_FIREBASE_PROJECT_ID" \\\n\s+--only firestore:rules,firestore:indexes,functions \\\n\s+--non-interactive \\\n\s+--force(?:\n|$)/
   );
   assert.equal((workflow.match(/--force/g) || []).length, 1);
-  assert.doesNotMatch(stagingWorkflow, /--force/);
+  assert.doesNotMatch(workflow.slice(0, deployJobStart), /--force/);
 });
 
 test("retry-enabled Gmail handlers retain source-level idempotency protections", () => {
