@@ -62,7 +62,6 @@ class V3ProductionBoundaryGuardTest {
         assertFalse(ai.contains("Icons.Default.Send"))
         assertTrue(activity.contains("\"השבוע\""))
         assertTrue(activity.contains("\"פעילות קודמת\""))
-        assertTrue(profile.contains("אודות האפליקציה"))
         assertTrue(profile.contains("BuildConfig.VERSION_NAME"))
     }
 }

@@ -52,6 +52,7 @@ import com.example.ui.v3.V3SavingsActionMode
 import com.example.ui.v3.asV3Money
 import com.example.ui.v3.hasAuthoritativeV3Offer
 import com.example.ui.v3.hasQualifiedBillIncrease
+import com.example.ui.v3.hasVerifiedSavingsActionTarget
 import com.example.ui.v3.toV3SavingsSummary
 import com.example.ui.v3.v3LifecycleLabel
 import com.example.ui.v3.v3SavingsActionMode
@@ -121,7 +122,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                         OpportunityCard(
                             opportunity = opportunity,
                             onAccept = {
-                                if (opportunity.v3SavingsActionMode() == V3SavingsActionMode.PROVIDER_LEAD_FLOW) {
+                                if (opportunity.hasVerifiedSavingsActionTarget()) {
                                     val offerId = opportunity.matchedOffer?.offerId.orEmpty()
                                     if (offerId.isBlank()) {
                                         error = "אין כרגע יעד פעולה מאומת להצעה."
@@ -150,13 +151,13 @@ fun ProvidersScreen(viewModel: MainViewModel) {
     }
 
     selectedOpportunity?.let { opportunity ->
-        if (opportunity.v3SavingsActionMode() == V3SavingsActionMode.PROVIDER_LEAD_FLOW) {
+        if (opportunity.hasVerifiedSavingsActionTarget()) {
             SavingsActionDialog(
                 opportunity = opportunity,
                 defaultName = session.displayName,
                 defaultEmail = session.email,
                 onDismiss = { selectedOpportunity = null },
-                onSubmit = { name, phone, email ->
+                onSubmit = { name, phone, email, consent ->
                     val offerId = opportunity.matchedOffer?.offerId.orEmpty()
                     selectedOpportunity = null
                     scope.launch {
@@ -167,7 +168,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                                 contactName = name,
                                 phone = phone,
                                 contactEmail = email,
-                                consentAccepted = true
+                                consentAccepted = consent
                             )
                         }.onSuccess {
                             actionMessage = "הפעולה נרשמה. מסירה לספק, השלמת עסקה וחיסכון ממומש יוצגו רק לפי ראיה מאומתת."
@@ -190,7 +191,7 @@ private fun OpportunityCard(opportunity: FinancialOpportunity, onAccept: () -> U
     val matched = opportunity.matchedOffer?.takeIf { opportunity.hasAuthoritativeV3Offer() }
     val monthlySaving = opportunity.potentialMonthlySaving
     val actionMode = opportunity.v3SavingsActionMode()
-    val actionAvailable = actionMode == V3SavingsActionMode.PROVIDER_LEAD_FLOW &&
+    val actionAvailable = opportunity.hasVerifiedSavingsActionTarget() &&
         matched != null && monthlySaving != null && monthlySaving > 0.0
 
     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
@@ -267,7 +268,7 @@ private fun SavingsActionDialog(
     defaultName: String,
     defaultEmail: String,
     onDismiss: () -> Unit,
-    onSubmit: (String, String, String) -> Unit
+    onSubmit: (String, String, String, Boolean) -> Unit
 ) {
     var name by remember(opportunity.id) { mutableStateOf(defaultName) }
     var phone by remember(opportunity.id) { mutableStateOf("") }
@@ -291,7 +292,7 @@ private fun SavingsActionDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onSubmit(name.trim(), phone.trim(), email.trim()) }, enabled = canSubmit) { Text("שלח בקשה") }
+            Button(onClick = { onSubmit(name.trim(), phone.trim(), email.trim(), consent) }, enabled = canSubmit) { Text("שלח בקשה") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("ביטול") } }
     )

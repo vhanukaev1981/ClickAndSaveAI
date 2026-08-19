@@ -83,21 +83,15 @@ fun DashboardScreen(
     }
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag("dashboard_screen"),
+        modifier = Modifier.fillMaxSize().testTag("dashboard_screen"),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("הכסף שלך, במבט אחד", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(
-                    text = "הכסף שלך, במבט אחד",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "מה כבר חסכת, מה עוד אפשר לחסוך ומה כדאי לעשות עכשיו.",
+                    "מה כבר חסכת, מה עוד אפשר לחסוך ומה כדאי לעשות עכשיו.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -114,43 +108,28 @@ fun DashboardScreen(
                     onConnectGmail = { showGmailConsent = true }
                 )
             }
-
             FinancialSyncState.CheckingConnection -> {
                 item {
                     MonitoringStatus(
                         title = "מחברים את החשבון",
-                        subtitle = gmailSyncStep.takeIf(String::isNotBlank)
-                            ?: "אנחנו מעדכנים את התמונה שלך",
+                        subtitle = gmailSyncStep.takeIf(String::isNotBlank) ?: "אנחנו מעדכנים את התמונה שלך",
                         active = true,
                         modifier = Modifier.testTag("v3_monitoring_status")
                     )
                 }
-                item {
-                    HomeStatusCard(
-                        title = "המידע הפיננסי עדיין נטען",
-                        body = "לא נציג אפס במקום ערך שעדיין אינו ידוע."
-                    )
-                }
+                item { HomeStatusCard("המידע הפיננסי עדיין נטען", "לא נציג אפס במקום ערך שעדיין אינו ידוע.") }
             }
-
             FinancialSyncState.Recovering -> {
                 item {
                     MonitoringStatus(
                         title = "מסדרים את התמונה שלך",
-                        subtitle = gmailSyncStep.takeIf(String::isNotBlank)
-                            ?: "אנחנו מעדכנים את התמונה שלך",
+                        subtitle = gmailSyncStep.takeIf(String::isNotBlank) ?: "אנחנו מעדכנים את התמונה שלך",
                         active = true,
                         modifier = Modifier.testTag("v3_monitoring_status")
                     )
                 }
-                item {
-                    HomeStatusCard(
-                        title = "המידע הפיננסי עדיין נטען",
-                        body = "לא נציג אפס במקום ערך שעדיין אינו ידוע."
-                    )
-                }
+                item { HomeStatusCard("המידע הפיננסי עדיין נטען", "לא נציג אפס במקום ערך שעדיין אינו ידוע.") }
             }
-
             FinancialSyncState.Disconnected -> item {
                 V3OnboardingContent(
                     step = 2,
@@ -160,25 +139,11 @@ fun DashboardScreen(
                     onConnectGmail = { showGmailConsent = true }
                 )
             }
-
             is FinancialSyncState.Partial -> {
-                item {
-                    V3SoftStatusCard(
-                        title = "המידע האחרון נשמר",
-                        body = "חלק מהמידע עדיין מתעדכן. אנחנו ממשיכים להציג רק את מה שכבר אומת."
-                    )
-                }
+                item { V3SoftStatusCard("המידע האחרון נשמר", "חלק מהמידע עדיין מתעדכן. אנחנו ממשיכים להציג רק את מה שכבר אומת.") }
                 val home = financialHome
                 if (home != null) {
-                    authoritativeHomeItems(
-                        home = home,
-                        latestScan = latestScan,
-                        syncState = state,
-                        isSyncing = isSyncing,
-                        gmailSyncStep = gmailSyncStep,
-                        onNavigateToTab = onNavigateToTab,
-                        onOpenInvoices = onOpenInvoices
-                    )
+                    authoritativeHomeItems(home, latestScan, state, isSyncing, gmailSyncStep, onNavigateToTab, onOpenInvoices)
                 } else {
                     item {
                         MonitoringStatus(
@@ -190,56 +155,25 @@ fun DashboardScreen(
                     }
                 }
                 item {
-                    TextButton(
-                        onClick = { viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                    TextButton(onClick = { viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY) }, modifier = Modifier.fillMaxWidth()) {
                         Text("נסה לסנכרן שוב")
                     }
                 }
             }
-
             is FinancialSyncState.Failed -> item {
-                HomeStatusCard(
-                    title = "לא הצלחנו להשלים את העדכון",
-                    body = "לא נציג מידע משוער במקום מידע שחסר. אפשר לנסות שוב כשהחיבור זמין."
-                ) {
-                    Button(onClick = { viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY) }) {
-                        Text("נסה שוב")
-                    }
+                HomeStatusCard("לא הצלחנו להשלים את העדכון", "לא נציג מידע משוער במקום מידע שחסר. אפשר לנסות שוב כשהחיבור זמין.") {
+                    Button(onClick = { viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY) }) { Text("נסה שוב") }
                 }
             }
-
             is FinancialSyncState.Ready -> {
-                authoritativeHomeItems(
-                    home = state.financialHome,
-                    latestScan = state.latestScan,
-                    syncState = state,
-                    isSyncing = isSyncing,
-                    gmailSyncStep = gmailSyncStep,
-                    onNavigateToTab = onNavigateToTab,
-                    onOpenInvoices = onOpenInvoices
-                )
+                authoritativeHomeItems(state.financialHome, state.latestScan, state, isSyncing, gmailSyncStep, onNavigateToTab, onOpenInvoices)
             }
         }
 
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                HomeShortcut(
-                    title = "פעילות",
-                    icon = Icons.Outlined.CloudSync,
-                    onClick = { onNavigateToTab(3) },
-                    modifier = Modifier.weight(1f)
-                )
-                HomeShortcut(
-                    title = "אני",
-                    icon = Icons.Default.Tune,
-                    onClick = { onNavigateToTab(4) },
-                    modifier = Modifier.weight(1f)
-                )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                HomeShortcut("פעילות", Icons.Outlined.CloudSync, { onNavigateToTab(3) }, Modifier.weight(1f))
+                HomeShortcut("פרופיל", Icons.Default.Tune, { onNavigateToTab(4) }, Modifier.weight(1f))
             }
         }
     }
@@ -258,14 +192,14 @@ private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItem
     onOpenInvoices: () -> Unit
 ) {
     val summary = home.toV3SavingsSummary()
-    val nextBest = summary.nextBestOpportunityId?.let { id ->
-        home.opportunities.firstOrNull { it.id == id }
-    }
+    val nextBest = summary.nextBestOpportunityId?.let { id -> home.opportunities.firstOrNull { it.id == id } }
 
     item {
         SavingsHero(
             realizedMonthly = summary.realizedMonthly,
+            realizedAnnual = summary.realizedAnnual,
             potentialMonthly = summary.potentialMonthly,
+            potentialAnnual = summary.potentialAnnual,
             realizedKnownZero = summary.realizedKnownZero,
             modifier = Modifier.testTag("v3_savings_hero")
         )
@@ -298,10 +232,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItem
         )
     }
 
-    item {
-        V3SectionHeader(title = "התמונה שלך")
-    }
-
+    item { V3SectionHeader(title = "התמונה שלך") }
     item {
         FinancialSnapshot(
             recurringSpendText = home.context.observedRecurringMonthlySpend?.asV3Money() ?: "לא ידוע",
@@ -326,19 +257,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItem
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(15.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(modifier = Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, tint = TechBluePrimary)
                     Spacer(modifier = Modifier.size(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(invoice.providerName, fontWeight = FontWeight.Bold)
-                        Text(
-                            invoice.category,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Text(invoice.category, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(invoice.monthlyCost.asV3Money(), fontWeight = FontWeight.Bold)
                 }
@@ -353,20 +277,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItem
                 modifier = Modifier.testTag("v3_open_invoices")
             )
         }
-        item {
-            V3SoftStatusCard(
-                title = "עדיין לא זיהינו חשבוניות",
-                body = "נמשיך לבדוק את המקורות המחוברים ונציג כאן רק חשבונות שנקלטו בפועל."
-            )
-        }
+        item { V3SoftStatusCard("עדיין לא זיהינו חשבוניות", "נמשיך לבדוק את המקורות המחוברים ונציג כאן רק חשבונות שנקלטו בפועל.") }
     } else {
         item {
-            TextButton(
-                onClick = onOpenInvoices,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("v3_open_invoices")
-            ) {
+            TextButton(onClick = onOpenInvoices, modifier = Modifier.fillMaxWidth().testTag("v3_open_invoices")) {
                 Text("כל החשבונות")
             }
         }
@@ -386,10 +300,7 @@ private fun HomeShortcut(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, tint = TechBluePrimary)
             Text(title, modifier = Modifier.padding(horizontal = 8.dp), fontWeight = FontWeight.SemiBold)
         }
@@ -397,11 +308,7 @@ private fun HomeShortcut(
 }
 
 @Composable
-private fun HomeStatusCard(
-    title: String,
-    body: String,
-    action: (@Composable () -> Unit)? = null
-) {
+private fun HomeStatusCard(title: String, body: String, action: (@Composable () -> Unit)? = null) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -420,10 +327,7 @@ private fun HomeStatusCard(
 }
 
 @Composable
-private fun GmailConsentDialog(
-    onDismiss: () -> Unit,
-    onApprove: () -> Unit
-) {
+private fun GmailConsentDialog(onDismiss: () -> Unit, onApprove: () -> Unit) {
     var accepted by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -437,9 +341,7 @@ private fun GmailConsentDialog(
                 }
             }
         },
-        confirmButton = {
-            Button(onClick = onApprove, enabled = accepted) { Text("המשך ל-Google") }
-        },
+        confirmButton = { Button(onClick = onApprove, enabled = accepted) { Text("המשך ל-Google") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("ביטול") } }
     )
 }

@@ -58,6 +58,9 @@ fun FinancialOpportunity.v3SavingsActionMode(): V3SavingsActionMode = when {
     else -> V3SavingsActionMode.NO_VERIFIED_ACTION_TARGET
 }
 
+fun FinancialOpportunity.hasVerifiedSavingsActionTarget(): Boolean =
+    v3SavingsActionMode() == V3SavingsActionMode.PROVIDER_LEAD_FLOW
+
 fun BackendInvoice.v3PaymentMode(): V3InvoicePaymentMode =
     V3InvoicePaymentMode.NO_VERIFIED_PAYMENT_TARGET
 
@@ -134,7 +137,7 @@ fun FinancialOpportunity.v3LifecycleLabel(): String = when {
         deliveryState == "DELIVERY_CONFIRMED" ||
         submissionState == "SUBMITTED" ||
         requestState == "REQUEST_CREATED" -> "בתהליך"
-    hasAuthoritativeV3Offer() && v3SavingsActionMode() == V3SavingsActionMode.PROVIDER_LEAD_FLOW -> "מוכן לפעולה"
+    hasAuthoritativeV3Offer() && hasVerifiedSavingsActionTarget() -> "מוכן לפעולה"
     hasAuthoritativeV3Offer() -> "נבדק"
     else -> "נמצא"
 }

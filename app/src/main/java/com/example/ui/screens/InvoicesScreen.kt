@@ -16,7 +16,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -186,12 +185,11 @@ private fun PaymentTargetCard(bill: BackendInvoice) {
             when (paymentMode) {
                 V3InvoicePaymentMode.NO_VERIFIED_PAYMENT_TARGET -> {
                     Text("אין יעד תשלום מאומת לחשבון הזה.")
-                    Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) { Text("מעבר לספק לתשלום") }
+                    Text("כפתור תשלום יוצג רק לאחר שיתקבל יעד תשלום מאומת לחשבונית עצמה.", style = MaterialTheme.typography.bodySmall)
                 }
                 V3InvoicePaymentMode.DIRECT_INVOICE_PAYMENT,
                 V3InvoicePaymentMode.PROVIDER_PAYMENT_PORTAL -> {
-                    Text("יעד תשלום קיים בחוזה אך אינו מחובר למסך זה ללא יעד חשבונית מאומת.")
-                    Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) { Text("מעבר לספק לתשלום") }
+                    Text("מצב יעד תשלום קיים בחוזה, אך לא יוצג CTA ללא יעד חשבונית מאומת שניתן לפתוח בפועל.")
                 }
             }
         }
