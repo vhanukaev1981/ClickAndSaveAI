@@ -13,8 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.ErrorOutline
@@ -70,6 +69,7 @@ fun DashboardScreen(
     val session by viewModel.userSession.collectAsState()
     val isSyncing by viewModel.isSyncingGmail.collectAsState()
     val gmailSyncStep by viewModel.gmailSyncStep.collectAsState()
+    val onboardingStep by viewModel.onboardingStep.collectAsState()
     var showGmailConsent by remember { mutableStateOf(false) }
 
     if (showGmailConsent) {
@@ -106,22 +106,40 @@ fun DashboardScreen(
 
         when (val state = financialSyncState) {
             FinancialSyncState.Unauthenticated -> item {
-                InitialGmailOnboardingCard(
+                V3OnboardingContent(
+                    step = onboardingStep,
                     authenticated = false,
-                    syncing = isSyncing,
+                    onNext = viewModel::nextOnboardingStep,
                     onGoogleSignIn = onGoogleSignIn,
                     onConnectGmail = { showGmailConsent = true }
                 )
             }
 
-            FinancialSyncState.CheckingConnection,
+            FinancialSyncState.CheckingConnection -> {
+                item {
+                    MonitoringStatus(
+                        title = "מחברים את החשבון",
+                        subtitle = gmailSyncStep.takeIf(String::isNotBlank)
+                            ?: "אנחנו מעדכנים את התמונה שלך",
+                        active = true,
+                        modifier = Modifier.testTag("v3_monitoring_status")
+                    )
+                }
+                item {
+                    HomeStatusCard(
+                        title = "המידע הפיננסי עדיין נטען",
+                        body = "לא נציג אפס במקום ערך שעדיין אינו ידוע."
+                    )
+                }
+            }
+
             FinancialSyncState.Recovering -> {
                 item {
                     MonitoringStatus(
-                        title = "אנחנו מסדרים את התמונה שלך",
+                        title = "מסדרים את התמונה שלך",
                         subtitle = gmailSyncStep.takeIf(String::isNotBlank)
-                            ?: "המידע הפיננסי עדיין נטען",
-                        active = false,
+                            ?: "אנחנו מעדכנים את התמונה שלך",
+                        active = true,
                         modifier = Modifier.testTag("v3_monitoring_status")
                     )
                 }
@@ -134,9 +152,10 @@ fun DashboardScreen(
             }
 
             FinancialSyncState.Disconnected -> item {
-                InitialGmailOnboardingCard(
+                V3OnboardingContent(
+                    step = 2,
                     authenticated = session.isAuthenticated,
-                    syncing = isSyncing,
+                    onNext = viewModel::nextOnboardingStep,
                     onGoogleSignIn = onGoogleSignIn,
                     onConnectGmail = { showGmailConsent = true }
                 )
@@ -311,7 +330,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItem
                     modifier = Modifier.fillMaxWidth().padding(15.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = TechBluePrimary)
+                    Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, tint = TechBluePrimary)
                     Spacer(modifier = Modifier.size(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(invoice.providerName, fontWeight = FontWeight.Bold)
@@ -396,38 +415,6 @@ private fun HomeStatusCard(
             }
             Text(body, style = MaterialTheme.typography.bodyMedium)
             action?.invoke()
-        }
-    }
-}
-
-@Composable
-private fun InitialGmailOnboardingCard(
-    authenticated: Boolean,
-    syncing: Boolean,
-    onGoogleSignIn: () -> Unit,
-    onConnectGmail: () -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-    ) {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Email, contentDescription = null, tint = TechBluePrimary)
-                Spacer(modifier = Modifier.size(9.dp))
-                Text("מחברים כדי להתחיל לחסוך", fontWeight = FontWeight.Bold)
-            }
-            Text(
-                "Gmail משמש לקריאה בלבד כדי לזהות חשבוניות וחיובים רלוונטיים. אתה נשאר בשליטה ויכול לנתק בכל עת.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Button(
-                onClick = if (authenticated) onConnectGmail else onGoogleSignIn,
-                enabled = !syncing,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (authenticated) "חבר Gmail לקריאה בלבד" else "התחבר עם Google")
-            }
         }
     }
 }
