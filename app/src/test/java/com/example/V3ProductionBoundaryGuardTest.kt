@@ -12,20 +12,8 @@ class V3ProductionBoundaryGuardTest {
         val source = sourceRoot.walkTopDown()
             .filter { it.isFile && it.extension in setOf("kt", "java") }
             .joinToString("\n") { it.readText() }
-
-        listOf(
-            "android.webkit.WebView",
-            "addJavascriptInterface",
-            "com.getcapacitor",
-            "com.facebook.react",
-            "startGmailConnect",
-            "GOOGLE_MAIL_APP_USER_CONNECTOR_CLIENT_API_KEY",
-            "connectAppUser",
-            "com.lovable.",
-            "lovable.runtime"
-        ).forEach { prohibited ->
-            assertFalse("V3 must not introduce runtime boundary: $prohibited", source.contains(prohibited))
-        }
+        listOf("android.webkit.WebView", "addJavascriptInterface", "com.getcapacitor", "com.facebook.react", "startGmailConnect", "GOOGLE_MAIL_APP_USER_CONNECTOR_CLIENT_API_KEY", "connectAppUser", "com.lovable.", "lovable.runtime")
+            .forEach { prohibited -> assertFalse("V3 must not introduce runtime boundary: $prohibited", source.contains(prohibited)) }
         assertTrue(source.contains("https://www.googleapis.com/auth/gmail.readonly"))
     }
 
@@ -45,8 +33,7 @@ class V3ProductionBoundaryGuardTest {
         val profile = File("src/main/java/com/example/ui/screens/ProfileScreen.kt").readText()
         val ai = File("src/main/java/com/example/ui/screens/AiAssistantScreen.kt").readText()
         val shell = File("src/main/java/com/example/MainActivity.kt").readText()
-
-        listOf("nav_home", "nav_savings", "nav_ai", "nav_activity", "nav_profile")
+        listOf("nav_home", "nav_savings", "nav_ai", "nav_pay", "nav_profile")
             .forEach { assertTrue(nav.contains("testTag(\"$it\")")) }
         assertTrue(savings.contains("testTag(\"v3_realized_savings\")"))
         assertTrue(savings.contains("testTag(\"v3_potential_savings\")"))
@@ -57,7 +44,7 @@ class V3ProductionBoundaryGuardTest {
         assertTrue(profile.contains("testTag(\"delete_account\")"))
         assertTrue(ai.contains("testTag(\"ai_message_input\")"))
         assertTrue(ai.contains("testTag(\"ai_send\")"))
-        assertTrue(shell.contains("testTag(\"invoices_back\")"))
+        assertTrue(shell.contains("testTag(\"activity_back\")"))
         assertTrue(shell.contains("contentDescription = \"חזרה\""))
     }
 
@@ -67,14 +54,12 @@ class V3ProductionBoundaryGuardTest {
         val ai = File("src/main/java/com/example/ui/screens/AiAssistantScreen.kt").readText()
         val activity = File("src/main/java/com/example/ui/screens/ActivityScreen.kt").readText()
         val profile = File("src/main/java/com/example/ui/screens/ProfileScreen.kt").readText()
-
         assertTrue(home.contains("Icons.AutoMirrored.Filled.ArrowBack"))
         assertFalse(home.contains("Icons.Default.ArrowBack"))
         assertTrue(ai.contains("Icons.AutoMirrored.Filled.Login"))
         assertTrue(ai.contains("Icons.AutoMirrored.Filled.Send"))
         assertFalse(ai.contains("Icons.Default.Login"))
         assertFalse(ai.contains("Icons.Default.Send"))
-
         assertTrue(activity.contains("\"השבוע\""))
         assertTrue(activity.contains("\"פעילות קודמת\""))
         assertTrue(profile.contains("אודות האפליקציה"))

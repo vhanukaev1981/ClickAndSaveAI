@@ -9,14 +9,10 @@ class V3FrozenProductContractTest {
     @Test
     fun primaryNavigationMatchesFrozenV3Exactly() {
         val nav = File("src/main/java/com/example/ui/components/BottomNavBar.kt").readText()
-        listOf("בית", "חיסכון", "AI", "לתשלום", "פרופיל").forEach { label ->
-            assertTrue("missing primary label $label", nav.contains("Text(\"$label\")"))
-        }
+        listOf("בית", "חיסכון", "AI", "לתשלום", "פרופיל").forEach { label -> assertTrue("missing primary label $label", nav.contains("Text(\"$label\")")) }
         assertFalse(nav.contains("Text(\"פעילות\")"))
         assertFalse(nav.contains("Text(\"אני\")"))
-        listOf("nav_home", "nav_savings", "nav_ai", "nav_pay", "nav_profile").forEach { tag ->
-            assertTrue("missing nav tag $tag", nav.contains("testTag(\"$tag\")"))
-        }
+        listOf("nav_home", "nav_savings", "nav_ai", "nav_pay", "nav_profile").forEach { tag -> assertTrue("missing nav tag $tag", nav.contains("testTag(\"$tag\")")) }
     }
 
     @Test
@@ -36,13 +32,9 @@ class V3FrozenProductContractTest {
     @Test
     fun profileMatchesFrozenGroupsWithoutTierOrSavingsPromotion() {
         val profile = File("src/main/java/com/example/ui/screens/ProfileScreen.kt").readText()
-        listOf("חיבור ונתונים", "פרטיות והרשאות", "פעילות והתראות", "חשבון ואבטחה").forEach { title ->
-            assertTrue("missing profile group $title", profile.contains("V3SectionHeader(\"$title\")"))
-        }
+        listOf("חיבור ונתונים", "פרטיות והרשאות", "פעילות והתראות", "חשבון ואבטחה").forEach { title -> assertTrue("missing profile group $title", profile.contains("V3SectionHeader(\"$title\")")) }
         assertTrue(profile.contains("Text(\"פרופיל\""))
-        listOf("Text(\"Pro\"", "Text(\"Free\"", "שדרוג", "מנוי", "חיסכון שלך").forEach { forbidden ->
-            assertFalse("forbidden profile tier/promo copy: $forbidden", profile.contains(forbidden, ignoreCase = true))
-        }
+        listOf("Text(\"Pro\"", "Text(\"Free\"", "שדרוג", "מנוי", "חיסכון שלך").forEach { forbidden -> assertFalse("forbidden profile tier/promo copy: $forbidden", profile.contains(forbidden, ignoreCase = true)) }
     }
 
     @Test
@@ -56,14 +48,20 @@ class V3FrozenProductContractTest {
         assertTrue(pay.contains("מועד לתשלום: לא ידוע"))
         assertTrue(pay.contains("Click & Save לא גובה כסף ולא משלם עבורך"))
         assertFalse(pay.contains("paymentUrl"))
+        assertFalse(Regex("onClick\\s*=\\s*\\{\\s*}").containsMatchIn(pay))
+    }
+
+    @Test
+    fun homeShowsAnnualSavingsWheneverAuthoritativeAnnualExists() {
+        val home = File("src/main/java/com/example/ui/screens/DashboardScreen.kt").readText()
+        assertTrue(home.contains("realizedAnnual = summary.realizedAnnual"))
+        assertTrue(home.contains("potentialAnnual = summary.potentialAnnual"))
     }
 
     @Test
     fun presentationContractKeepsTruthBoundariesAndExactModes() {
         val source = File("src/main/java/com/example/ui/v3/V3FinancialPresentation.kt").readText()
-        listOf("DIRECT_PLAN_JOIN", "PROVIDER_LEAD_FLOW", "VIEW_ONLY", "NO_VERIFIED_ACTION_TARGET", "DIRECT_INVOICE_PAYMENT", "PROVIDER_PAYMENT_PORTAL", "NO_VERIFIED_PAYMENT_TARGET").forEach { mode ->
-            assertTrue("missing mode $mode", source.contains(mode))
-        }
+        listOf("DIRECT_PLAN_JOIN", "PROVIDER_LEAD_FLOW", "VIEW_ONLY", "NO_VERIFIED_ACTION_TARGET", "DIRECT_INVOICE_PAYMENT", "PROVIDER_PAYMENT_PORTAL", "NO_VERIFIED_PAYMENT_TARGET").forEach { mode -> assertTrue("missing mode $mode", source.contains(mode)) }
         assertTrue(source.contains("monthlyIncrease >= 5.0"))
         assertTrue(source.contains("percentIncrease >= 5.0"))
         assertTrue(source.contains("potentialAnnual"))

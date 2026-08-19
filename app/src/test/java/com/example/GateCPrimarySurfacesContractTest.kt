@@ -25,6 +25,8 @@ class GateCPrimarySurfacesContractTest {
         assertTrue(source.contains("v3_monitoring_status"))
         assertTrue(source.contains("v3_open_invoices"))
         assertTrue(source.contains("toV3SavingsSummary"))
+        assertTrue(source.contains("realizedAnnual = summary.realizedAnnual"))
+        assertTrue(source.contains("potentialAnnual = summary.potentialAnnual"))
         assertTrue(source.contains("NextBestActionCard("))
         assertTrue(homeComponents.contains("הדבר הכי משתלם לעשות עכשיו"))
     }
@@ -54,11 +56,13 @@ class GateCPrimarySurfacesContractTest {
     }
 
     @Test
-    fun savingsUsesFrozenActionBoundaryAndExistingLeadFlow() {
+    fun savingsUsesFrozenActionBoundaryAndExistingProviderHandoff() {
         val source = File("src/main/java/com/example/ui/screens/ProvidersScreen.kt").readText()
+        val presentation = File("src/main/java/com/example/ui/v3/V3FinancialPresentation.kt").readText()
         assertTrue(source.contains("v3LifecycleLabel"))
         assertTrue(source.contains("hasAuthoritativeV3Offer"))
-        assertTrue(source.contains("V3SavingsActionMode.PROVIDER_LEAD_FLOW"))
+        assertTrue(source.contains("hasVerifiedSavingsActionTarget"))
+        assertTrue(presentation.contains("V3SavingsActionMode.PROVIDER_LEAD_FLOW"))
         assertTrue(source.contains("recordSavingsActionStarted"))
         assertTrue(source.contains("acceptSavingsOpportunity"))
         assertTrue(source.contains("לא הוכחה לשינוי תעריף"))
