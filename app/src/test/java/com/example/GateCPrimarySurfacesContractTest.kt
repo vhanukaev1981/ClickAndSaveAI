@@ -92,6 +92,37 @@ class GateCPrimarySurfacesContractTest {
     }
 
     @Test
+    fun activityMeAndInvoicesUseTheApprovedV3SecondarySurfaceHierarchy() {
+        val activity = File("src/main/java/com/example/ui/screens/ActivityScreen.kt").readText()
+        val profile = File("src/main/java/com/example/ui/screens/ProfileScreen.kt").readText()
+        val invoices = File("src/main/java/com/example/ui/screens/InvoicesScreen.kt").readText()
+        val shell = File("src/main/java/com/example/MainActivity.kt").readText()
+
+        assertTrue(activity.contains("ActivityTimelineItem("))
+        assertTrue(activity.contains("activityGroupLabel("))
+        assertFalse(activity.contains("CRM", ignoreCase = true))
+        assertFalse(activity.contains("lead", ignoreCase = true))
+
+        assertTrue(profile.contains("החיבורים שלי"))
+        assertTrue(profile.contains("פרטיות ונתונים"))
+        assertTrue(profile.contains("disconnectGmail"))
+        assertTrue(profile.contains("deleteImportedFinancialData"))
+        assertTrue(profile.contains("deleteAccount"))
+        assertTrue(profile.contains("קריאה בלבד"))
+
+        assertTrue(invoices.contains("v3_invoice_list"))
+        assertTrue(invoices.contains("v3_invoice_item"))
+        assertTrue(invoices.contains("receivedDate"))
+        assertTrue(invoices.contains("verificationLabel"))
+        assertFalse(invoices.contains("viewModel.invoices.collectAsState()"))
+        assertFalse(invoices.contains("ManualInvoiceDialog"))
+        assertFalse(invoices.contains("viewModel.addManualInvoice"))
+
+        assertTrue(shell.contains("V3SecondarySurface.INVOICES"))
+        assertTrue(shell.contains("contentDescription = \"חזרה\""))
+    }
+
+    @Test
     fun financialContractKeepsUnknownAuthoritativeValuesNullable() {
         val backend = File("src/main/java/com/example/data/repository/BackendRepository.kt").readText()
         val action = File("src/main/java/com/example/data/repository/OpportunityActionRepository.kt").readText()
