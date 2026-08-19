@@ -5,8 +5,10 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.LayoutDirection
+import com.example.ui.components.MonitoringStatus
 import com.example.ui.components.NextBestActionCard
 import com.example.ui.components.SavingsHero
+import com.example.ui.screens.V3OnboardingContent
 import com.example.ui.theme.ClickAndSaveTheme
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -68,6 +70,64 @@ class V3PrimaryScreensScreenshotTest {
         }
         composeTestRule.onRoot().captureRoboImage(
             filePath = "src/test/screenshots/v3-next-best-action.png"
+        )
+    }
+
+    @Test
+    fun onboardingStartsWithTheApprovedV3Promise() {
+        composeTestRule.setContent {
+            ClickAndSaveTheme {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    V3OnboardingContent(
+                        step = 0,
+                        authenticated = false,
+                        onNext = {},
+                        onGoogleSignIn = {},
+                        onConnectGmail = {}
+                    )
+                }
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage(
+            filePath = "src/test/screenshots/v3-onboarding-step-1.png"
+        )
+    }
+
+    @Test
+    fun onboardingMakesReadOnlyGmailTrustExplicit() {
+        composeTestRule.setContent {
+            ClickAndSaveTheme {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    V3OnboardingContent(
+                        step = 2,
+                        authenticated = true,
+                        onNext = {},
+                        onGoogleSignIn = {},
+                        onConnectGmail = {}
+                    )
+                }
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage(
+            filePath = "src/test/screenshots/v3-onboarding-step-3.png"
+        )
+    }
+
+    @Test
+    fun firstSyncUsesNeutralTruthSafePresentation() {
+        composeTestRule.setContent {
+            ClickAndSaveTheme {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    MonitoringStatus(
+                        title = "מסדרים את התמונה שלך",
+                        subtitle = "אנחנו מעדכנים את התמונה שלך",
+                        active = true
+                    )
+                }
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage(
+            filePath = "src/test/screenshots/v3-first-sync.png"
         )
     }
 }
