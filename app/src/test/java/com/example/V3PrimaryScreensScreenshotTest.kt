@@ -1,9 +1,10 @@
 package com.example
 
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.LayoutDirection
 import com.example.ui.components.SavingsHero
 import com.example.ui.theme.ClickAndSaveTheme
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
@@ -33,6 +34,20 @@ class V3PrimaryScreensScreenshotTest {
         }
         composeTestRule.onRoot().captureRoboImage(
             filePath = "src/test/screenshots/v3-savings-hero.png"
+        )
+    }
+
+    @Test
+    fun savingsHeroKeepsUnknownDistinctFromKnownZero() {
+        composeTestRule.setContent {
+            ClickAndSaveTheme {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    SavingsHero(realizedMonthly = null, potentialMonthly = null)
+                }
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage(
+            filePath = "src/test/screenshots/v3-savings-hero-unknown.png"
         )
     }
 }

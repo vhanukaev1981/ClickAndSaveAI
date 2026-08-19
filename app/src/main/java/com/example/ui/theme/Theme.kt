@@ -16,32 +16,40 @@ private val DarkColorScheme = darkColorScheme(
     secondary = EmeraldSavings,
     onSecondary = SurfaceLight,
     tertiary = AmberDeal,
-    background = BackgroundLight,
-    surface = SurfaceLight,
-    surfaceVariant = SurfaceVariantLight,
-    onBackground = TextPrimaryLight,
-    onSurface = TextPrimaryLight,
-    onSurfaceVariant = TextSecondaryLight
+    background = BackgroundDark,
+    surface = SurfaceDark,
+    surfaceVariant = SurfaceVariantDark,
+    onBackground = TextPrimaryDark,
+    onSurface = TextPrimaryDark,
+    onSurfaceVariant = TextSecondaryDark,
+    error = AlertRed
 )
 
 private val LightColorScheme = lightColorScheme(
     primary = TechBluePrimary,
     onPrimary = SurfaceLight,
+    primaryContainer = V3BlueSoft,
+    onPrimaryContainer = BrandNavy,
     secondary = EmeraldSavings,
     onSecondary = SurfaceLight,
+    secondaryContainer = V3EmeraldSoft,
+    onSecondaryContainer = BrandNavy,
     tertiary = AmberDeal,
-    background = BackgroundLight,
+    tertiaryContainer = V3AmberSoft,
+    background = V3Background,
     surface = SurfaceLight,
-    surfaceVariant = SurfaceVariantLight,
+    surfaceVariant = V3SurfaceSoft,
     onBackground = TextPrimaryLight,
     onSurface = TextPrimaryLight,
-    onSurfaceVariant = TextSecondaryLight
+    onSurfaceVariant = TextSecondaryLight,
+    error = AlertRed,
+    errorContainer = V3ErrorSoft
 )
 
 @Composable
 fun ClickAndSaveTheme(
-    darkTheme: Boolean = false, // Strictly Light Theme per user requirement
-    dynamicColor: Boolean = false, // Use clean brand palette
+    darkTheme: Boolean = false,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -60,7 +68,6 @@ fun ClickAndSaveTheme(
     )
 }
 
-// Alias for compatibility
 @Composable
 fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -69,4 +76,3 @@ fun MyApplicationTheme(
 ) {
     ClickAndSaveTheme(darkTheme = darkTheme, dynamicColor = dynamicColor, content = content)
 }
-
