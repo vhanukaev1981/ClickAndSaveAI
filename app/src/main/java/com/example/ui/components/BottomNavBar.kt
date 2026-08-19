@@ -1,14 +1,14 @@
 package com.example.ui.components
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Dashboard
-import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Savings
 import androidx.compose.material3.Icon
@@ -23,10 +23,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun BottomNavBar(
-    selectedTab: Int,
-    onTabSelected: (Int) -> Unit
-) {
+fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
     NavigationBar(
         modifier = Modifier.testTag("bottom_nav_bar"),
         containerColor = MaterialTheme.colorScheme.surface,
@@ -35,69 +32,40 @@ fun BottomNavBar(
         NavigationBarItem(
             selected = selectedTab == 0,
             onClick = { onTabSelected(0) },
-            icon = {
-                Icon(
-                    if (selectedTab == 0) Icons.Filled.Dashboard else Icons.Outlined.Dashboard,
-                    contentDescription = "בית"
-                )
-            },
+            icon = { Icon(if (selectedTab == 0) Icons.Filled.Dashboard else Icons.Outlined.Dashboard, "בית") },
             label = { Text("בית") },
             colors = navColors(),
             modifier = Modifier.testTag("nav_home")
         )
-
         NavigationBarItem(
             selected = selectedTab == 1,
             onClick = { onTabSelected(1) },
-            icon = {
-                Icon(
-                    if (selectedTab == 1) Icons.Filled.Savings else Icons.Outlined.Savings,
-                    contentDescription = "חיסכון"
-                )
-            },
+            icon = { Icon(if (selectedTab == 1) Icons.Filled.Savings else Icons.Outlined.Savings, "חיסכון") },
             label = { Text("חיסכון") },
             colors = navColors(),
             modifier = Modifier.testTag("nav_savings")
         )
-
         NavigationBarItem(
             selected = selectedTab == 2,
             onClick = { onTabSelected(2) },
-            icon = {
-                Icon(
-                    if (selectedTab == 2) Icons.Filled.AutoAwesome else Icons.Outlined.AutoAwesome,
-                    contentDescription = "AI"
-                )
-            },
+            icon = { Icon(if (selectedTab == 2) Icons.Filled.AutoAwesome else Icons.Outlined.AutoAwesome, "AI") },
             label = { Text("AI") },
             colors = navColors(),
             modifier = Modifier.testTag("nav_ai")
         )
-
         NavigationBarItem(
             selected = selectedTab == 3,
             onClick = { onTabSelected(3) },
-            icon = {
-                Icon(
-                    if (selectedTab == 3) Icons.Filled.History else Icons.Outlined.History,
-                    contentDescription = "פעילות"
-                )
-            },
-            label = { Text("פעילות") },
+            icon = { Icon(if (selectedTab == 3) Icons.AutoMirrored.Filled.ReceiptLong else Icons.AutoMirrored.Outlined.ReceiptLong, "לתשלום") },
+            label = { Text("לתשלום") },
             colors = navColors(),
-            modifier = Modifier.testTag("nav_activity")
+            modifier = Modifier.testTag("nav_pay")
         )
-
         NavigationBarItem(
             selected = selectedTab == 4,
             onClick = { onTabSelected(4) },
-            icon = {
-                Icon(
-                    if (selectedTab == 4) Icons.Filled.Person else Icons.Outlined.Person,
-                    contentDescription = "אני"
-                )
-            },
-            label = { Text("אני") },
+            icon = { Icon(if (selectedTab == 4) Icons.Filled.Person else Icons.Outlined.Person, "פרופיל") },
+            label = { Text("פרופיל") },
             colors = navColors(),
             modifier = Modifier.testTag("nav_profile")
         )

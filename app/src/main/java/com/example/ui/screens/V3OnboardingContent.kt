@@ -43,19 +43,19 @@ fun V3OnboardingContent(
     val safeStep = step.coerceIn(0, 2)
     val content = when (safeStep) {
         0 -> OnboardingStep(
-            icon = Icons.Outlined.AutoAwesome,
-            title = "הכסף שלך יכול לעבוד חכם יותר",
-            body = "Click & Save AI מרכז את התמונה הפיננסית שלך כדי לעזור לזהות הוצאות והזדמנויות לחיסכון בלי להמציא מספרים."
+            Icons.Outlined.AutoAwesome,
+            "הכסף שלך יכול לעבוד חכם יותר",
+            "Click & Save AI מרכז את התמונה הפיננסית שלך כדי לעזור לזהות הוצאות והזדמנויות לחיסכון בלי להמציא מספרים."
         )
         1 -> OnboardingStep(
-            icon = Icons.Outlined.Search,
-            title = "אנחנו מחפשים — אתה מחליט",
-            body = "אנחנו מציגים הזדמנויות ומסבירים מה ידוע ומה עדיין דורש בדיקה. שום בקשה לא מוצגת כאילו כבר הושלמה."
+            Icons.Outlined.Search,
+            "אנחנו מחפשים — אתה מחליט",
+            "אנחנו מציגים הזדמנויות ומסבירים מה ידוע ומה עדיין דורש בדיקה. שום בקשה לא מוצגת כאילו כבר הושלמה."
         )
         else -> OnboardingStep(
-            icon = Icons.Outlined.Lock,
-            title = "מחברים Gmail בצורה מאובטחת",
-            body = "החיבור נועד לאתר חשבונות רלוונטיים בהרשאת קריאה בלבד. לפני החיבור תראה בדיוק איזו הרשאה מתבקשת."
+            Icons.Outlined.Lock,
+            "אתה בוחר — וממשיך רק כשמתאים לך",
+            "אפשר לחבר Gmail בהרשאת קריאה בלבד כדי לאתר חשבונות רלוונטיים. החיבור מתבצע רק לאחר אישור מפורש שלך."
         )
     }
 
@@ -65,62 +65,31 @@ fun V3OnboardingContent(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 24.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
+                Modifier.size(64.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = content.icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(30.dp),
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer
-                )
+                Icon(content.icon, null, Modifier.size(30.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
             }
-
-            Text(
-                text = content.title,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = content.body,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-
+            Text(content.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Text(content.body, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             if (safeStep == 2) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
-                    shape = RoundedCornerShape(18.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Outlined.Lock, contentDescription = null)
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer), shape = RoundedCornerShape(18.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Lock, null)
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text("קריאה בלבד", fontWeight = FontWeight.Bold)
-                            Text(
-                                "החיבור לא מאפשר לנו לשלוח, למחוק או לשנות הודעות.",
-                                style = MaterialTheme.typography.bodySmall
-                            )
+                            Text("החיבור לא מאפשר לנו לשלוח, למחוק או לשנות הודעות.", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
             }
-
-            OnboardingProgress(currentStep = safeStep)
+            OnboardingProgress(safeStep)
             Spacer(Modifier.height(2.dp))
-
             Button(
                 onClick = when {
                     safeStep < 2 -> onNext
@@ -130,17 +99,14 @@ fun V3OnboardingContent(
                 modifier = Modifier.fillMaxWidth().height(52.dp).testTag("v3_onboarding_primary_action"),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Text(
-                    when {
-                        safeStep < 2 -> "המשך"
-                        authenticated -> "חבר Gmail"
-                        else -> "התחבר עם Google"
-                    }
-                )
+                Text(when {
+                    safeStep < 2 -> "המשך"
+                    authenticated -> "חבר Gmail"
+                    else -> "התחבר עם Google"
+                })
             }
-
             Text(
-                text = when {
+                when {
                     safeStep < 2 -> "שלב ${safeStep + 1} מתוך 3"
                     authenticated -> "החיבור יתבצע רק לאחר אישור מפורש שלך."
                     else -> "ההתחברות לחשבון נפרדת מהרשאת Gmail."
@@ -157,21 +123,12 @@ fun V3OnboardingContent(
 private fun OnboardingProgress(currentStep: Int) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         repeat(3) { index ->
-            Box(
-                modifier = Modifier
-                    .size(if (index == currentStep) 10.dp else 8.dp)
-                    .background(
-                        if (index == currentStep) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.surfaceVariant,
-                        CircleShape
-                    )
-            )
+            Box(Modifier.size(if (index == currentStep) 10.dp else 8.dp).background(
+                if (index == currentStep) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                CircleShape
+            ))
         }
     }
 }
 
-private data class OnboardingStep(
-    val icon: ImageVector,
-    val title: String,
-    val body: String
-)
+private data class OnboardingStep(val icon: ImageVector, val title: String, val body: String)

@@ -45,8 +45,10 @@ import com.example.ui.components.VerificationBadge
 import com.example.ui.theme.TechBluePrimary
 import com.example.ui.theme.V3AiViolet
 import com.example.ui.theme.V3BlueSoft
+import com.example.ui.v3.V3AiSuggestion
+import com.example.ui.v3.v3RankedAiSuggestions
 
-private val SAVINGS_ASSISTANT_PROMPTS = listOf(
+private val SECONDARY_SAVINGS_ASSISTANT_PROMPTS = listOf(
     "איפה אני משלם יותר מדי?",
     "מה אפשר לבטל?",
     "מה כדאי לבדוק השבוע?",
@@ -62,6 +64,10 @@ fun AiAssistantScreen(viewModel: MainViewModel) {
     val isChatLoading by viewModel.isAiChatLoading.collectAsState()
     val errorMessage by viewModel.aiErrorMessage.collectAsState()
     val session by viewModel.userSession.collectAsState()
+    val financialHome by viewModel.authoritativeFinancialHome.collectAsState()
+
+    val primarySuggestions = financialHome.v3RankedAiSuggestions()
+    val secondarySuggestions = SECONDARY_SAVINGS_ASSISTANT_PROMPTS
 
     AiAssistantContent(
         authenticated = session.isAuthenticated,
@@ -70,6 +76,8 @@ fun AiAssistantScreen(viewModel: MainViewModel) {
         messages = messages,
         isChatLoading = isChatLoading,
         errorMessage = errorMessage,
+        primarySuggestions = primarySuggestions,
+        secondarySuggestions = secondarySuggestions,
         onAnalyze = viewModel::analyzeDeal,
         onSend = viewModel::sendChatMessage
     )
@@ -83,6 +91,8 @@ fun AiAssistantContent(
     messages: List<ChatMessage>,
     isChatLoading: Boolean,
     errorMessage: String,
+    primarySuggestions: List<V3AiSuggestion> = emptyList(),
+    secondarySuggestions: List<String> = SECONDARY_SAVINGS_ASSISTANT_PROMPTS,
     onAnalyze: (String) -> Unit,
     onSend: (String) -> Unit
 ) {
@@ -90,33 +100,28 @@ fun AiAssistantContent(
     var chatInput by remember { mutableStateOf("") }
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag("ai_assistant_screen"),
+        modifier = Modifier.fillMaxSize().testTag("ai_assistant_screen"),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 104.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = null,
-                        tint = V3AiViolet
-                    )
+                    Icon(Icons.Default.AutoAwesome, null, tint = V3AiViolet)
                     Spacer(Modifier.size(8.dp))
-                    Text(
-                        text = "עוזר החיסכון שלך",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("עוזר החיסכון שלך", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 }
                 Text(
-                    text = "שאל על חיובים, מסלולים והזדמנויות. כשאין מספיק מידע, אגיד זאת במפורש.",
+                    "הצעות יזומות מדורגות רק לפי מידע פיננסי מאומת שזמין כרגע.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                VerificationBadge("מבוסס על מידע מאומת")
+                VerificationBadge("הצעות יזומות: מבוססות על מידע מאומת")
+                Text(
+                    "בשיחה חופשית ההקשר הפיננסי המלא עדיין אינו מובטח; כשאין נתון סמכותי, לא נניח אותו.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 
@@ -127,50 +132,53 @@ fun AiAssistantContent(
                     shape = RoundedCornerShape(22.dp),
                     colors = CardDefaults.cardColors(containerColor = V3BlueSoft)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null, tint = TechBluePrimary)
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.AutoMirrored.Filled.Login, null, tint = TechBluePrimary)
                         Spacer(Modifier.size(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f)) {
                             Text("כדי להשתמש בעוזר צריך להתחבר", fontWeight = FontWeight.Bold)
-                            Text(
-                                "אפשר להתחבר דרך מסך ״אני״. העוזר לא יציג מידע אישי לפני התחברות.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Text("אפשר להתחבר דרך מסך פרופיל. העוזר לא יציג מידע אישי לפני התחברות.", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
             }
         }
 
-        item {
-            Text(
-                text = "מה תרצה לבדוק?",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+        item { Text("הצעות בשבילך", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+        if (primarySuggestions.isEmpty()) {
+            item {
+                Text(
+                    "אין כרגע הצעות אישיות מאומתות",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    primarySuggestions.forEachIndexed { index, suggestion ->
+                        AssistChip(
+                            onClick = { if (authenticated && !isChatLoading) onSend(suggestion.prompt) },
+                            enabled = authenticated && !isChatLoading,
+                            label = { Text(suggestion.label) },
+                            leadingIcon = { Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp)) },
+                            modifier = Modifier.fillMaxWidth().testTag("ai_primary_suggestion_$index")
+                        )
+                    }
+                }
+            }
         }
 
+        item { Text("אפשר לבדוק גם", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SAVINGS_ASSISTANT_PROMPTS.forEachIndexed { index, prompt ->
+                secondarySuggestions.forEachIndexed { index, prompt ->
                     AssistChip(
                         onClick = { if (authenticated && !isChatLoading) onSend(prompt) },
                         enabled = authenticated && !isChatLoading,
                         label = { Text(prompt) },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("ai_suggestion_$index")
+                        leadingIcon = { Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp)) },
+                        modifier = Modifier.fillMaxWidth().testTag("ai_secondary_suggestion_$index")
                     )
                 }
             }
@@ -182,14 +190,11 @@ fun AiAssistantContent(
                 shape = RoundedCornerShape(22.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Shield, contentDescription = null, tint = TechBluePrimary)
+                        Icon(Icons.Default.Shield, null, tint = TechBluePrimary)
                         Spacer(Modifier.size(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f)) {
                             Text("בדיקת חשבון או מסלול", fontWeight = FontWeight.Bold)
                             Text(
                                 "תאר את מה שאתה רוצה לבדוק. המלצה מסחרית נשארת כפופה למידע ומקור שניתן לאמת.",
@@ -211,55 +216,32 @@ fun AiAssistantContent(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         if (isAnalyzing) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.size(8.dp))
                         }
                         Text(if (isAnalyzing) "בודק..." else "בדיקת המסלול")
                     }
                     if (errorMessage.isNotBlank()) {
-                        Text(
-                            errorMessage,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
+                        Text(errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     }
-                    analysis?.let {
-                        DealAnalysisResultCard(it)
-                    }
+                    analysis?.let { DealAnalysisResultCard(it) }
                 }
             }
         }
 
         if (messages.isNotEmpty()) {
-            item {
-                Text(
-                    text = "השיחה שלך",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            items(messages, key = { it.id }) { message ->
-                ChatMessageBubble(message)
-            }
+            item { Text("השיחה שלך", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+            items(messages, key = { it.id }) { message -> ChatMessageBubble(message) }
         }
 
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = chatInput,
                         onValueChange = { chatInput = it },
                         label = { Text("שאל את עוזר החיסכון") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("ai_message_input"),
+                        modifier = Modifier.fillMaxWidth().testTag("ai_message_input"),
                         minLines = 2
                     )
                     Button(
@@ -271,15 +253,10 @@ fun AiAssistantContent(
                             }
                         },
                         enabled = authenticated && chatInput.isNotBlank() && !isChatLoading,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("ai_send")
+                        modifier = Modifier.fillMaxWidth().testTag("ai_send")
                     ) {
-                        if (isChatLoading) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        } else {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
-                        }
+                        if (isChatLoading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.AutoMirrored.Filled.Send, null)
                         Spacer(Modifier.size(7.dp))
                         Text(if (isChatLoading) "בודק..." else "שלח")
                     }
@@ -292,28 +269,15 @@ fun AiAssistantContent(
 @Composable
 fun ChatMessageBubble(message: ChatMessage) {
     val isUser = message.isUser
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isUser) Arrangement.Start else Arrangement.End
-    ) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (isUser) Arrangement.Start else Arrangement.End) {
         Surface(
             modifier = Modifier.fillMaxWidth(0.88f),
             shape = RoundedCornerShape(18.dp),
             color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
         ) {
-            Column(
-                modifier = Modifier.padding(13.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = if (isUser) "אתה" else "Click & Save AI",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (isUser) TechBluePrimary else V3AiViolet
-                )
-                Text(
-                    text = message.text,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+            Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(if (isUser) "אתה" else "Click & Save AI", style = MaterialTheme.typography.labelMedium, color = if (isUser) TechBluePrimary else V3AiViolet)
+                Text(message.text, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -321,19 +285,11 @@ fun ChatMessageBubble(message: ChatMessage) {
 
 @Composable
 fun DealAnalysisResultCard(analysis: DealAnalysisResult) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(13.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(analysis.recommendation, fontWeight = FontWeight.Bold)
             Text(analysis.summary, style = MaterialTheme.typography.bodySmall)
-            if (analysis.couponSuggestion.isNotBlank()) {
-                Text(analysis.couponSuggestion, style = MaterialTheme.typography.bodySmall)
-            }
+            if (analysis.couponSuggestion.isNotBlank()) Text(analysis.couponSuggestion, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

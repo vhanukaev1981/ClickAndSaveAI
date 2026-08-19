@@ -16,11 +16,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -34,14 +36,23 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.repository.BackendInvoice
+import com.example.data.repository.FinancialOpportunity
 import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.latestScanOrNull
 import com.example.ui.MainViewModel
 import com.example.ui.components.V3SectionHeader
 import com.example.ui.theme.TechBluePrimary
+import com.example.ui.v3.V3InvoicePaymentMode
+import com.example.ui.v3.asV3Money
+import com.example.ui.v3.hasAuthoritativeV3Offer
+import com.example.ui.v3.v3PaymentMode
 
 @Composable
-fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
+fun InvoicesScreen(
+    viewModel: MainViewModel,
+    onOpenReceiptScan: () -> Unit,
+    onOpenSavings: () -> Unit = {}
+) {
     val financialSyncState by viewModel.financialSyncState.collectAsState()
     val financialHome by viewModel.authoritativeFinancialHome.collectAsState()
     var selectedCategory by remember { mutableStateOf("הכל") }
@@ -50,45 +61,25 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
     val filteredBills = authoritativeBills?.let { bills ->
         if (selectedCategory == "הכל") bills else bills.filter { it.category == selectedCategory }
     }
+    val opportunities = financialHome?.opportunities.orEmpty()
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag("invoices_screen")
-            .testTag("v3_invoice_list"),
+        modifier = Modifier.fillMaxSize().testTag("invoices_screen").testTag("v3_invoice_list"),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("החשבונות שלי", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("לתשלום", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(
-                    "חיובים שנצפו במקור המחובר שאומת.",
+                    "חשבונות שנקלטו ממקור מאומת. שדה שלא קיים בנתונים נשאר לא ידוע.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                shape = RoundedCornerShape(22.dp)
-            ) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        formatAuthoritativeMoney(financialHome?.context?.observedRecurringMonthlySpend),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text("הוצאה חודשית חוזרת שנצפתה")
-                    Text(financialTruthStatus(financialSyncState), style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-
-        item { V3SectionHeader("חשבונות שנמצאו") }
-
+        item { V3SectionHeader("מה נכנס לתשלום") }
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(categories) { category ->
@@ -100,43 +91,42 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
                 }
             }
         }
-
         when {
-            filteredBills == null -> item {
-                BillsStateCard(unknownBillsMessage(financialSyncState))
-            }
+            filteredBills == null -> item { BillsStateCard(unknownBillsMessage(financialSyncState)) }
             filteredBills.isEmpty() -> item {
-                BillsStateCard(
-                    if (selectedCategory == "הכל") {
-                        "בסריקה האחרונה שאומתה לא נמצאו חשבונות להצגה."
-                    } else {
-                        "בסריקה האחרונה שאומתה אין חשבונות בקטגוריה $selectedCategory."
-                    }
-                )
+                BillsStateCard(if (selectedCategory == "הכל") "בסריקה האחרונה שאומתה לא נמצאו חשבונות להצגה." else "אין חשבונות מאומתים בקטגוריה $selectedCategory.")
             }
-            else -> items(filteredBills, key = { it.sourceMessageId }) { bill ->
-                AuthoritativeBillCard(bill)
+            else -> items(filteredBills, key = { "bill:${it.sourceMessageId}" }) { bill -> PayableBillCard(bill) }
+        }
+
+        item { V3SectionHeader("האם אפשר לחסוך") }
+        when {
+            filteredBills == null -> item { BillsStateCard("אין מספיק מידע מאומת כדי לקשור הזדמנות חיסכון לחשבון.") }
+            filteredBills.isEmpty() -> item { BillsStateCard("אין כרגע חשבון מאומת שניתן לבדוק מול הזדמנות חיסכון.") }
+            else -> items(filteredBills, key = { "saving:${it.sourceMessageId}" }) { bill ->
+                InvoiceSavingCard(
+                    bill = bill,
+                    opportunity = matchingSavingsOpportunity(bill, opportunities),
+                    onOpenSavings = onOpenSavings
+                )
             }
         }
 
+        item { V3SectionHeader("מעבר לספק לתשלום") }
         item {
             Card(
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ReceiptLong,
-                        contentDescription = null,
-                        tint = TechBluePrimary
-                    )
+                    Icon(Icons.Default.Info, null, tint = TechBluePrimary)
                     Spacer(Modifier.size(10.dp))
-                    Text(
-                        "רשומה מוצגת רק כאשר היא קיימת בתוצאת סריקה שאומתה. שדות חסרים נשארים לא ידועים.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    Text("Click & Save לא גובה כסף ולא משלם עבורך. מעבר לתשלום יוצג רק כשקיים יעד תשלום מאומת לחשבון עצמו.")
                 }
             }
+        }
+        if (filteredBills != null) {
+            items(filteredBills, key = { "payment:${it.sourceMessageId}" }) { bill -> PaymentTargetCard(bill) }
         }
     }
 
@@ -145,28 +135,65 @@ fun InvoicesScreen(viewModel: MainViewModel, onOpenReceiptScan: () -> Unit) {
 }
 
 @Composable
-private fun AuthoritativeBillCard(bill: BackendInvoice) {
-    Card(
-        modifier = Modifier.fillMaxWidth().testTag("v3_invoice_item"),
-        shape = RoundedCornerShape(18.dp)
-    ) {
+private fun PayableBillCard(bill: BackendInvoice) {
+    Card(modifier = Modifier.fillMaxWidth().testTag("v3_invoice_item"), shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(bill.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
             Text(bill.category.ifBlank { "קטגוריה לא ידועה" }, style = MaterialTheme.typography.bodySmall)
-            Text("סכום שנצפה: ${money(bill.monthlyCost)}", fontWeight = FontWeight.SemiBold)
+            Text("סכום שנצפה: ${bill.monthlyCost.asV3Money()}", fontWeight = FontWeight.SemiBold)
+            Text("מועד לתשלום: לא ידוע", style = MaterialTheme.typography.bodySmall)
             Text(
-                if (bill.receivedDate.isNotBlank()) {
-                    "תאריך שנצפה: ${bill.receivedDate}"
-                } else {
-                    "תאריך החיוב לא ידוע"
-                },
+                if (bill.receivedDate.isNotBlank()) "זוהה ב: ${bill.receivedDate}" else "מועד הקליטה לא ידוע",
                 style = MaterialTheme.typography.bodySmall
             )
-            Text(
-                "מקור: Gmail בקריאה בלבד • ${verificationLabel(bill.verificationStatus)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text("מקור: Gmail בקריאה בלבד • ${verificationLabel(bill.verificationStatus)}", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun InvoiceSavingCard(
+    bill: BackendInvoice,
+    opportunity: FinancialOpportunity?,
+    onOpenSavings: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(bill.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
+            if (opportunity == null) {
+                Text("אין כרגע חיסכון מאומת לחשבון הזה. UNKNOWN אינו מוצג כאפס.")
+            } else {
+                val monthly = opportunity.potentialMonthlySaving
+                val annual = opportunity.potentialAnnualSaving
+                Text(
+                    if (monthly != null) "חיסכון פוטנציאלי: ${monthly.asV3Money()} בחודש" else "חיסכון חודשי פוטנציאלי: לא ידוע",
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(if (annual != null) "חיסכון פוטנציאלי: ${annual.asV3Money()} בשנה" else "חיסכון שנתי פוטנציאלי: לא ידוע")
+                Text("זהו פוטנציאל לפי הצעה מאומתת — לא חיסכון ממומש.", style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = onOpenSavings, modifier = Modifier.fillMaxWidth()) { Text("לבדיקת חיסכון") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaymentTargetCard(bill: BackendInvoice) {
+    val paymentMode = bill.v3PaymentMode()
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(bill.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
+            when (paymentMode) {
+                V3InvoicePaymentMode.NO_VERIFIED_PAYMENT_TARGET -> {
+                    Text("אין יעד תשלום מאומת לחשבון הזה.")
+                    Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) { Text("מעבר לספק לתשלום") }
+                }
+                V3InvoicePaymentMode.DIRECT_INVOICE_PAYMENT,
+                V3InvoicePaymentMode.PROVIDER_PAYMENT_PORTAL -> {
+                    Text("יעד תשלום קיים בחוזה אך אינו מחובר למסך זה ללא יעד חשבונית מאומת.")
+                    Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) { Text("מעבר לספק לתשלום") }
+                }
+            }
         }
     }
 }
@@ -175,12 +202,24 @@ private fun AuthoritativeBillCard(bill: BackendInvoice) {
 private fun BillsStateCard(message: String) {
     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
         Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Info, contentDescription = null)
+            Icon(Icons.AutoMirrored.Filled.ReceiptLong, null)
             Spacer(Modifier.size(10.dp))
             Text(message)
         }
     }
 }
+
+private fun matchingSavingsOpportunity(
+    bill: BackendInvoice,
+    opportunities: List<FinancialOpportunity>
+): FinancialOpportunity? = opportunities
+    .asSequence()
+    .filter { it.hasAuthoritativeV3Offer() && (it.potentialMonthlySaving ?: 0.0) > 0.0 }
+    .filter { opportunity ->
+        opportunity.providerName.trim().equals(bill.providerName.trim(), ignoreCase = true) &&
+            (bill.category.isBlank() || opportunity.category.trim().equals(bill.category.trim(), ignoreCase = true))
+    }
+    .maxByOrNull { it.potentialMonthlySaving ?: 0.0 }
 
 private fun unknownBillsMessage(state: FinancialSyncState): String = when (state) {
     FinancialSyncState.Unauthenticated -> "נדרשת התחברות כדי לדעת אילו חשבונות קיימים."
@@ -190,16 +229,6 @@ private fun unknownBillsMessage(state: FinancialSyncState): String = when (state
     is FinancialSyncState.Partial -> "כיסוי החשבונות עדיין אינו ידוע במלואו."
     is FinancialSyncState.Failed -> "טעינת החשבונות נכשלה; לא נציג רשימה ריקה במקום שגיאה."
     is FinancialSyncState.Ready -> "מצב החשבונות לא ידוע."
-}
-
-private fun financialTruthStatus(state: FinancialSyncState): String = when (state) {
-    FinancialSyncState.Unauthenticated -> "נדרשת התחברות כדי לטעון מידע מאומת."
-    FinancialSyncState.CheckingConnection -> "בודקים את מקור המידע."
-    FinancialSyncState.Disconnected -> "מקור החשבונות אינו מחובר."
-    FinancialSyncState.Recovering -> "המידע המאומת עדיין נטען."
-    is FinancialSyncState.Partial -> "המידע חלקי; ערכים חסרים נשארים לא ידועים."
-    is FinancialSyncState.Failed -> "הסנכרון נכשל; ערכים חסרים נשארים לא ידועים."
-    is FinancialSyncState.Ready -> "הנתונים מבוססים על הסנכרון המאומת האחרון."
 }
 
 private fun verificationLabel(status: String): String = when (status.uppercase()) {
