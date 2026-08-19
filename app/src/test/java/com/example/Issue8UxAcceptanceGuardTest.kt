@@ -107,7 +107,8 @@ class Issue8UxAcceptanceGuardTest {
 
         assertTrue(dashboard.contains("FinancialSyncState.Unauthenticated -> item"))
         assertTrue(dashboard.contains("FinancialSyncState.Disconnected -> item"))
-        assertTrue(Regex("InitialGmailOnboardingCard\\(").findAll(dashboard).count() == 3)
+        assertTrue(Regex("V3OnboardingContent\\(").findAll(dashboard).count() == 2)
+        assertFalse(dashboard.contains("InitialGmailOnboardingCard("))
         assertTrue(dashboard.contains("is FinancialSyncState.Ready ->"))
         assertTrue(profile.contains("financialSyncState == FinancialSyncState.Disconnected"))
         assertFalse(profile.contains("connection?.connected != true"))
