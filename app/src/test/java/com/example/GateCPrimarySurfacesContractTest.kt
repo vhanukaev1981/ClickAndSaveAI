@@ -58,6 +58,20 @@ class GateCPrimarySurfacesContractTest {
     }
 
     @Test
+    fun savingsUsesApprovedV3WorkspaceAndExistingActionBoundary() {
+        val source = File("src/main/java/com/example/ui/screens/ProvidersScreen.kt").readText()
+        assertTrue(source.contains("החיסכון שלך"))
+        assertTrue(source.contains("חיסכון פוטנציאלי"))
+        assertTrue(source.contains("v3LifecycleLabel"))
+        assertTrue(source.contains("hasAuthoritativeV3Offer"))
+        assertTrue(source.contains("OpportunityLifecycleChip"))
+        assertTrue(source.contains("recordSavingsActionStarted"))
+        assertTrue(source.contains("acceptSavingsOpportunity"))
+        assertFalse(source.contains("חיסכון מאומת"))
+        assertFalse(source.contains("potentialMonthlySaving ?: 0.0"))
+    }
+
+    @Test
     fun savingsUnknownMonetaryValueCannotCreateAMonetarySavingsCta() {
         val source = File("src/main/java/com/example/ui/screens/ProvidersScreen.kt").readText()
         assertFalse(source.contains("potentialAnnualSaving ?: 0.0"))
