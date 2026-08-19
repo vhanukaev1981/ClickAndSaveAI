@@ -12,10 +12,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Login
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.Login
-import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -42,6 +42,7 @@ import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.gmailConnectionOrNull
 import com.example.ui.MainViewModel
 import com.example.ui.PrivacyOperationUiState
+import com.example.ui.components.V3SectionHeader
 import com.example.ui.theme.TechBluePrimary
 
 private const val CONFIRM_DISCONNECT_GMAIL = "DISCONNECT_GMAIL"
@@ -72,13 +73,14 @@ fun ProfileScreen(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("אני", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(
-                    "כאן מנהלים את החשבון, חיבור Gmail ופעולות הפרטיות.",
+                    "החשבון, החיבורים והפרטיות שלך במקום אחד.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
+        item { V3SectionHeader("החשבון שלי") }
         item {
             AccountCard(
                 authState = authState,
@@ -86,6 +88,8 @@ fun ProfileScreen(
                 onSignOut = viewModel::signOut
             )
         }
+
+        item { V3SectionHeader("החיבורים שלי") }
         item {
             GmailAuthorityCard(
                 financialSyncState = financialSyncState,
@@ -93,6 +97,8 @@ fun ProfileScreen(
                 onRequestGmailAuthorization = onRequestGmailAuthorization
             )
         }
+
+        item { V3SectionHeader("פרטיות ונתונים") }
         item {
             PrivacyAuthorityCard(
                 authState = authState,
@@ -158,7 +164,7 @@ private fun AccountCard(
                 AuthState.Idle -> {
                     Text("לא מחובר לחשבון.")
                     Button(onClick = onGoogleSignIn, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Default.Login, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Filled.Login, contentDescription = null)
                         Spacer(modifier = Modifier.size(6.dp))
                         Text("התחבר עם Google")
                     }
@@ -173,7 +179,7 @@ private fun AccountCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Default.Logout, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                         Spacer(modifier = Modifier.size(6.dp))
                         Text("יציאה מהחשבון")
                     }
