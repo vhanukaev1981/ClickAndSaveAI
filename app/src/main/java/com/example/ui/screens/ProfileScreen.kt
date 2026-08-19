@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material3.AlertDialog
@@ -37,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.BuildConfig
 import com.example.data.repository.AuthState
 import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.gmailConnectionOrNull
@@ -109,6 +111,9 @@ fun ProfileScreen(
                 onDeleteAccount = { pendingConfirmation = CONFIRM_DELETE_ACCOUNT }
             )
         }
+
+        item { V3SectionHeader("אודות האפליקציה") }
+        item { AppAboutCard() }
     }
 
     when (pendingConfirmation) {
@@ -235,7 +240,7 @@ private fun GmailAuthorityCard(
             ) {
                 OutlinedButton(
                     onClick = onRequestGmailAuthorization,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().testTag("connect_gmail")
                 ) {
                     Text("חבר Gmail")
                 }
@@ -344,6 +349,27 @@ private fun PrivacyAuthorityCard(
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold
             )
+        }
+    }
+}
+
+@Composable
+private fun AppAboutCard() {
+    Card(shape = RoundedCornerShape(20.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(Icons.Default.Info, contentDescription = null, tint = TechBluePrimary)
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Click & Save AI", fontWeight = FontWeight.Bold)
+                Text(
+                    "גרסה ${BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
