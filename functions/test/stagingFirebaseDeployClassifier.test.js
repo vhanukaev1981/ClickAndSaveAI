@@ -44,10 +44,10 @@ test("cleanup-only post-success evidence may be downgraded and records successfu
   assert.match(result.functions, /financialHome/);
 });
 
-test("unknown nonzero deploy failure remains fatal", () => {
+test("aggregate nonzero Functions deployment failure remains fatal", () => {
   const result = runClassifier({ exitCode: 2, log: "Error: There was an error deploying functions" });
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /CLASSIFICATION=FATAL_UNKNOWN/);
+  assert.match(result.stderr, /CLASSIFICATION=FATAL_DEPLOY_ERROR/);
 });
 
 test("cleanup warning cannot mask an individual function failure", () => {
