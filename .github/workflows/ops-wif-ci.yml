@@ -8,6 +8,8 @@ on:
       - scripts/bootstrap-staging-wif.sh
       - scripts/verify-staging-wif.sh
       - scripts/configure-github-staging-vars.sh
+      - scripts/staging-artifact-cleanup-preflight.sh
+      - scripts/staging-artifact-cleanup-predeploy.sh
       - .github/workflows/deploy-staging.yml
       - .github/workflows/ops-wif-ci.yml
   pull_request:
@@ -15,6 +17,8 @@ on:
       - scripts/bootstrap-staging-wif.sh
       - scripts/verify-staging-wif.sh
       - scripts/configure-github-staging-vars.sh
+      - scripts/staging-artifact-cleanup-preflight.sh
+      - scripts/staging-artifact-cleanup-predeploy.sh
       - .github/workflows/deploy-staging.yml
       - .github/workflows/ops-wif-ci.yml
 
@@ -33,7 +37,9 @@ jobs:
           bash -n \
             scripts/bootstrap-staging-wif.sh \
             scripts/verify-staging-wif.sh \
-            scripts/configure-github-staging-vars.sh
+            scripts/configure-github-staging-vars.sh \
+            scripts/staging-artifact-cleanup-preflight.sh \
+            scripts/staging-artifact-cleanup-predeploy.sh
 
       - name: Enforce keyless and scoped trust guardrails
         shell: bash
@@ -63,15 +69,35 @@ jobs:
           workflow='.github/workflows/deploy-staging.yml'
 
           grep -Fq 'source_sha:' "$workflow"
-          grep -Fq 'ref: ${{ inputs.source_sha }}' "$workflow"
+          grep -Fq 'SOURCE_SHA: ${{ inputs.source_sha }}' "$workflow"
+          grep -Fq 'ref: ${{ env.SOURCE_SHA }}' "$workflow"
           grep -Fq 'ACTUAL_SHA="$(git rev-parse HEAD)"' "$workflow"
           grep -Fq 'if [[ "$ACTUAL_SHA" != "$SOURCE_SHA" ]]' "$workflow"
-          grep -Fq 'git merge-base --is-ancestor "$SOURCE_SHA" origin/agent/ai-native-financial-core' "$workflow"
+          grep -Fq 'BLOCK5_BASE_SHA: 7fa4b23cf927ca1dada6c61c51f48477996a5a66' "$workflow"
+          grep -Fq 'git merge-base --is-ancestor "$BLOCK5_BASE_SHA" "$ACTUAL_SHA"' "$workflow"
           grep -Fq -- '--project clickandsaveai-staging' "$workflow"
           grep -Fq 'environment: staging' "$workflow"
           grep -Fq 'id-token: write' "$workflow"
 
           if grep -Fq 'default: agent/ai-native-financial-core' "$workflow"; then
             echo 'Mutable branch deployment input is forbidden; deploy an exact commit SHA.' >&2
+            exit 1
+          fi
+
+      - name: Enforce staging-only cleanup preflight guardrails
+        shell: bash
+        run: |
+          set -euo pipefail
+          preflight='scripts/staging-artifact-cleanup-preflight.sh'
+          bridge='scripts/staging-artifact-cleanup-predeploy.sh'
+          grep -Fq 'readonly PROJECT_ID="clickandsaveai-staging"' "$preflight"
+          grep -Fq 'readonly LOCATION="us-central1"' "$preflight"
+          grep -Fq 'firebase-functions-cleanup' "$preflight"
+          grep -Fq 'set-cleanup-policies' "$preflight"
+          grep -Fq -- '--no-dry-run' "$preflight"
+          grep -Fq 'GCLOUD_PROJECT' "$bridge"
+          grep -Fq 'clickandsaveai-staging' "$bridge"
+          if grep -Eq 'add-iam-policy-binding|set-iam-policy|repositories delete' "$preflight" "$bridge"; then
+            echo 'Cleanup preflight must not mutate IAM or delete repositories.' >&2
             exit 1
           fi
