@@ -93,8 +93,10 @@ test("retry-enabled Gmail handlers retain source-level idempotency protections",
 
   assert.match(watch, /exports\.gmailPushNotification = onMessagePublished\([\s\S]*?retry:\s*true,/);
   assert.match(watch, /collection\("gmailMessageImports"\)\.doc\(messageId\)/);
-  assert.match(watch, /const existingIds = new Set\(currentInvoices\.map\(\(invoice\) => invoice\.sourceMessageId\)\);/);
-  assert.match(watch, /importedCount = parsedInvoices\.filter\(\(invoice\) => !existingIds\.has\(invoice\.sourceMessageId\)\)\.length;/);
+  assert.match(watch, /const acceptedInvoices = acceptedFromAudit\(existingData\);/);
+  assert.match(watch, /persistInvoiceDocuments\(uid, acceptedInvoices\)/);
+  assert.match(watch, /const previousIds = new Set\(previousAccepted\.map\(\(invoice\) => invoice\.sourceMessageId\)\);/);
+  assert.match(watch, /const importedCount = recurringInvoices\.filter\(\(invoice\) => !previousIds\.has\(invoice\.sourceMessageId\)\)\.length;/);
   assert.match(watch, /gmailInvoiceDocumentId\(invoice\.sourceMessageId\)/);
   assert.match(watch, /watchHistoryId:\s*notificationHistoryId/);
 
