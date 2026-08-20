@@ -46,12 +46,13 @@ test("2 entry loads common index before every other exported module", () => {
   }
 });
 
-test("3 common v2 global options bind exact Production SA with non-Production default", () => {
+test("3 common v2 global options bind exact Production SA with omitted non-Production override", () => {
   has(index, /firebase-functions\/params/);
   has(index, /\bprojectID\b/);
   has(index, new RegExp(esc(v2)));
   has(index, new RegExp(`projectID\\s*\\.\\s*equals\\(\\s*["']${esc(prod)}["']\\s*\\)`));
-  has(index, /thenElse\(\s*PRODUCTION_V2_SERVICE_ACCOUNT\s*,\s*["']default["']\s*\)/);
+  has(index, /thenElse\(\s*PRODUCTION_V2_SERVICE_ACCOUNT\s*,\s*["']["']\s*\)/);
+  no(index, /thenElse\(\s*PRODUCTION_V2_SERVICE_ACCOUNT\s*,\s*["']default["']\s*\)/);
   has(index, /setGlobalOptions\s*\(\s*\{[\s\S]*?serviceAccount\s*:\s*productionV2ServiceAccount[\s\S]*?\}\s*\)/);
 });
 
