@@ -27,9 +27,18 @@ test("backfill scan classifies PDFs and applies one shared recurring-bill policy
   );
 });
 
-test("real-time watch uses the same recurring-bill policy and never directly persists raw parsed candidates", () => {
+test("six-month backfill is marked complete and is not the steady-state ingestion path", () => {
+  assert.match(scanSource, /initialBackfillCompletedAt/);
+  assert.match(scanSource, /hasCompletedInitialBackfill/);
+  assert.match(scanSource, /alreadyCompleted:\s*true/);
+  assert.match(scanSource, /INITIAL_GMAIL_LOOKBACK\s*=\s*"6m"/);
+});
+
+test("real-time watch uses Gmail history plus the same recurring-bill policy and pushes only selected bills", () => {
   assert.match(watchSource, /require\("\.\/gmailRecurringBillPolicy"\)/);
+  assert.match(watchSource, /users\/me\/history/);
   assert.match(watchSource, /selectRecurringBills/);
+  assert.match(watchSource, /sendPushToUser/);
   assert.doesNotMatch(watchSource, /persistInvoiceDocuments\(uid, parsedInvoices\)/);
 });
 
