@@ -140,6 +140,15 @@ async function deleteInvoiceDocuments(uid, sourceMessageIds) {
   ));
 }
 
+async function currentAuthoritativeInvoices(uid) {
+  const snapshot = await db.collection("users").doc(uid).collection("gmailInvoices")
+    .limit(MAX_AUTHORITATIVE_INVOICES)
+    .get();
+  return snapshot.docs
+    .map((doc) => normalizeStoredCandidate(doc.data() || {}))
+    .filter(Boolean);
+}
+
 async function currentAuthoritativeSourceIds(uid) {
   const snapshot = await db.collection("users").doc(uid).collection("gmailInvoices")
     .limit(MAX_AUTHORITATIVE_INVOICES)
@@ -244,8 +253,9 @@ exports.scanGmailInvoices = onCall(
     const connection = connectionSnapshot.data() || {};
 
     if (hasCompletedInitialBackfill(connection)) {
+      const invoices = await currentAuthoritativeInvoices(uid);
       return {
-        invoices: [],
+        invoices,
         scannedMessages: 0,
         importedCount: 0,
         removedSourceMessageIds: [],
