@@ -7,7 +7,9 @@ const assert = require("node:assert/strict");
 
 const repoRoot = path.resolve(__dirname, "..", "..");
 const workflowPath = path.join(repoRoot, ".github", "workflows", "deploy-staging.yml");
+const firebasePath = path.join(repoRoot, "firebase.json");
 const preflightPath = path.join(repoRoot, "scripts", "staging-artifact-cleanup-preflight.sh");
+const bridgePath = path.join(repoRoot, "scripts", "staging-artifact-cleanup-predeploy.sh");
 const classifierPath = path.join(repoRoot, "scripts", "staging-firebase-deploy-classifier.mjs");
 const workflow = fs.readFileSync(workflowPath, "utf8");
 
@@ -38,6 +40,23 @@ test("C/D: bounded Artifact Registry cleanup preflight exists and is hard-pinned
   assert.match(preflight, /artifactregistry\.versions\.delete/);
   assert.doesNotMatch(preflight, /add-iam-policy-binding|set-iam-policy|repositories delete/);
   assert.doesNotMatch(preflight, /PROJECT_ID:-|PROJECT_ID=\"\$\{/);
+});
+
+test("C/D compatibility: exact-source deploys from protected main still execute the staging-only preflight", () => {
+  assert.ok(fs.existsSync(bridgePath), "missing staging predeploy bridge");
+  const bridge = fs.readFileSync(bridgePath, "utf8");
+  const firebase = JSON.parse(fs.readFileSync(firebasePath, "utf8"));
+  const functionsConfigs = Array.isArray(firebase.functions) ? firebase.functions : [firebase.functions];
+  const predeploy = functionsConfigs.flatMap((entry) => entry?.predeploy || []);
+  assert.ok(
+    predeploy.some((command) => String(command).includes("scripts/staging-artifact-cleanup-predeploy.sh")),
+    "firebase.json must invoke the staging-only predeploy compatibility bridge",
+  );
+  assert.match(bridge, /GCLOUD_PROJECT/);
+  assert.match(bridge, /clickandsaveai-staging/);
+  assert.match(bridge, /STAGING_ARTIFACT_CLEANUP_PREFLIGHT_VERIFIED/);
+  assert.match(bridge, /staging-artifact-cleanup-preflight\.sh/);
+  assert.doesNotMatch(bridge, /clickandsaveai-prod/);
 });
 
 test("E/F/G: Firebase deploy is never blindly suppressed and classifier is explicit", () => {
