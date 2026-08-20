@@ -13,7 +13,7 @@ const bridgePath = path.join(repoRoot, "scripts", "staging-artifact-cleanup-pred
 const classifierPath = path.join(repoRoot, "scripts", "staging-firebase-deploy-classifier.mjs");
 const workflow = fs.readFileSync(workflowPath, "utf8");
 
-test("A/B/J: staging workflow remains exact-SHA guarded and staging-only", () => {
+test("A/B/J: staging workflow remains exact-SHA guarded and accepts only the staging project", () => {
   assert.match(workflow, /SOURCE_SHA:\s*\$\{\{ inputs\.source_sha \}\}/);
   assert.match(workflow, /ACTUAL_SHA="\$\(git rev-parse HEAD\)"/);
   assert.match(workflow, /if \[\[ "\$ACTUAL_SHA" != "\$SOURCE_SHA" \]\]/);
@@ -21,6 +21,17 @@ test("A/B/J: staging workflow remains exact-SHA guarded and staging-only", () =>
   assert.match(workflow, /--project clickandsaveai-staging/);
   assert.doesNotMatch(workflow, /--project\s+\$\{\{/);
   assert.doesNotMatch(workflow, /confirm_project\s*!=?\s*'clickandsaveai-staging'/);
+
+  const projectArgs = [...workflow.matchAll(/--project(?:=|\s+)([^\s\\]+)/g)].map((match) => match[1]);
+  assert.ok(projectArgs.length > 0, "staging workflow must explicitly pass a Firebase/GCP project");
+  assert.deepEqual([...new Set(projectArgs)], ["clickandsaveai-staging"]);
+});
+
+test("exact source SHA is gated by all three required CI workflows", () => {
+  assert.match(workflow, /android-ci\.yml\|Android and Backend CI/);
+  assert.match(workflow, /production-operations-ci\.yml\|Production Operations CI/);
+  assert.match(workflow, /production-enablement-ci\.yml\|Production Enablement Security CI/);
+  assert.match(workflow, /head_sha=\$SOURCE_SHA/);
 });
 
 test("C/D: bounded Artifact Registry cleanup preflight exists and is hard-pinned to staging", () => {
@@ -36,6 +47,9 @@ test("C/D: bounded Artifact Registry cleanup preflight exists and is hard-pinned
   assert.match(preflight, /gcloud artifacts repositories set-cleanup-policies/);
   assert.match(preflight, /--no-dry-run/);
   assert.match(preflight, /firebase-functions-cleanup/);
+  assert.match(preflight, /tagState:\s*"any"/);
+  assert.match(preflight, /olderThan:\s*"1d"/);
+  assert.match(preflight, /artifactregistry\.repositories\.get/);
   assert.match(preflight, /artifactregistry\.repositories\.update/);
   assert.match(preflight, /artifactregistry\.versions\.delete/);
   assert.doesNotMatch(preflight, /add-iam-policy-binding|set-iam-policy|repositories delete/);
@@ -59,24 +73,28 @@ test("C/D compatibility: exact-source deploys from protected main still execute 
   assert.doesNotMatch(bridge, /clickandsaveai-prod/);
 });
 
-test("E/F/G: Firebase deploy is never blindly suppressed and classifier is explicit", () => {
+test("E/F/G: Firebase deploy is never blindly suppressed and cleanup downgrade requires explicit proof", () => {
   assert.doesNotMatch(workflow, /firebase deploy[^\n]*\|\|\s*true/);
   assert.ok(fs.existsSync(classifierPath), "missing guarded Firebase deploy classifier");
   assert.match(workflow, /staging-firebase-deploy-classifier\.mjs/);
   assert.match(workflow, /FIREBASE_DEPLOY_EXIT/);
   assert.match(workflow, /PIPESTATUS\[0\]/);
   assert.match(workflow, /Functions successfully deployed but could not set up cleanup policy/);
+  assert.match(workflow, /touch "\$RUNNER_TEMP\/staging-firestore-deploy-proven"/);
+  assert.match(workflow, /test -f "\$RUNNER_TEMP\/staging-firestore-deploy-proven"/);
   assert.match(workflow, /Verify deployed staging Functions are ACTIVE/);
 });
 
 test("H/I: successful deploy path still reaches authenticated smoke and Block 5 E2E", () => {
   const deployIndex = workflow.indexOf("Deploy Functions to staging with guarded classifier");
+  const activeIndex = workflow.indexOf("Verify deployed staging Functions are ACTIVE");
   const truthSmokeIndex = workflow.indexOf("Run authenticated staging truth smoke");
   const smokeUploadIndex = workflow.indexOf("Upload sanitized staging smoke evidence");
   const block5Index = workflow.indexOf("Run Block 5 destructive lifecycle E2E with ephemeral accounts");
   const block5UploadIndex = workflow.indexOf("Upload sanitized Block 5 staging E2E evidence");
   assert.ok(deployIndex >= 0, "guarded Functions deploy step is missing");
-  assert.ok(truthSmokeIndex > deployIndex, "authenticated truth smoke must remain downstream of deploy");
+  assert.ok(activeIndex > deployIndex, "ACTIVE verification must remain downstream of Functions deploy");
+  assert.ok(truthSmokeIndex > activeIndex, "authenticated truth smoke must remain downstream of deploy verification");
   assert.ok(smokeUploadIndex > truthSmokeIndex, "smoke evidence upload must remain reachable");
   assert.ok(block5Index > smokeUploadIndex, "Block 5 E2E must remain reachable");
   assert.ok(block5UploadIndex > block5Index, "Block 5 evidence upload must remain reachable");
