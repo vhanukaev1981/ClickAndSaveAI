@@ -42,11 +42,15 @@ function buildGmailSyncStatus(connection) {
     data.scopes.includes(GMAIL_READONLY_SCOPE) &&
     Boolean(data.encryptedRefreshToken);
   const storedParserVersion = Math.max(0, Number(data.parserVersion || 0));
+  const initialBackfillCompleted = data.initialBackfillCompleted === true ||
+    Boolean(data.initialBackfillCompletedAt);
   return {
     connected,
     storedParserVersion,
     activeParserVersion: ACTIVE_GMAIL_PARSER_VERSION,
-    upgradeRequired: connected && storedParserVersion < ACTIVE_GMAIL_PARSER_VERSION,
+    // This backwards-compatible flag means "the one-time initial baseline is
+    // still required". Parser upgrades never reopen the six-month mailbox.
+    upgradeRequired: connected && !initialBackfillCompleted,
     lookback: INITIAL_GMAIL_LOOKBACK,
   };
 }
@@ -61,7 +65,8 @@ function normalizeFinancialHomeContext(context) {
     recurringServices: Array.isArray(data.recurringServices)
       ? data.recurringServices.slice(0, MAX_HOME_ITEMS)
       : [],
-    categories: Array.isArray(data.categories) ? data.categories.slice(0, MAX_HOME_ITEMS) : [],
+    categories: Array.isArray(data.categories) ? data.categories.slice(0, MAX_HOME_ITEMS)
+      : [],
   };
 }
 
