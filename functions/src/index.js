@@ -20,7 +20,7 @@ const PRODUCTION_V2_SERVICE_ACCOUNT =
   "clicksave-v2-runtime@click-save-ai-production.iam.gserviceaccount.com";
 const productionV2ServiceAccount = projectID
   .equals("click-save-ai-production")
-  .thenElse(PRODUCTION_V2_SERVICE_ACCOUNT, "default");
+  .thenElse(PRODUCTION_V2_SERVICE_ACCOUNT, "");
 
 initializeApp();
 setGlobalOptions({
@@ -561,7 +561,6 @@ exports.createProviderLead = onCall(
     } catch (error) {
       throw invalidArgument(error);
     }
-
     const leadId = crypto
       .createHash("sha256")
       .update(`${uid}:${input.idempotencyKey}`)
