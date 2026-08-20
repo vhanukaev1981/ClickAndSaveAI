@@ -67,6 +67,7 @@ exports.connectGmail = onCall(
   },
   async (request) => {
     const uid = requireAuth(request);
+    let stage = "ACCOUNT_CHECK";
     try {
       await assertActiveAccount(uid);
       const data = request.data || {};
@@ -81,6 +82,7 @@ exports.connectGmail = onCall(
         throw new HttpsError("failed-precondition", "Explicit Gmail read-only consent is required.");
       }
 
+      stage = "LOAD_CONNECTION";
       const connectionRef = db.collection("gmailConnections").doc(uid);
       const existing = await connectionRef.get();
       if (existing.data()?.disconnectState === "RETRY_REQUIRED") {
@@ -90,6 +92,7 @@ exports.connectGmail = onCall(
         );
       }
 
+      stage = "TOKEN_EXCHANGE";
       const tokenPayload = await postForm("https://oauth2.googleapis.com/token", {
         client_id: googleOAuthClientId.value(),
         client_secret: googleOAuthClientSecret.value(),
@@ -107,6 +110,8 @@ exports.connectGmail = onCall(
       if (!accessToken) {
         throw new HttpsError("failed-precondition", "Google did not return an access token.");
       }
+
+      stage = "GMAIL_IDENTITY";
       const gmailEmail = await fetchGmailProfileEmail(accessToken);
       const firebaseEmail = String(request.auth.token.email || "").trim().toLowerCase();
       if (!firebaseEmail || gmailEmail !== firebaseEmail) {
@@ -117,6 +122,7 @@ exports.connectGmail = onCall(
         );
       }
 
+      stage = "ENCRYPT_TOKEN";
       const refreshToken = tokenPayload.refresh_token || null;
       const encryptedRefreshToken = refreshToken
         ? encryptToken(refreshToken, oauthTokenEncryptionKey.value())
@@ -128,6 +134,7 @@ exports.connectGmail = onCall(
         );
       }
 
+      stage = "STORE_CONNECTION";
       await connectionRef.set({
         uid,
         email: gmailEmail,
@@ -140,6 +147,7 @@ exports.connectGmail = onCall(
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
 
+      stage = "SUCCESS_TELEMETRY";
       emitOperationalEvent({
         event: "gmail.oauth.connect",
         subsystem: "gmail",
@@ -152,19 +160,25 @@ exports.connectGmail = onCall(
 
       return { connected: true, email: gmailEmail, consentVersion: CONSENT_VERSION };
     } catch (error) {
-      emitOperationalEvent({
-        event: "gmail.oauth.connect",
-        subsystem: "gmail",
-        outcome: "failure",
-        severity: "ERROR",
-        code: "GMAIL_OAUTH_CONNECT_FAILED",
-        uid,
-        details: {
-          errorName: error instanceof Error ? error.name : typeof error,
-          errorCode: error?.code || "UNKNOWN",
-        },
-      });
-      throw error;
+      try {
+        emitOperationalEvent({
+          event: "gmail.oauth.connect",
+          subsystem: "gmail",
+          outcome: "failure",
+          severity: "ERROR",
+          code: "GMAIL_OAUTH_CONNECT_FAILED",
+          uid,
+          details: {
+            stage,
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorCode: error?.code || "UNKNOWN",
+          },
+        });
+      } catch {
+        // Diagnostics must never replace the original callable failure.
+      }
+      if (error instanceof HttpsError) throw error;
+      throw new HttpsError("internal", `GMAIL_CONNECT_INTERNAL_${stage}`);
     }
   }
 );
