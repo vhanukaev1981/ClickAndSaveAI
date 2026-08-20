@@ -62,6 +62,7 @@ fun ProfileScreen(
     val authState by viewModel.authState.collectAsState()
     val financialSyncState by viewModel.financialSyncState.collectAsState()
     val privacyOperationState by viewModel.privacyOperationState.collectAsState()
+    val gmailSyncStep by viewModel.gmailSyncStep.collectAsState()
     var pendingConfirmation by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
@@ -85,6 +86,7 @@ fun ProfileScreen(
             GmailAuthorityCard(
                 financialSyncState = financialSyncState,
                 authState = authState,
+                gmailSyncStep = gmailSyncStep,
                 onRequestGmailAuthorization = onRequestGmailAuthorization
             )
         }
@@ -203,6 +205,7 @@ private fun AccountCard(authState: AuthState, onGoogleSignIn: () -> Unit, onSign
 private fun GmailAuthorityCard(
     financialSyncState: FinancialSyncState,
     authState: AuthState,
+    gmailSyncStep: String,
     onRequestGmailAuthorization: () -> Unit
 ) {
     val connection = financialSyncState.gmailConnectionOrNull
@@ -226,6 +229,14 @@ private fun GmailAuthorityCard(
                         Text("הרשאה: קריאה בלבד")
                     } else Text("Gmail אינו מחובר.")
                 }
+            }
+            if (gmailSyncStep.isNotBlank()) {
+                Text(
+                    gmailSyncStep,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("gmail_connection_message")
+                )
             }
             if (authState is AuthState.Authenticated && financialSyncState == FinancialSyncState.Disconnected) {
                 OutlinedButton(onClick = onRequestGmailAuthorization, modifier = Modifier.fillMaxWidth().testTag("connect_gmail")) {
