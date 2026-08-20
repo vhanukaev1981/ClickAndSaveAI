@@ -92,8 +92,20 @@ while IFS= read -r repo; do
   if ! policy_is_equivalent "$policies_before" "$dry_run_before"; then
     policy_file="$(mktemp)"
     trap 'rm -f "${policy_file:-}"' EXIT
+
+    # Preserve every unrelated cleanup policy. Normalize only enum spelling from
+    # gcloud's read representation before adding the deterministic Firebase policy.
     printf '%s' "$policies_before" | jq --arg name "$POLICY_NAME" '
-      [ .[] | select(.name != $name) ]
+      [
+        .[]
+        | select(.name != $name)
+        | if .action.type? then
+            .action.type = (if (.action.type | ascii_downcase) == "delete" then "Delete" else "Keep" end)
+          else . end
+        | if .condition.tagState? then
+            .condition.tagState = (.condition.tagState | ascii_downcase)
+          else . end
+      ]
       + [{
           name: $name,
           action: {type: "Delete"},
@@ -176,5 +188,25 @@ jq -n \
     deploymentRepositories: $deploymentRepositories
   }' > "$EVIDENCE_PATH"
 
-jq -c '{project, location, deploymentRepositoryCount, deploymentRepositories: [.deploymentRepositories[] | {repository, format, cleanupPolicyDryRunBefore, cleanupPolicyDryRunAfter, changed, deployIdentityPermissions, policyNamesBefore: [.policiesBefore[].name], policyNamesAfter: [.policiesAfter[].name]}]}' "$EVIDENCE_PATH"
+jq -c --arg canonical "$POLICY_NAME" '{
+  project,
+  location,
+  allRepositories,
+  deploymentRepositoryCount,
+  deploymentRepositories: [
+    .deploymentRepositories[]
+    | {
+        repository,
+        format,
+        cleanupPolicyDryRunBefore,
+        cleanupPolicyDryRunAfter,
+        changed,
+        deployIdentityPermissions,
+        policiesBefore,
+        policiesAfter,
+        canonicalBefore: ([.policiesBefore[] | select(.name == $canonical)][0] // null),
+        canonicalAfter: ([.policiesAfter[] | select(.name == $canonical)][0] // null)
+      }
+  ]
+}' "$EVIDENCE_PATH"
 echo "Artifact Registry cleanup preflight verified canonical active policy in $PROJECT_ID/$LOCATION."
