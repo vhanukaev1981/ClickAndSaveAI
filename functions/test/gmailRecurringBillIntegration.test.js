@@ -44,6 +44,18 @@ test("six-month backfill is one-time only", () => {
   assert.match(scanSource, /INITIAL_GMAIL_LOOKBACK\s*=\s*"6m"/);
 });
 
+test("completed backfill returns the authoritative snapshot without reopening Gmail history", () => {
+  assert.match(scanSource, /async function currentAuthoritativeInvoices\(uid\)/);
+  const completedBranchStart = scanSource.indexOf("if (hasCompletedInitialBackfill(connection))");
+  const permissionBranchStart = scanSource.indexOf("if (!Array.isArray(connection.scopes)", completedBranchStart);
+  assert.notEqual(completedBranchStart, -1);
+  assert.notEqual(permissionBranchStart, -1);
+  const completedBranch = scanSource.slice(completedBranchStart, permissionBranchStart);
+  assert.match(completedBranch, /const invoices = await currentAuthoritativeInvoices\(uid\);/);
+  assert.match(completedBranch, /invoices,/);
+  assert.doesNotMatch(completedBranch, /listGmailCandidateMessageIds|newer_than:/);
+});
+
 test("real-time watch stays on Gmail History and applies the same recurring-bill policy", () => {
   assert.match(watchSource, /require\("\.\/gmailRecurringBillPolicy"\)/);
   assert.match(watchSource, /users\/me\/history/);
