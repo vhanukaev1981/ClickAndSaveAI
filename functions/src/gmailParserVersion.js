@@ -1,8 +1,8 @@
 "use strict";
 
-// One source of truth for every Gmail ingestion path. Bump only when stored
-// Gmail import records must be re-evaluated under materially changed parsing rules.
-const ACTIVE_GMAIL_PARSER_VERSION = 6;
+// One source of truth for every Gmail ingestion path. A parser-version bump must
+// never cause another six-month mailbox scan after initialBackfillCompleted=true.
+const ACTIVE_GMAIL_PARSER_VERSION = 7;
 
 module.exports = {
   ACTIVE_GMAIL_PARSER_VERSION,
