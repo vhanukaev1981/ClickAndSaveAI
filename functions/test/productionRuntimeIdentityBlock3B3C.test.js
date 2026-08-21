@@ -65,9 +65,15 @@ test("5 v1 cleanup identity and trigger semantics remain exact", () => {
   has(cleanup, /require\(["']firebase-functions\/v1["']\)/);
   has(cleanup, new RegExp(esc(v1)));
   has(cleanup, new RegExp(`projectID\\s*\\.\\s*equals\\(\\s*["']${esc(prod)}["']\\s*\\)`));
-  has(cleanup, /thenElse\(PRODUCTION_AUTH_CLEANUP_SERVICE_ACCOUNT,\s*["']default["']\s*\)/);
+  has(cleanup, /thenElse\(\s*PRODUCTION_AUTH_CLEANUP_SERVICE_ACCOUNT\s*,\s*["']["']\s*\)/);
+  no(cleanup, /thenElse\(\s*PRODUCTION_AUTH_CLEANUP_SERVICE_ACCOUNT\s*,\s*["']default["']\s*\)/);
   has(cleanup, /runWith\(\{\s*serviceAccount:\s*authCleanupServiceAccount\s*\}\)/);
   has(cleanup, /exports\.onPushAccountDeleted\s*=\s*functions[\s\S]*?\.auth\.user\(\)\.onDelete/);
+});
+
+test("V1 non-Production runtime fallback never materializes literal default service account", () => {
+  has(cleanup, /thenElse\(\s*PRODUCTION_AUTH_CLEANUP_SERVICE_ACCOUNT\s*,\s*["']["']\s*\)/);
+  no(cleanup, /thenElse\(\s*PRODUCTION_AUTH_CLEANUP_SERVICE_ACCOUNT\s*,\s*["']default["']\s*\)/);
 });
 
 test("6 bootstrap creates only the two exact dedicated runtime service accounts when absent", () => {
