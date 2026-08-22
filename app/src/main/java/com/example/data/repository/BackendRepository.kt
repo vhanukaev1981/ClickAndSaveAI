@@ -18,12 +18,60 @@ data class GmailConnectionResult(
     val consentVersion: String
 )
 
+data class GmailRecoveryDiagnosticResult(
+    val initialBackfillCompleted: Boolean,
+    val initialBackfillCompletedAt: String,
+    val storedParserVersion: Int,
+    val activeParserVersion: Int,
+    val authoritativeInvoiceCount: Int,
+    val gmailMessageImportCount: Int,
+    val gmailMessageImportsParserVersionDistribution: Map<String, Int>,
+    val storedCandidateCount: Int,
+    val normalizedCandidateCount: Int,
+    val replayableCandidateCount: Int,
+    val replayableRecurringCount: Int,
+    val uniqueReplayableSourceCount: Int,
+    val duplicateCandidateCount: Int,
+    val importsTruncated: Boolean
+)
+
+internal fun decodeGmailRecoveryDiagnostic(
+    recoveryMap: Map<String, Any?>?
+): GmailRecoveryDiagnosticResult? {
+    if (recoveryMap == null) return null
+    val parserDistribution = (recoveryMap["gmailMessageImportsParserVersionDistribution"] as? Map<*, *>)
+        .orEmpty()
+        .mapNotNull { (key, value) ->
+            val version = key?.toString() ?: return@mapNotNull null
+            val count = (value as? Number)?.toInt() ?: return@mapNotNull null
+            version to count
+        }
+        .toMap()
+    return GmailRecoveryDiagnosticResult(
+        initialBackfillCompleted = recoveryMap["initialBackfillCompleted"] as? Boolean ?: false,
+        initialBackfillCompletedAt = recoveryMap["initialBackfillCompletedAt"] as? String ?: "",
+        storedParserVersion = (recoveryMap["storedParserVersion"] as? Number)?.toInt() ?: 0,
+        activeParserVersion = (recoveryMap["activeParserVersion"] as? Number)?.toInt() ?: 0,
+        authoritativeInvoiceCount = (recoveryMap["authoritativeInvoiceCount"] as? Number)?.toInt() ?: 0,
+        gmailMessageImportCount = (recoveryMap["gmailMessageImportCount"] as? Number)?.toInt() ?: 0,
+        gmailMessageImportsParserVersionDistribution = parserDistribution,
+        storedCandidateCount = (recoveryMap["storedCandidateCount"] as? Number)?.toInt() ?: 0,
+        normalizedCandidateCount = (recoveryMap["normalizedCandidateCount"] as? Number)?.toInt() ?: 0,
+        replayableCandidateCount = (recoveryMap["replayableCandidateCount"] as? Number)?.toInt() ?: 0,
+        replayableRecurringCount = (recoveryMap["replayableRecurringCount"] as? Number)?.toInt() ?: 0,
+        uniqueReplayableSourceCount = (recoveryMap["uniqueReplayableSourceCount"] as? Number)?.toInt() ?: 0,
+        duplicateCandidateCount = (recoveryMap["duplicateCandidateCount"] as? Number)?.toInt() ?: 0,
+        importsTruncated = recoveryMap["importsTruncated"] as? Boolean ?: false
+    )
+}
+
 data class GmailSyncStatusResult(
     val connected: Boolean,
     val storedParserVersion: Int,
     val activeParserVersion: Int,
     val upgradeRequired: Boolean,
-    val lookback: String
+    val lookback: String,
+    val recoveryState: GmailRecoveryDiagnosticResult? = null
 )
 
 data class GmailWatchResult(
@@ -185,18 +233,20 @@ class BackendRepository(
         )
     }
 
-    suspend fun getGmailSyncStatus(): GmailSyncStatusResult {
+    suspend fun getGmailSyncStatus(includeRecoveryDiagnostics: Boolean = false): GmailSyncStatusResult {
         val response = functions.getHttpsCallable("getGmailSyncStatus")
-            .call()
+            .call(mapOf("includeRecoveryDiagnostics" to includeRecoveryDiagnostics))
             .await()
             .data
             .asStringMap()
+        val recoveryState = decodeGmailRecoveryDiagnostic(response["recoveryState"].asStringMapOrNull())
         return GmailSyncStatusResult(
             connected = response["connected"] as? Boolean ?: false,
             storedParserVersion = (response["storedParserVersion"] as? Number)?.toInt() ?: 0,
             activeParserVersion = (response["activeParserVersion"] as? Number)?.toInt() ?: 0,
             upgradeRequired = response["upgradeRequired"] as? Boolean ?: false,
-            lookback = response["lookback"] as? String ?: ""
+            lookback = response["lookback"] as? String ?: "",
+            recoveryState = recoveryState
         )
     }
 

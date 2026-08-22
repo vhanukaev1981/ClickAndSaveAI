@@ -37,7 +37,13 @@ class FinancialSessionRecovery(
         val scan = try {
             recoverInvoices()
         } catch (error: Exception) {
-            return emit(preservePreviousOrFail(previous, safeReason(error)))
+            return emit(
+                preservePreviousAfterConfirmedConnection(
+                    previous = previous,
+                    connection = connection,
+                    reason = safeReason(error)
+                )
+            )
         }
 
         val financialHome = try {
@@ -52,7 +58,8 @@ class FinancialSessionRecovery(
                 FinancialSyncState.Partial(
                     latestScan = scan,
                     financialHome = previousHome,
-                    reason = safeReason(error)
+                    reason = safeReason(error),
+                    gmailConnection = connection
                 )
             )
         }
@@ -60,9 +67,39 @@ class FinancialSessionRecovery(
         return emit(
             FinancialSyncState.Ready(
                 latestScan = scan,
-                financialHome = financialHome
+                financialHome = financialHome,
+                gmailConnection = connection
             )
         )
+    }
+
+    private fun preservePreviousAfterConfirmedConnection(
+        previous: FinancialSyncState?,
+        connection: GmailConnectionResult,
+        reason: String
+    ): FinancialSyncState {
+        return when (previous) {
+            is FinancialSyncState.Ready -> FinancialSyncState.Partial(
+                latestScan = previous.latestScan,
+                financialHome = previous.financialHome,
+                reason = reason,
+                gmailConnection = connection,
+                activity = previous.activity
+            )
+            is FinancialSyncState.Partial -> FinancialSyncState.Partial(
+                latestScan = previous.latestScan,
+                financialHome = previous.financialHome,
+                reason = reason,
+                gmailConnection = connection,
+                activity = previous.activity
+            )
+            else -> FinancialSyncState.Partial(
+                latestScan = null,
+                financialHome = null,
+                reason = reason,
+                gmailConnection = connection
+            )
+        }
     }
 
     private fun preservePreviousOrFail(
@@ -73,12 +110,16 @@ class FinancialSessionRecovery(
             is FinancialSyncState.Ready -> FinancialSyncState.Partial(
                 latestScan = previous.latestScan,
                 financialHome = previous.financialHome,
-                reason = reason
+                reason = reason,
+                gmailConnection = previous.gmailConnection,
+                activity = previous.activity
             )
             is FinancialSyncState.Partial -> FinancialSyncState.Partial(
                 latestScan = previous.latestScan,
                 financialHome = previous.financialHome,
-                reason = reason
+                reason = reason,
+                gmailConnection = previous.gmailConnection,
+                activity = previous.activity
             )
             else -> FinancialSyncState.Failed(
                 reason = reason,

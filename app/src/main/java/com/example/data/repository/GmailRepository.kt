@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import android.util.Log
+import com.example.BuildConfig
 import com.example.data.local.InvoiceItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -62,6 +63,55 @@ class GmailRepository(
     private val _lastScanTime = MutableStateFlow("טרם בוצעה סריקה")
     val lastScanTime: StateFlow<String> = _lastScanTime.asStateFlow()
 
+    private val _recoveryDiagnostic = MutableStateFlow("")
+    val recoveryDiagnostic: StateFlow<String> = _recoveryDiagnostic.asStateFlow()
+
+    companion object {
+        internal fun formatRecoveryDiagnostic(state: GmailRecoveryDiagnosticResult): String =
+            buildString {
+                append("Recovery diagnostic · completed=")
+                append(state.initialBackfillCompleted)
+                append(" · parser=")
+                append(state.storedParserVersion)
+                append("→")
+                append(state.activeParserVersion)
+                append(" · invoices=")
+                append(state.authoritativeInvoiceCount)
+                append(" · imports=")
+                append(state.gmailMessageImportCount)
+                append(" · storedCandidates=")
+                append(state.storedCandidateCount)
+                append(" · normalized=")
+                append(state.normalizedCandidateCount)
+                append(" · replayable=")
+                append(state.replayableCandidateCount)
+                append(" · recurring=")
+                append(state.replayableRecurringCount)
+                append(" · uniqueSources=")
+                append(state.uniqueReplayableSourceCount)
+                append(" · duplicates=")
+                append(state.duplicateCandidateCount)
+                append(" · truncated=")
+                append(state.importsTruncated)
+            }
+    }
+
+    private suspend fun refreshRecoveryDiagnosticIfAvailable(connected: Boolean) {
+        if (!BuildConfig.DEBUG || !connected) {
+            _recoveryDiagnostic.value = ""
+            return
+        }
+        runCatching { backendRepository.getGmailSyncStatus(includeRecoveryDiagnostics = true) }
+            .onSuccess { status ->
+                _recoveryDiagnostic.value = status.recoveryState?.let { formatRecoveryDiagnostic(it) }.orEmpty()
+            }
+            .onFailure { error ->
+                // Diagnostic availability must never alter Gmail connection truth.
+                _recoveryDiagnostic.value = ""
+                Log.w("GmailRepository", "Sanitized Gmail recovery diagnostic unavailable", error)
+            }
+    }
+
     private suspend fun ensureGmailWatch() {
         runCatching { backendRepository.startGmailWatch() }
             .onFailure { error ->
@@ -76,10 +126,12 @@ class GmailRepository(
             _isConnected.value = connection.connected
             _connectedEmail.value = if (connection.connected) connection.email else ""
             if (connection.connected) ensureGmailWatch()
+            refreshRecoveryDiagnosticIfAvailable(connection.connected)
             connection
         }.onFailure { error ->
             Log.e("GmailRepository", "Gmail status refresh failed", error)
             _isConnected.value = false
+            _recoveryDiagnostic.value = ""
         }
     }
 
@@ -121,6 +173,7 @@ class GmailRepository(
             _isConnected.value = connection.connected
             _connectedEmail.value = connection.email.ifBlank { userEmail }
             if (connection.connected) ensureGmailWatch()
+            refreshRecoveryDiagnosticIfAvailable(connection.connected)
             _syncState.value = GmailSyncState.Success(
                 invoicesFound = 0,
                 totalSavingsPotential = 0.0,
@@ -130,6 +183,7 @@ class GmailRepository(
         }.onFailure { error ->
             Log.e("GmailRepository", "Gmail connection failed", error)
             _isConnected.value = false
+            _recoveryDiagnostic.value = ""
             _syncState.value = GmailSyncState.Error(
                 errorMessage = error.localizedMessage ?: "חיבור Gmail נכשל.",
                 isAuthRequired = true
@@ -190,6 +244,7 @@ class GmailRepository(
             _isConnected.value = false
             _connectedEmail.value = ""
             _lastScanTime.value = "מנותק"
+            _recoveryDiagnostic.value = ""
             _syncState.value = GmailSyncState.Idle
         }.onFailure { error ->
             Log.e("GmailRepository", "Gmail disconnect failed", error)

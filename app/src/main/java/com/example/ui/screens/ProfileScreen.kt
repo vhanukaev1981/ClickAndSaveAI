@@ -33,6 +33,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,11 +43,13 @@ import androidx.compose.ui.unit.dp
 import com.example.BuildConfig
 import com.example.data.repository.AuthState
 import com.example.data.repository.FinancialSyncState
+import com.example.data.repository.GmailRecoveryDryRunRepository
 import com.example.data.repository.gmailConnectionOrNull
 import com.example.ui.MainViewModel
 import com.example.ui.PrivacyOperationUiState
 import com.example.ui.components.V3SectionHeader
 import com.example.ui.theme.TechBluePrimary
+import kotlinx.coroutines.launch
 
 private const val CONFIRM_DISCONNECT_GMAIL = "DISCONNECT_GMAIL"
 private const val CONFIRM_DELETE_IMPORTED_DATA = "DELETE_IMPORTED_FINANCIAL_DATA"
@@ -62,6 +65,12 @@ fun ProfileScreen(
     val authState by viewModel.authState.collectAsState()
     val financialSyncState by viewModel.financialSyncState.collectAsState()
     val privacyOperationState by viewModel.privacyOperationState.collectAsState()
+    val gmailSyncStep by viewModel.gmailSyncStep.collectAsState()
+    val gmailRecoveryDiagnostic by viewModel.gmailRepository.recoveryDiagnostic.collectAsState()
+    val recoveryDryRunRepository = remember { GmailRecoveryDryRunRepository() }
+    val recoveryDryRunScope = rememberCoroutineScope()
+    var recoveryDryRunStatus by remember { mutableStateOf("") }
+    var recoveryDryRunRunning by remember { mutableStateOf(false) }
     var pendingConfirmation by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
@@ -85,8 +94,51 @@ fun ProfileScreen(
             GmailAuthorityCard(
                 financialSyncState = financialSyncState,
                 authState = authState,
+                gmailSyncStep = gmailSyncStep,
                 onRequestGmailAuthorization = onRequestGmailAuthorization
             )
+        }
+        if (BuildConfig.DEBUG && gmailRecoveryDiagnostic.isNotBlank()) {
+            item {
+                Text(
+                    text = gmailRecoveryDiagnostic,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("gmail_recovery_diagnostic")
+                )
+            }
+        }
+        if (BuildConfig.DEBUG) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            recoveryDryRunRunning = true
+                            recoveryDryRunStatus = "Recovery dry-run running"
+                            recoveryDryRunScope.launch {
+                                val result = runCatching { recoveryDryRunRepository.run() }
+                                recoveryDryRunStatus = result.fold(
+                                    onSuccess = { it.countOnlySummary() },
+                                    onFailure = { "Recovery dry-run failed before a count-only result." }
+                                )
+                                recoveryDryRunRunning = false
+                            }
+                        },
+                        enabled = authState is AuthState.Authenticated && !recoveryDryRunRunning,
+                        modifier = Modifier.fillMaxWidth().testTag("gmail_recovery_dry_run")
+                    ) {
+                        Text("Recovery dry-run · Staging diagnostic")
+                    }
+                    if (recoveryDryRunStatus.isNotBlank()) {
+                        Text(
+                            text = recoveryDryRunStatus,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag("gmail_recovery_dry_run_result")
+                        )
+                    }
+                }
+            }
         }
 
         item { V3SectionHeader("פרטיות והרשאות") }
@@ -203,6 +255,7 @@ private fun AccountCard(authState: AuthState, onGoogleSignIn: () -> Unit, onSign
 private fun GmailAuthorityCard(
     financialSyncState: FinancialSyncState,
     authState: AuthState,
+    gmailSyncStep: String,
     onRequestGmailAuthorization: () -> Unit
 ) {
     val connection = financialSyncState.gmailConnectionOrNull
@@ -226,6 +279,14 @@ private fun GmailAuthorityCard(
                         Text("הרשאה: קריאה בלבד")
                     } else Text("Gmail אינו מחובר.")
                 }
+            }
+            if (gmailSyncStep.isNotBlank()) {
+                Text(
+                    gmailSyncStep,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("gmail_connection_message")
+                )
             }
             if (authState is AuthState.Authenticated && financialSyncState == FinancialSyncState.Disconnected) {
                 OutlinedButton(onClick = onRequestGmailAuthorization, modifier = Modifier.fillMaxWidth().testTag("connect_gmail")) {

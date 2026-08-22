@@ -41,7 +41,7 @@ suspend fun BackendRepository.disconnectGmailAuthoritatively(): GmailDisconnectR
         .await()
         .data
         .privacyMap()
-    return GmailDisconnectResult(
+    val result = GmailDisconnectResult(
         connected = response["connected"] as? Boolean ?: false,
         ingestionStopped = response["ingestionStopped"] as? Boolean ?: false,
         watchStopStatus = response["watchStopStatus"] as? String ?: "UNKNOWN",
@@ -49,6 +49,14 @@ suspend fun BackendRepository.disconnectGmailAuthoritatively(): GmailDisconnectR
         externalCleanupConfirmed = response["externalCleanupConfirmed"] as? Boolean ?: false,
         idempotent = response["idempotent"] as? Boolean ?: false
     )
+    if (!result.externalCleanupConfirmed) {
+        throw IllegalStateException(
+            "Gmail provider cleanup is still pending. " +
+                "watchStopStatus=${result.watchStopStatus}; " +
+                "oauthRevocationStatus=${result.oauthRevocationStatus}"
+        )
+    }
+    return result
 }
 
 suspend fun BackendRepository.deleteImportedFinancialData(): ImportedFinancialDataDeletionResult {
