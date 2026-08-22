@@ -3,29 +3,24 @@ package com.example.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,7 +29,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -45,8 +39,11 @@ import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.gmailConnectionOrNull
 import com.example.ui.MainViewModel
 import com.example.ui.PrivacyOperationUiState
+import com.example.ui.components.V3ScreenHeader
 import com.example.ui.components.V3SectionHeader
-import com.example.ui.theme.TechBluePrimary
+import com.example.ui.components.V3SettingsGroup
+import com.example.ui.components.V3SettingsRow
+import com.example.ui.theme.V3Border
 
 private const val CONFIRM_DISCONNECT_GMAIL = "DISCONNECT_GMAIL"
 private const val CONFIRM_DELETE_IMPORTED_DATA = "DELETE_IMPORTED_FINANCIAL_DATA"
@@ -66,23 +63,20 @@ fun ProfileScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("profile_screen"),
-        contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 100.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 108.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("פרופיל", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text(
-                    "החיבורים, הפרטיות, הפעילות והאבטחה שלך במקום אחד.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            V3ScreenHeader(
+                eyebrow = "החשבון שלך",
+                title = "פרופיל",
+                subtitle = "החיבורים, הפרטיות, הפעילות והאבטחה שלך במקום אחד."
+            )
         }
 
         item { V3SectionHeader("חיבור ונתונים") }
         item {
-            GmailAuthorityCard(
+            GmailAuthorityGroup(
                 financialSyncState = financialSyncState,
                 authState = authState,
                 onRequestGmailAuthorization = onRequestGmailAuthorization
@@ -91,7 +85,7 @@ fun ProfileScreen(
 
         item { V3SectionHeader("פרטיות והרשאות") }
         item {
-            PrivacyAuthorityCard(
+            PrivacyAuthorityGroup(
                 authState = authState,
                 financialSyncState = financialSyncState,
                 privacyOperationState = privacyOperationState,
@@ -102,17 +96,17 @@ fun ProfileScreen(
         }
 
         item { V3SectionHeader("פעילות והתראות") }
-        item { ActivityNotificationsCard(onOpenActivity) }
+        item { ActivityNotificationsGroup(onOpenActivity) }
 
         item { V3SectionHeader("חשבון ואבטחה") }
         item {
-            AccountCard(
+            AccountGroup(
                 authState = authState,
                 onGoogleSignIn = onGoogleSignIn,
                 onSignOut = viewModel::signOut
             )
         }
-        item { AppAboutCard() }
+        item { AppAboutGroup() }
     }
 
     when (pendingConfirmation) {
@@ -141,104 +135,47 @@ fun ProfileScreen(
 }
 
 @Composable
-private fun ActivityNotificationsCard(onOpenActivity: () -> Unit) {
-    Card(shape = RoundedCornerShape(20.dp)) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.History, null, tint = TechBluePrimary)
-                Spacer(Modifier.size(8.dp))
-                Text("פעילות", fontWeight = FontWeight.Bold)
-            }
-            Text("יומן הפעילות הוא מסך משני ומציג רק אירועים שקיימים במידע הזמין.")
-            Text(
-                "הרשאות התראות מנוהלות על ידי Android; אין כאן הבטחה להתראה שלא נוצרה בפועל.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            OutlinedButton(onClick = onOpenActivity, modifier = Modifier.fillMaxWidth().testTag("open_activity")) {
-                Text("פתח פעילות")
-            }
-        }
-    }
-}
-
-@Composable
-private fun AccountCard(authState: AuthState, onGoogleSignIn: () -> Unit, onSignOut: () -> Unit) {
-    Card(shape = RoundedCornerShape(20.dp)) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.AccountCircle, null, tint = TechBluePrimary)
-                Spacer(Modifier.size(8.dp))
-                Text("חשבון", fontWeight = FontWeight.Bold)
-            }
-            when (authState) {
-                AuthState.Loading -> Text("מצב החשבון עדיין נטען.")
-                is AuthState.Error -> Text("לא הצלחנו לטעון את מצב החשבון כרגע. נסו שוב בעוד רגע.")
-                AuthState.Idle -> {
-                    Text("לא מחובר לחשבון.")
-                    Button(onClick = onGoogleSignIn, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.AutoMirrored.Filled.Login, null)
-                        Spacer(Modifier.size(6.dp))
-                        Text("התחבר עם Google")
-                    }
-                }
-                is AuthState.Authenticated -> {
-                    val session = authState.session
-                    Text(session.displayName.ifBlank { "שם לא זמין" }, fontWeight = FontWeight.Bold)
-                    Text(session.email.ifBlank { "כתובת דוא״ל לא זמינה" })
-                    Text("התחברות לחשבון וחיבור Gmail הם שני מצבים נפרדים.", style = MaterialTheme.typography.bodySmall)
-                    OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, null)
-                        Spacer(Modifier.size(6.dp))
-                        Text("יציאה מהחשבון")
-                    }
-                    Text("יציאה מהחשבון אינה מנתקת Gmail ואינה מוחקת את החשבון.", style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun GmailAuthorityCard(
+private fun GmailAuthorityGroup(
     financialSyncState: FinancialSyncState,
     authState: AuthState,
     onRequestGmailAuthorization: () -> Unit
 ) {
     val connection = financialSyncState.gmailConnectionOrNull
-    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Link, null, tint = TechBluePrimary)
-                Spacer(Modifier.size(8.dp))
-                Text("Gmail", fontWeight = FontWeight.Bold)
-            }
-            when (financialSyncState) {
-                FinancialSyncState.Unauthenticated -> Text("יש להתחבר לחשבון כדי לבדוק את מצב Gmail.")
-                FinancialSyncState.CheckingConnection, FinancialSyncState.Recovering -> Text("בודקים את מצב החיבור ל-Gmail.")
-                FinancialSyncState.Disconnected -> Text("Gmail אינו מחובר.")
-                is FinancialSyncState.Failed -> Text("לא הצלחנו לבדוק את מצב Gmail כרגע. נסו שוב בעוד רגע.")
-                is FinancialSyncState.Ready, is FinancialSyncState.Partial -> {
-                    if (connection == null) Text("מצב Gmail לא ידוע כרגע.")
-                    else if (connection.connected) {
-                        Text("Gmail מחובר", fontWeight = FontWeight.SemiBold)
-                        if (connection.email.isNotBlank()) Text(connection.email)
-                        Text("הרשאה: קריאה בלבד")
-                    } else Text("Gmail אינו מחובר.")
-                }
-            }
-            if (authState is AuthState.Authenticated && financialSyncState == FinancialSyncState.Disconnected) {
-                OutlinedButton(onClick = onRequestGmailAuthorization, modifier = Modifier.fillMaxWidth().testTag("connect_gmail")) {
-                    Text("חבר Gmail")
-                }
-            }
-            Text("ניתוק Gmail הוא פעולה נפרדת מיציאה, ממחיקת נתונים וממחיקת החשבון.", style = MaterialTheme.typography.bodySmall)
+    val status = when (financialSyncState) {
+        FinancialSyncState.Unauthenticated -> "יש להתחבר לחשבון כדי לבדוק את מצב Gmail."
+        FinancialSyncState.CheckingConnection, FinancialSyncState.Recovering -> "בודקים את מצב החיבור ל-Gmail."
+        FinancialSyncState.Disconnected -> "Gmail אינו מחובר."
+        is FinancialSyncState.Failed -> "לא הצלחנו לבדוק את מצב Gmail כרגע. נסו שוב בעוד רגע."
+        is FinancialSyncState.Ready, is FinancialSyncState.Partial -> when {
+            connection == null -> "מצב Gmail לא ידוע כרגע."
+            connection.connected && connection.email.isNotBlank() -> "Gmail מחובר · ${connection.email}"
+            connection.connected -> "Gmail מחובר"
+            else -> "Gmail אינו מחובר."
+        }
+    }
+
+    V3SettingsGroup(title = "") {
+        V3SettingsRow(
+            title = "Gmail",
+            subtitle = "$status\nניתוק Gmail הוא פעולה נפרדת מיציאה, ממחיקת נתונים וממחיקת החשבון.",
+            icon = Icons.Default.Link,
+            trailingText = if (connection?.connected == true) "קריאה בלבד" else null
+        )
+        if (authState is AuthState.Authenticated && financialSyncState == FinancialSyncState.Disconnected) {
+            HorizontalDivider(color = V3Border)
+            V3SettingsRow(
+                title = "חבר Gmail",
+                subtitle = "הרשאת Gmail נשארת קריאה בלבד.",
+                icon = Icons.AutoMirrored.Filled.Login,
+                onClick = onRequestGmailAuthorization,
+                modifier = Modifier.testTag("connect_gmail")
+            )
         }
     }
 }
 
 @Composable
-private fun PrivacyAuthorityCard(
+private fun PrivacyAuthorityGroup(
     authState: AuthState,
     financialSyncState: FinancialSyncState,
     privacyOperationState: PrivacyOperationUiState,
@@ -248,50 +185,116 @@ private fun PrivacyAuthorityCard(
 ) {
     val authenticated = authState is AuthState.Authenticated
     val working = privacyOperationState is PrivacyOperationUiState.Working
-    Card(shape = RoundedCornerShape(20.dp)) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.PrivacyTip, null, tint = TechBluePrimary)
-                Spacer(Modifier.size(8.dp))
-                Text("פרטיות ושליטה", fontWeight = FontWeight.Bold)
-            }
-            val connection = financialSyncState.gmailConnectionOrNull
-            Text(when {
-                connection?.connected == true -> "Gmail מחובר לקריאה בלבד."
-                financialSyncState == FinancialSyncState.Disconnected -> "אין כרגע ייבוא פעיל מ-Gmail."
-                else -> "מצב Gmail עדיין לא ידוע במלואו."
-            })
-            when (privacyOperationState) {
-                PrivacyOperationUiState.Idle -> Unit
-                is PrivacyOperationUiState.Working -> Text("הפעולה מתבצעת. נציג הצלחה רק לאחר שתושלם.", style = MaterialTheme.typography.bodySmall)
-                is PrivacyOperationUiState.Success -> Text(privacyOperationState.message, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                is PrivacyOperationUiState.Error -> Text("לא הצלחנו להשלים את הפעולה. אפשר לנסות שוב.", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-            }
-            if (authenticated) {
-                OutlinedButton(onClick = onDisconnectGmail, enabled = !working, modifier = Modifier.fillMaxWidth().testTag("disconnect_gmail")) { Text("נתק Gmail") }
-                Text("מפסיק ייבוא עתידי ומסיר את הרשאת Gmail; אינו מוחק נתונים שכבר יובאו.", style = MaterialTheme.typography.labelSmall)
-                OutlinedButton(onClick = onDeleteImportedData, enabled = !working, modifier = Modifier.fillMaxWidth().testTag("delete_imported_data")) { Text("מחק נתונים מיובאים") }
-                Text("מוחק נתונים מיובאים ונתונים שנוצרו מהם בלבד; החשבון ו-Gmail נשמרים.", style = MaterialTheme.typography.labelSmall)
-                Button(onClick = onDeleteAccount, enabled = !working, modifier = Modifier.fillMaxWidth().testTag("delete_account")) { Text("מחק חשבון") }
-                Text("מוחק את החשבון, הנתונים וחיבור Gmail לאחר אישור מפורש.", style = MaterialTheme.typography.labelSmall)
-            } else {
-                Text("יש להתחבר לחשבון כדי לבצע פעולות פרטיות.", style = MaterialTheme.typography.bodySmall)
-            }
-            Text("ניתוק Gmail, מחיקת נתונים ומחיקת חשבון הן פעולות שונות.", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+    val connection = financialSyncState.gmailConnectionOrNull
+    val connectionText = when {
+        connection?.connected == true -> "Gmail מחובר לקריאה בלבד."
+        financialSyncState == FinancialSyncState.Disconnected -> "אין כרגע ייבוא פעיל מ-Gmail."
+        else -> "מצב Gmail עדיין לא ידוע במלואו."
+    }
+    val operationText = when (privacyOperationState) {
+        PrivacyOperationUiState.Idle -> null
+        is PrivacyOperationUiState.Working -> "הפעולה מתבצעת. נציג הצלחה רק לאחר שתושלם."
+        is PrivacyOperationUiState.Success -> privacyOperationState.message
+        is PrivacyOperationUiState.Error -> "לא הצלחנו להשלים את הפעולה. אפשר לנסות שוב."
+    }
+
+    V3SettingsGroup(title = "") {
+        V3SettingsRow(
+            title = "פרטיות ושליטה",
+            subtitle = listOfNotNull(connectionText, operationText).joinToString("\n"),
+            icon = Icons.Default.PrivacyTip
+        )
+        if (authenticated) {
+            HorizontalDivider(color = V3Border)
+            V3SettingsRow(
+                title = "נתק Gmail",
+                subtitle = "מפסיק ייבוא עתידי ומסיר את הרשאת Gmail; אינו מוחק נתונים שכבר יובאו.",
+                icon = Icons.Default.LinkOff,
+                onClick = if (working) null else onDisconnectGmail,
+                modifier = Modifier.testTag("disconnect_gmail")
+            )
+            HorizontalDivider(color = V3Border)
+            V3SettingsRow(
+                title = "מחק נתונים מיובאים",
+                subtitle = "מוחק נתונים מיובאים ונתונים שנוצרו מהם בלבד; החשבון ו-Gmail נשמרים.",
+                icon = Icons.Default.DeleteSweep,
+                onClick = if (working) null else onDeleteImportedData,
+                modifier = Modifier.testTag("delete_imported_data")
+            )
+            HorizontalDivider(color = V3Border)
+            V3SettingsRow(
+                title = "מחק חשבון",
+                subtitle = "מוחק את החשבון, הנתונים וחיבור Gmail לאחר אישור מפורש.",
+                icon = Icons.Default.DeleteForever,
+                onClick = if (working) null else onDeleteAccount,
+                destructive = true,
+                modifier = Modifier.testTag("delete_account")
+            )
+        } else {
+            HorizontalDivider(color = V3Border)
+            V3SettingsRow(
+                title = "נדרשת התחברות",
+                subtitle = "יש להתחבר לחשבון כדי לבצע פעולות פרטיות.",
+                icon = Icons.Default.PrivacyTip
+            )
         }
     }
 }
 
 @Composable
-private fun AppAboutCard() {
-    Card(shape = RoundedCornerShape(20.dp)) {
-        Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Default.Info, null, tint = TechBluePrimary)
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Click & Save AI", fontWeight = FontWeight.Bold)
-                Text("גרסה ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun ActivityNotificationsGroup(onOpenActivity: () -> Unit) {
+    V3SettingsGroup(title = "") {
+        V3SettingsRow(
+            title = "פעילות",
+            subtitle = "יומן הפעילות מציג רק אירועים שקיימים במידע הזמין. הרשאות התראות מנוהלות על ידי Android.",
+            icon = Icons.Default.History,
+            trailingText = "פתח",
+            onClick = onOpenActivity,
+            modifier = Modifier.testTag("open_activity")
+        )
+    }
+}
+
+@Composable
+private fun AccountGroup(authState: AuthState, onGoogleSignIn: () -> Unit, onSignOut: () -> Unit) {
+    V3SettingsGroup(title = "") {
+        when (authState) {
+            AuthState.Loading -> V3SettingsRow("חשבון", "מצב החשבון עדיין נטען.", Icons.Default.AccountCircle)
+            is AuthState.Error -> V3SettingsRow("חשבון", "לא הצלחנו לטעון את מצב החשבון כרגע. נסו שוב בעוד רגע.", Icons.Default.AccountCircle)
+            AuthState.Idle -> V3SettingsRow(
+                title = "התחבר עם Google",
+                subtitle = "התחברות לחשבון וחיבור Gmail הם שני מצבים נפרדים.",
+                icon = Icons.AutoMirrored.Filled.Login,
+                trailingText = "התחבר",
+                onClick = onGoogleSignIn
+            )
+            is AuthState.Authenticated -> {
+                val session = authState.session
+                V3SettingsRow(
+                    title = session.displayName.ifBlank { "שם לא זמין" },
+                    subtitle = "${session.email.ifBlank { "כתובת דוא״ל לא זמינה" }}\nהתחברות לחשבון וחיבור Gmail הם שני מצבים נפרדים.",
+                    icon = Icons.Default.AccountCircle
+                )
+                HorizontalDivider(color = V3Border)
+                V3SettingsRow(
+                    title = "יציאה מהחשבון",
+                    subtitle = "יציאה מהחשבון אינה מנתקת Gmail ואינה מוחקת את החשבון.",
+                    icon = Icons.AutoMirrored.Filled.Logout,
+                    onClick = onSignOut
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun AppAboutGroup() {
+    V3SettingsGroup(title = "") {
+        V3SettingsRow(
+            title = "Click & Save AI",
+            subtitle = "גרסה ${BuildConfig.VERSION_NAME}",
+            icon = Icons.Default.Info
+        )
     }
 }
 
@@ -306,7 +309,7 @@ private fun PrivacyConfirmationDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title, fontWeight = FontWeight.Bold) },
-        text = { Text(text) },
+        text = { Text(text, style = MaterialTheme.typography.bodyMedium) },
         confirmButton = { Button(onClick = onConfirm) { Text(confirmLabel) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("ביטול") } }
     )
