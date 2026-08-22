@@ -82,6 +82,7 @@ class GateBRemoteAcceptanceTest {
             insights = emptyList(),
             opportunities = emptyList()
         )
+        val connection = GmailConnectionResult(true, "restored@example.com", "gmail-readonly-v1")
 
         var connectionStatusCalls = 0
         var recoveryScanCalls = 0
@@ -91,7 +92,7 @@ class GateBRemoteAcceptanceTest {
         fun recovery() = FinancialSessionRecovery(
             getConnectionStatus = {
                 connectionStatusCalls += 1
-                GmailConnectionResult(true, "restored@example.com", "gmail-readonly-v1")
+                connection
             },
             recoverInvoices = {
                 recoveryScanCalls += 1
@@ -105,13 +106,13 @@ class GateBRemoteAcceptanceTest {
         )
 
         val firstLaunch = recovery().refresh(previous = null)
-        assertEquals(FinancialSyncState.Ready(scan, home), firstLaunch)
+        assertEquals(FinancialSyncState.Ready(scan, home, gmailConnection = connection), firstLaunch)
         assertEquals(2, repository.invoices.first().size)
 
         // Simulate a new app process/fresh local financial session. The server still reports the
         // existing Gmail grant, so recovery must run directly without any OAuth reconnect step.
         val secondLaunch = recovery().refresh(previous = null)
-        assertEquals(FinancialSyncState.Ready(scan, home), secondLaunch)
+        assertEquals(FinancialSyncState.Ready(scan, home, gmailConnection = connection), secondLaunch)
 
         val restoredRows = repository.invoices.first()
         assertEquals(2, restoredRows.size)
