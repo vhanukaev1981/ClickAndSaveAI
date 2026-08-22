@@ -46,23 +46,21 @@ private data class PremiumNavItem(
     val label: String,
     val selectedIcon: ImageVector?,
     val unselectedIcon: ImageVector?,
-    val testTag: String,
     val savingsGlyph: Boolean = false
 )
 
 @Composable
 fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
     val items = listOf(
-        PremiumNavItem("בית", Icons.Filled.Home, Icons.Outlined.Home, "nav_home"),
-        PremiumNavItem("חיסכון", null, null, "nav_savings", savingsGlyph = true),
-        PremiumNavItem("AI", Icons.Filled.AutoAwesome, Icons.Outlined.AutoAwesome, "nav_ai"),
+        PremiumNavItem("בית", Icons.Filled.Home, Icons.Outlined.Home),
+        PremiumNavItem("חיסכון", null, null, savingsGlyph = true),
+        PremiumNavItem("AI", Icons.Filled.AutoAwesome, Icons.Outlined.AutoAwesome),
         PremiumNavItem(
             "לתשלום",
             Icons.AutoMirrored.Filled.ReceiptLong,
-            Icons.AutoMirrored.Outlined.ReceiptLong,
-            "nav_pay"
+            Icons.AutoMirrored.Outlined.ReceiptLong
         ),
-        PremiumNavItem("פרופיל", Icons.Filled.Person, Icons.Outlined.Person, "nav_profile")
+        PremiumNavItem("פרופיל", Icons.Filled.Person, Icons.Outlined.Person)
     )
 
     Box(
@@ -97,12 +95,21 @@ fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                         item = item,
                         selected = selectedTab == index,
                         onClick = { onTabSelected(index) },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).then(premiumNavTestTag(index))
                     )
                 }
             }
         }
     }
+}
+
+private fun premiumNavTestTag(index: Int): Modifier = when (index) {
+    0 -> Modifier.testTag("nav_home")
+    1 -> Modifier.testTag("nav_savings")
+    2 -> Modifier.testTag("nav_ai")
+    3 -> Modifier.testTag("nav_pay")
+    4 -> Modifier.testTag("nav_profile")
+    else -> Modifier
 }
 
 @Composable
@@ -118,8 +125,7 @@ private fun PremiumNavDestination(
             .clip(RoundedCornerShape(14.dp))
             .selectable(selected = selected, onClick = onClick, role = Role.Tab)
             .background(if (selected) V3PrimarySoft else V3Surface)
-            .padding(horizontal = 2.dp, vertical = 7.dp)
-            .testTag(item.testTag),
+            .padding(horizontal = 2.dp, vertical = 7.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
