@@ -68,7 +68,7 @@ fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
             .navigationBarsPadding()
-            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp, top = 4.dp)
+            .padding(top = 2.dp)
             .testTag("bottom_nav_bar"),
         contentAlignment = Alignment.Center
     ) {
@@ -76,17 +76,17 @@ fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("premium_bottom_nav_dock"),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
             color = V3Surface,
-            border = BorderStroke(1.dp, V3Border),
-            shadowElevation = 8.dp,
+            border = BorderStroke(1.dp, V3Border.copy(alpha = 0.9f)),
+            shadowElevation = 2.dp,
             tonalElevation = 0.dp
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .selectableGroup()
-                    .padding(horizontal = 5.dp, vertical = 5.dp),
+                    .padding(horizontal = 4.dp, vertical = 3.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -121,21 +121,21 @@ private fun PremiumNavDestination(
 ) {
     Column(
         modifier = modifier
-            .heightIn(min = 52.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .heightIn(min = 50.dp)
+            .clip(RoundedCornerShape(20.dp))
             .selectable(selected = selected, onClick = onClick, role = Role.Tab)
             .background(if (selected) V3PrimarySoft else V3Surface)
-            .padding(horizontal = 2.dp, vertical = 7.dp),
+            .padding(horizontal = 2.dp, vertical = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Box(
-            modifier = Modifier.size(width = 30.dp, height = 23.dp),
+            modifier = Modifier.size(width = 28.dp, height = 21.dp),
             contentAlignment = Alignment.Center
         ) {
             if (item.savingsGlyph) {
                 SavingsGlyph(
-                    modifier = Modifier.size(21.dp),
+                    modifier = Modifier.size(20.dp),
                     tint = if (selected) V3Primary else V3MutedForeground,
                     contentDescription = item.label
                 )
@@ -144,13 +144,13 @@ private fun PremiumNavDestination(
                     imageVector = if (selected) item.selectedIcon!! else item.unselectedIcon!!,
                     contentDescription = item.label,
                     tint = if (selected) V3Primary else V3MutedForeground,
-                    modifier = Modifier.size(21.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
         Text(
             text = item.label,
-            modifier = Modifier.padding(top = 3.dp),
+            modifier = Modifier.padding(top = 2.dp),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
             color = if (selected) V3Primary else V3MutedForeground,
