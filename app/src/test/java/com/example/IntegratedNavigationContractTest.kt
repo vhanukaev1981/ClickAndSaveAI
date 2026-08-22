@@ -9,15 +9,21 @@ class IntegratedNavigationContractTest {
     @Test
     fun primaryNavigationHasExactlyTheFrozenV3Destinations() {
         val nav = File("src/main/java/com/example/ui/components/BottomNavBar.kt").readText()
-        listOf("בית", "חיסכון", "AI", "לתשלום", "פרופיל").forEach { label ->
-            assertTrue(nav.contains("Text(\"$label\")"))
+        val labels = listOf("בית", "חיסכון", "AI", "לתשלום", "פרופיל")
+        var previous = -1
+        labels.forEach { label ->
+            val position = nav.indexOf("PremiumNavItem(\"$label\"")
+            assertTrue("missing primary label $label", position >= 0)
+            assertTrue("primary navigation order changed at $label", position > previous)
+            previous = position
         }
-        assertFalse(nav.contains("Text(\"פעילות\")"))
-        assertFalse(nav.contains("Text(\"אני\")"))
+        assertFalse(nav.contains("PremiumNavItem(\"פעילות\""))
+        assertFalse(nav.contains("PremiumNavItem(\"אני\""))
         listOf("nav_home", "nav_savings", "nav_ai", "nav_pay", "nav_profile").forEach { tag ->
-            assertTrue(nav.contains("testTag(\"$tag\")"))
+            assertTrue(nav.contains("\"$tag\""))
         }
-        (0..4).forEach { index -> assertTrue(nav.contains("onTabSelected($index)")) }
+        assertTrue(nav.contains("items.forEachIndexed"))
+        assertTrue(nav.contains("onTabSelected(index)"))
     }
 
     @Test
