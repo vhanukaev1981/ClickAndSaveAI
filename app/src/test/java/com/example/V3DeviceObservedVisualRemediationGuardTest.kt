@@ -23,13 +23,13 @@ class V3DeviceObservedVisualRemediationGuardTest {
     }
 
     @Test
-    fun aiSecondaryPromptsUseCompactGridAndHideTechnicalBackendCopy() {
+    fun aiSecondaryPromptsUseCompactGridAndSanitizeTechnicalCopyAtPresentationBoundary() {
         val ai = source("ui/screens/AiAssistantScreen.kt")
-        val viewModel = source("ui/MainViewModel.kt")
         assertTrue(ai.contains("AiSuggestionGrid("))
         assertTrue(ai.contains("consumerAiError"))
-        assertFalse(viewModel.contains("Backend מאומת"))
+        assertTrue(ai.contains("consumerAiMessage"))
         assertFalse(ai.contains("Text(errorMessage"))
+        assertFalse(ai.contains("Text(message.text"))
     }
 
     @Test
