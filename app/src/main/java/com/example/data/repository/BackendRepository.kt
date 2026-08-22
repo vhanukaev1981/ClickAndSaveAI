@@ -18,12 +18,25 @@ data class GmailConnectionResult(
     val consentVersion: String
 )
 
+data class GmailRecoveryDiagnosticResult(
+    val initialBackfillCompleted: Boolean,
+    val initialBackfillCompletedAt: String,
+    val storedParserVersion: Int,
+    val activeParserVersion: Int,
+    val authoritativeInvoiceCount: Int,
+    val gmailMessageImportCount: Int,
+    val gmailMessageImportsParserVersionDistribution: Map<String, Int>,
+    val storedCandidateCount: Int,
+    val importsTruncated: Boolean
+)
+
 data class GmailSyncStatusResult(
     val connected: Boolean,
     val storedParserVersion: Int,
     val activeParserVersion: Int,
     val upgradeRequired: Boolean,
-    val lookback: String
+    val lookback: String,
+    val recoveryState: GmailRecoveryDiagnosticResult? = null
 )
 
 data class GmailWatchResult(
@@ -185,18 +198,42 @@ class BackendRepository(
         )
     }
 
-    suspend fun getGmailSyncStatus(): GmailSyncStatusResult {
+    suspend fun getGmailSyncStatus(includeRecoveryDiagnostics: Boolean = false): GmailSyncStatusResult {
         val response = functions.getHttpsCallable("getGmailSyncStatus")
-            .call()
+            .call(mapOf("includeRecoveryDiagnostics" to includeRecoveryDiagnostics))
             .await()
             .data
             .asStringMap()
+        val recoveryMap = response["recoveryState"].asStringMapOrNull()
+        val parserDistribution = recoveryMap
+            ?.get("gmailMessageImportsParserVersionDistribution")
+            .asStringMapOrNull()
+            .orEmpty()
+            .mapNotNull { (key, value) ->
+                val count = (value as? Number)?.toInt() ?: return@mapNotNull null
+                key to count
+            }
+            .toMap()
+        val recoveryState = recoveryMap?.let {
+            GmailRecoveryDiagnosticResult(
+                initialBackfillCompleted = it["initialBackfillCompleted"] as? Boolean ?: false,
+                initialBackfillCompletedAt = it["initialBackfillCompletedAt"] as? String ?: "",
+                storedParserVersion = (it["storedParserVersion"] as? Number)?.toInt() ?: 0,
+                activeParserVersion = (it["activeParserVersion"] as? Number)?.toInt() ?: 0,
+                authoritativeInvoiceCount = (it["authoritativeInvoiceCount"] as? Number)?.toInt() ?: 0,
+                gmailMessageImportCount = (it["gmailMessageImportCount"] as? Number)?.toInt() ?: 0,
+                gmailMessageImportsParserVersionDistribution = parserDistribution,
+                storedCandidateCount = (it["storedCandidateCount"] as? Number)?.toInt() ?: 0,
+                importsTruncated = it["importsTruncated"] as? Boolean ?: false
+            )
+        }
         return GmailSyncStatusResult(
             connected = response["connected"] as? Boolean ?: false,
             storedParserVersion = (response["storedParserVersion"] as? Number)?.toInt() ?: 0,
             activeParserVersion = (response["activeParserVersion"] as? Number)?.toInt() ?: 0,
             upgradeRequired = response["upgradeRequired"] as? Boolean ?: false,
-            lookback = response["lookback"] as? String ?: ""
+            lookback = response["lookback"] as? String ?: "",
+            recoveryState = recoveryState
         )
     }
 
