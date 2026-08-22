@@ -51,6 +51,21 @@ class GmailRepository(
     private val shoppingRepository: ShoppingRepository,
     private val backendRepository: BackendRepository = BackendRepository()
 ) {
+    private val _syncState = MutableStateFlow<GmailSyncState>(GmailSyncState.Idle)
+    val syncState: StateFlow<GmailSyncState> = _syncState.asStateFlow()
+
+    private val _isConnected = MutableStateFlow(false)
+    val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
+
+    private val _connectedEmail = MutableStateFlow("")
+    val connectedEmail: StateFlow<String> = _connectedEmail.asStateFlow()
+
+    private val _lastScanTime = MutableStateFlow("טרם בוצעה סריקה")
+    val lastScanTime: StateFlow<String> = _lastScanTime.asStateFlow()
+
+    private val _recoveryDiagnostic = MutableStateFlow("")
+    val recoveryDiagnostic: StateFlow<String> = _recoveryDiagnostic.asStateFlow()
+
     companion object {
         internal fun formatRecoveryDiagnostic(state: GmailRecoveryDiagnosticResult): String =
             buildString {
@@ -80,21 +95,6 @@ class GmailRepository(
                 append(state.importsTruncated)
             }
     }
-
-    private val _syncState = MutableStateFlow<GmailSyncState>(GmailSyncState.Idle)
-    val syncState: StateFlow<GmailSyncState> = _syncState.asStateFlow()
-
-    private val _isConnected = MutableStateFlow(false)
-    val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
-
-    private val _connectedEmail = MutableStateFlow("")
-    val connectedEmail: StateFlow<String> = _connectedEmail.asStateFlow()
-
-    private val _lastScanTime = MutableStateFlow("טרם בוצעה סריקה")
-    val lastScanTime: StateFlow<String> = _lastScanTime.asStateFlow()
-
-    private val _recoveryDiagnostic = MutableStateFlow("")
-    val recoveryDiagnostic: StateFlow<String> = _recoveryDiagnostic.asStateFlow()
 
     private suspend fun refreshRecoveryDiagnosticIfAvailable(connected: Boolean) {
         if (!BuildConfig.DEBUG || !connected) {
