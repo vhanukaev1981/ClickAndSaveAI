@@ -40,13 +40,17 @@ import com.example.ui.components.OpportunityLifecycleChip
 import com.example.ui.components.SavingsGlyph
 import com.example.ui.components.SavingsHero
 import com.example.ui.components.V3EmptyState
+import com.example.ui.components.V3Note
 import com.example.ui.components.V3Panel
 import com.example.ui.components.V3PrimaryButton
 import com.example.ui.components.V3ScreenHeader
 import com.example.ui.components.V3SectionHeader
+import com.example.ui.components.V3SummaryItem
+import com.example.ui.components.V3SummaryStrip
 import com.example.ui.components.VerificationBadge
 import com.example.ui.theme.TechBluePrimary
 import com.example.ui.theme.V3PrimarySoft
+import com.example.ui.theme.V3Success
 import com.example.ui.v3.V3SavingsActionMode
 import com.example.ui.v3.asV3Money
 import com.example.ui.v3.hasAuthoritativeV3Offer
@@ -68,6 +72,14 @@ fun ProvidersScreen(viewModel: MainViewModel) {
     var actionMessage by remember { mutableStateOf("") }
     var selectedOpportunity by remember { mutableStateOf<FinancialOpportunity?>(null) }
 
+    val allOpportunities = financialHome?.opportunities.orEmpty()
+    val openOpportunities = allOpportunities.filter { it.savingRealizationState != "REALIZED" }
+    val inProgress = openOpportunities.filter(FinancialOpportunity::hasActionInProgress)
+    val realized = allOpportunities.filter {
+        it.savingRealizationState == "REALIZED" && it.realizedMonthlySaving != null
+    }
+    val summary = financialHome?.toV3SavingsSummary()
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("providers_screen"),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 108.dp),
@@ -75,14 +87,13 @@ fun ProvidersScreen(viewModel: MainViewModel) {
     ) {
         item {
             V3ScreenHeader(
-                eyebrow = "CLICK & SAVE",
+                eyebrow = "חיסכון",
                 title = "החיסכון שלך",
-                subtitle = "מה כבר מומש, מה פוטנציאלי ומה באמת ניתן לבצע עכשיו."
+                subtitle = "איפה אפשר לשלם פחות, מה בתהליך ומה כבר נחסך בפועל."
             )
         }
 
-        financialHome?.let { home ->
-            val summary = home.toV3SavingsSummary()
+        if (summary != null) {
             item {
                 SavingsHero(
                     realizedMonthly = summary.realizedMonthly,
@@ -90,6 +101,27 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                     potentialMonthly = summary.potentialMonthly,
                     potentialAnnual = summary.potentialAnnual,
                     realizedKnownZero = summary.realizedKnownZero
+                )
+            }
+            item {
+                V3SummaryStrip(
+                    listOf(
+                        V3SummaryItem(
+                            label = "שירותים במעקב",
+                            value = financialHome?.context?.recurringServiceCount?.toString() ?: "לא ידוע"
+                        ),
+                        V3SummaryItem(
+                            label = "שווים בדיקה",
+                            value = openOpportunities.size.toString(),
+                            emphasized = true
+                        ),
+                        V3SummaryItem(
+                            label = "חיסכון שאומת",
+                            value = summary.realizedMonthly?.asV3Money()
+                                ?: if (summary.realizedKnownZero) "₪0.00" else "לא ידוע",
+                            positive = summary.realizedMonthly != null && summary.realizedMonthly > 0.0
+                        )
+                    )
                 )
             }
         }
@@ -118,12 +150,11 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                 V3EmptyState("חלק מהמידע עדיין מתעדכן", "אין כרגע מספיק מידע מאומת להצגת חיסכון. ערך חסר אינו אפס.")
             }
             else -> {
-                val opportunities = financialHome?.opportunities.orEmpty()
-                if (opportunities.isEmpty()) {
+                item { V3SectionHeader("אפשר לחסוך") }
+                if (openOpportunities.isEmpty()) {
                     item { V3EmptyState("כרגע אין הזדמנויות מאומתות", "נמשיך לבדוק עבורך כשהמידע יתעדכן.") }
                 } else {
-                    item { V3SectionHeader("הזדמנויות פתוחות") }
-                    items(opportunities, key = { it.id }) { opportunity ->
+                    items(openOpportunities, key = { "opportunity:${it.id}" }) { opportunity ->
                         OpportunityCard(
                             opportunity = opportunity,
                             onAccept = {
@@ -148,11 +179,42 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                         )
                     }
                 }
+
+                item { V3SectionHeader("בתהליך") }
+                if (inProgress.isEmpty()) {
+                    item {
+                        V3EmptyState(
+                            "אין כרגע פעולה בתהליך",
+                            "פעולה תופיע כאן רק אחרי שתאשר אותה, עם המצב האמיתי שלה."
+                        )
+                    }
+                } else {
+                    items(inProgress, key = { "progress:${it.id}" }) { opportunity ->
+                        SavingsProgressCard(opportunity)
+                    }
+                }
+
+                item { V3SectionHeader("נחסך בפועל") }
+                if (realized.isEmpty()) {
+                    item {
+                        V3EmptyState(
+                            "עדיין לא נחסך סכום מאומת",
+                            "ברגע שמעבר יושלם והחיסכון יאומת, הסכום החודשי והשנתי יופיעו כאן."
+                        )
+                    }
+                } else {
+                    items(realized, key = { "realized:${it.id}" }) { opportunity ->
+                        RealizedSavingCard(opportunity)
+                    }
+                }
             }
         }
 
         if (actionMessage.isNotBlank()) item { MessageCard("מצב הבקשה", actionMessage) }
         if (error.isNotBlank()) item { MessageCard("לא ניתן להשלים את הבדיקה", error) }
+        item {
+            V3Note("חיסכון פוטנציאלי אינו חיסכון ממומש. פתיחת בדיקה או בקשה אינה הוכחה למסירה לספק, להשלמת עסקה או לחיסכון בפועל.")
+        }
     }
 
     selectedOpportunity?.let { opportunity ->
@@ -204,7 +266,7 @@ private fun OpportunityCard(opportunity: FinancialOpportunity, onAccept: () -> U
             SavingsGlyph(modifier = Modifier.size(23.dp), contentDescription = "חיסכון")
             Spacer(Modifier.size(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(opportunity.providerName, style = MaterialTheme.typography.titleMedium)
+                Text(opportunity.providerName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(opportunity.category, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             OpportunityLifecycleChip(opportunity.v3LifecycleLabel())
@@ -227,7 +289,7 @@ private fun OpportunityCard(opportunity: FinancialOpportunity, onAccept: () -> U
                 fontWeight = FontWeight.SemiBold
             )
             VerificationBadge("אומת")
-            Text("החיסכון הפוטנציאלי אינו חיסכון ממומש.", style = MaterialTheme.typography.bodySmall)
+            Text("חיסכון פוטנציאלי אינו חיסכון ממומש.", style = MaterialTheme.typography.bodySmall)
         } else {
             val detectionText = if (opportunity.type == "COMPARE_AFTER_PRICE_INCREASE") {
                 if (opportunity.hasQualifiedBillIncrease()) {
@@ -241,8 +303,6 @@ private fun OpportunityCard(opportunity: FinancialOpportunity, onAccept: () -> U
             Text(detectionText)
         }
 
-        realizedSavingMessage(opportunity)?.let { Text(it, fontWeight = FontWeight.Bold) }
-
         when {
             actionAvailable -> V3PrimaryButton("בדיקת ההצעה", onAccept, Modifier.fillMaxWidth())
             actionMode == V3SavingsActionMode.VIEW_ONLY -> Text("ההזדמנות היא לצפייה בלבד; אין יעד פעולה מאומת.", style = MaterialTheme.typography.bodySmall)
@@ -250,6 +310,59 @@ private fun OpportunityCard(opportunity: FinancialOpportunity, onAccept: () -> U
             actionMode == V3SavingsActionMode.DIRECT_PLAN_JOIN -> Text("חיבור ישיר למסלול אינו זמין ללא יעד מאומת.", style = MaterialTheme.typography.bodySmall)
             else -> Unit
         }
+    }
+}
+
+private fun FinancialOpportunity.hasActionInProgress(): Boolean =
+    savingRealizationState != "REALIZED" && (
+        consentState != "NOT_CONSENTED" ||
+            requestState != "NOT_CREATED" ||
+            deliveryAttemptState != "NOT_ATTEMPTED" ||
+            submissionState != "NOT_SUBMITTED" ||
+            completionState == "DEAL_COMPLETED"
+        )
+
+@Composable
+private fun SavingsProgressCard(opportunity: FinancialOpportunity) {
+    V3Panel(containerColor = V3PrimarySoft) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SavingsGlyph(modifier = Modifier.size(22.dp), contentDescription = "פעולת חיסכון")
+            Spacer(Modifier.size(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(opportunity.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
+                Text(opportunity.category.ifBlank { "קטגוריה לא ידועה" }, style = MaterialTheme.typography.bodySmall)
+            }
+            OpportunityLifecycleChip(opportunity.v3LifecycleLabel())
+        }
+        Text(
+            "הבקשה בתהליך. מסירה לספק, השלמת עסקה וחיסכון ממומש יוצגו רק אחרי ראיה מתאימה.",
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+@Composable
+private fun RealizedSavingCard(opportunity: FinancialOpportunity) {
+    V3Panel {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SavingsGlyph(modifier = Modifier.size(23.dp), tint = V3Success, contentDescription = "חיסכון שאומת")
+            Spacer(Modifier.size(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(opportunity.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
+                Text(opportunity.category.ifBlank { "קטגוריה לא ידועה" }, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Text(
+            "${opportunity.realizedMonthlySaving!!.asV3Money()} נחסכו בפועל בחודש",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = V3Success
+        )
+        Text(
+            opportunity.realizedAnnualSaving?.let { "${it.asV3Money()} בשנה לפי הראיה שנקלטה" }
+                ?: "החיסכון השנתי עדיין לא ידוע",
+            style = MaterialTheme.typography.bodySmall
+        )
     }
 }
 
