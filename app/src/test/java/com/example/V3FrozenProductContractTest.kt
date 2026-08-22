@@ -9,10 +9,19 @@ class V3FrozenProductContractTest {
     @Test
     fun primaryNavigationMatchesFrozenV3Exactly() {
         val nav = File("src/main/java/com/example/ui/components/BottomNavBar.kt").readText()
-        listOf("בית", "חיסכון", "AI", "לתשלום", "פרופיל").forEach { label -> assertTrue("missing primary label $label", nav.contains("Text(\"$label\")")) }
-        assertFalse(nav.contains("Text(\"פעילות\")"))
-        assertFalse(nav.contains("Text(\"אני\")"))
-        listOf("nav_home", "nav_savings", "nav_ai", "nav_pay", "nav_profile").forEach { tag -> assertTrue("missing nav tag $tag", nav.contains("testTag(\"$tag\")")) }
+        val labels = listOf("בית", "חיסכון", "AI", "לתשלום", "פרופיל")
+        var previous = -1
+        labels.forEach { label ->
+            val position = nav.indexOf("PremiumNavItem(\"$label\"")
+            assertTrue("missing primary label $label", position >= 0)
+            assertTrue("primary navigation order changed at $label", position > previous)
+            previous = position
+        }
+        assertFalse(nav.contains("PremiumNavItem(\"פעילות\""))
+        assertFalse(nav.contains("PremiumNavItem(\"אני\""))
+        listOf("nav_home", "nav_savings", "nav_ai", "nav_pay", "nav_profile").forEach { tag -> assertTrue("missing nav tag $tag", nav.contains("\"$tag\"")) }
+        assertTrue(nav.contains("items.forEachIndexed"))
+        assertTrue(nav.contains("onTabSelected(index)"))
     }
 
     @Test
@@ -33,14 +42,14 @@ class V3FrozenProductContractTest {
     fun profileMatchesFrozenGroupsWithoutTierOrSavingsPromotion() {
         val profile = File("src/main/java/com/example/ui/screens/ProfileScreen.kt").readText()
         listOf("חיבור ונתונים", "פרטיות והרשאות", "פעילות והתראות", "חשבון ואבטחה").forEach { title -> assertTrue("missing profile group $title", profile.contains("V3SectionHeader(\"$title\")")) }
-        assertTrue(profile.contains("Text(\"פרופיל\""))
+        assertTrue(profile.contains("title = \"פרופיל\"") || profile.contains("Text(\"פרופיל\""))
         listOf("Text(\"Pro\"", "Text(\"Free\"", "שדרוג", "מנוי", "חיסכון שלך").forEach { forbidden -> assertFalse("forbidden profile tier/promo copy: $forbidden", profile.contains(forbidden, ignoreCase = true)) }
     }
 
     @Test
     fun payScreenIsTruthfulAndSeparatesSavingFromPayment() {
         val pay = File("src/main/java/com/example/ui/screens/InvoicesScreen.kt").readText()
-        assertTrue(pay.contains("Text(\"לתשלום\""))
+        assertTrue(pay.contains("title = \"לתשלום\"") || pay.contains("Text(\"לתשלום\""))
         assertTrue(pay.contains("מה נכנס לתשלום"))
         assertTrue(pay.contains("האם אפשר לחסוך"))
         assertTrue(pay.contains("מעבר לספק לתשלום"))
