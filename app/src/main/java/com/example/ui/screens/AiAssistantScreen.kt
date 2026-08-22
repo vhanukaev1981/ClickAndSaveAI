@@ -77,7 +77,7 @@ private fun consumerAiError(message: String): String = when {
 private fun consumerAiMessage(message: ChatMessage): String {
     if (message.isUser) return message.text
     return when {
-        message.text.contains("Backend מאומת", ignoreCase = true) ->
+        message.text.contains("מחירים ותנאים עדיין דורשים", ignoreCase = true) ->
             "אני כאן כדי לעזור לך להבין מה כדאי לבדוק ולחסוך. אציג רק מידע שאפשר לבסס על המקורות המחוברים."
         message.text.contains("temporarily unavailable", ignoreCase = true) ||
             message.text.contains("unavailable", ignoreCase = true) ->
