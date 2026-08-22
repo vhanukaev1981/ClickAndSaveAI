@@ -39,7 +39,6 @@ import com.example.ui.MainViewModel
 import com.example.ui.components.OpportunityLifecycleChip
 import com.example.ui.components.SavingsGlyph
 import com.example.ui.components.V3EmptyState
-import com.example.ui.components.V3GradientHeader
 import com.example.ui.components.V3Note
 import com.example.ui.components.V3Panel
 import com.example.ui.components.V3PrimaryButton
@@ -85,14 +84,6 @@ fun ProvidersScreen(viewModel: MainViewModel) {
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 108.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item {
-            V3GradientHeader(
-                eyebrow = "חיסכון",
-                title = "החיסכון שלך",
-                subtitle = "מה כבר התממש, מה בתהליך ואיפה אפשר לשלם פחות."
-            )
-        }
-
         if (summary != null) {
             item {
                 V3SavingsDashboardHero(
