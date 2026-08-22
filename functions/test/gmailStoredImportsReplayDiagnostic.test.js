@@ -1,5 +1,7 @@
 "use strict";
 
+const fs = require("node:fs");
+const path = require("node:path");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
@@ -156,4 +158,42 @@ test("recovery state returns replay counts only and never candidate content", ()
   ]) {
     assert.equal(serialized.includes(forbidden), false, `diagnostic leaked ${forbidden}`);
   }
+});
+
+test("stored-import replay diagnostic is staging-only, Firestore-read-only and Gmail-free", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "../src/gmailSyncStatusFunctions.js"),
+    "utf8"
+  );
+
+  const loaderStart = source.indexOf("async function loadGmailRecoveryState");
+  const loaderEnd = source.indexOf("\nfunction normalizeFinancialHomeContext", loaderStart);
+  assert.ok(loaderStart >= 0 && loaderEnd > loaderStart, "recovery loader boundary must be discoverable");
+  const loader = source.slice(loaderStart, loaderEnd);
+
+  for (const forbidden of [
+    ".set(",
+    ".add(",
+    ".create(",
+    ".update(",
+    ".delete(",
+    ".runTransaction(",
+    ".batch(",
+    "fetch(",
+    "gmail.googleapis.com",
+    "messages.list",
+  ]) {
+    assert.equal(loader.includes(forbidden), false, `recovery loader contains forbidden operation ${forbidden}`);
+  }
+  assert.match(loader, /\.count\(\)\.get\(\)/);
+  assert.match(loader, /\.limit\(MAX_RECOVERY_DIAGNOSTIC_IMPORTS \+ 1\)\.get\(\)/);
+
+  const callableStart = source.indexOf("exports.getGmailSyncStatus = onCall");
+  const callableEnd = source.indexOf("\nexports.getFinancialHome = onCall", callableStart);
+  assert.ok(callableStart >= 0 && callableEnd > callableStart, "sync-status callable boundary must be discoverable");
+  const callable = source.slice(callableStart, callableEnd);
+  assert.match(callable, /const uid = requireAuth\(request\)/);
+  assert.match(callable, /request\.data\?\.includeRecoveryDiagnostics === true/);
+  assert.match(callable, /process\.env\.GCLOUD_PROJECT !== STAGING_PROJECT_ID/);
+  assert.match(callable, /loadGmailRecoveryState\(uid, connection\)/);
 });
