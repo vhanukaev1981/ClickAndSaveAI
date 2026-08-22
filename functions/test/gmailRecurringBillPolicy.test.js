@@ -7,6 +7,10 @@ const {
   selectRecurringBills,
 } = require("../src/gmailRecurringBillPolicy");
 
+function pdfFingerprint(char) {
+  return `sha256:${String(char).repeat(64)}`;
+}
+
 function bill(overrides = {}) {
   return {
     sourceMessageId: "m1:pdf:one",
@@ -17,7 +21,7 @@ function bill(overrides = {}) {
     documentClass: "RECURRING_BILL",
     recurrenceEvidence: "EXPLICIT_BILLING_PERIOD",
     recurrenceType: "PERIODIC_VARIABLE",
-    contentFingerprint: "sha256:a",
+    contentFingerprint: pdfFingerprint("a"),
     ...overrides,
   };
 }
@@ -37,7 +41,7 @@ test("rejects one-off, refund and contract documents even when monetary", () => 
   assert.deepEqual(selected, []);
 });
 
-test("promotes repeated receipt-only service charges across distinct billing dates", () => {
+test("preserves trusted PDF-backed receipt-only historical recurrence", () => {
   const selected = selectRecurringBills([
     bill({
       sourceMessageId: "usage-1",
@@ -47,7 +51,7 @@ test("promotes repeated receipt-only service charges across distinct billing dat
       recurrenceEvidence: "NONE",
       recurrenceType: "UNKNOWN",
       receivedDate: "2026-05-08",
-      contentFingerprint: "sha256:usage-1",
+      contentFingerprint: pdfFingerprint("b"),
     }),
     bill({
       sourceMessageId: "usage-2",
@@ -57,12 +61,96 @@ test("promotes repeated receipt-only service charges across distinct billing dat
       recurrenceEvidence: "NONE",
       recurrenceType: "UNKNOWN",
       receivedDate: "2026-05-28",
-      contentFingerprint: "sha256:usage-2",
+      contentFingerprint: pdfFingerprint("c"),
     }),
   ]);
 
   assert.equal(selected.length, 2);
   assert.ok(selected.every((item) => item.recurrenceEvidence === "REPEATED_PROVIDER_HISTORY"));
+});
+
+test("does not promote two body-only RECEIPT_ONLY items across distinct dates", () => {
+  const selected = selectRecurringBills([
+    bill({
+      sourceMessageId: "body-receipt-1",
+      providerName: "Example Charging Network",
+      category: "תחבורה",
+      documentClass: "RECEIPT_ONLY",
+      recurrenceEvidence: "NONE",
+      recurrenceType: "UNKNOWN",
+      receivedDate: "2026-05-08",
+      contentFingerprint: "",
+    }),
+    bill({
+      sourceMessageId: "body-receipt-2",
+      providerName: "Example Charging Network",
+      category: "תחבורה",
+      documentClass: "RECEIPT_ONLY",
+      recurrenceEvidence: "NONE",
+      recurrenceType: "UNKNOWN",
+      receivedDate: "2026-05-28",
+      contentFingerprint: "",
+    }),
+  ]);
+  assert.deepEqual(selected, []);
+});
+
+test("mixed body receipt plus trusted PDF receipts never promotes the body receipt", () => {
+  const selected = selectRecurringBills([
+    bill({
+      sourceMessageId: "body-receipt",
+      providerName: "Example Charging Network",
+      category: "תחבורה",
+      documentClass: "RECEIPT_ONLY",
+      recurrenceEvidence: "NONE",
+      recurrenceType: "UNKNOWN",
+      receivedDate: "2026-05-01",
+      contentFingerprint: "",
+    }),
+    bill({
+      sourceMessageId: "pdf-receipt-1",
+      providerName: "Example Charging Network",
+      category: "תחבורה",
+      documentClass: "RECEIPT_ONLY",
+      recurrenceEvidence: "NONE",
+      recurrenceType: "UNKNOWN",
+      receivedDate: "2026-05-08",
+      contentFingerprint: pdfFingerprint("d"),
+    }),
+    bill({
+      sourceMessageId: "pdf-receipt-2",
+      providerName: "Example Charging Network",
+      category: "תחבורה",
+      documentClass: "RECEIPT_ONLY",
+      recurrenceEvidence: "NONE",
+      recurrenceType: "UNKNOWN",
+      receivedDate: "2026-05-28",
+      contentFingerprint: pdfFingerprint("e"),
+    }),
+  ]);
+  assert.deepEqual(new Set(selected.map((item) => item.sourceMessageId)), new Set(["pdf-receipt-1", "pdf-receipt-2"]));
+});
+
+test("repeated UNKNOWN items remain rejected", () => {
+  const selected = selectRecurringBills([
+    bill({
+      sourceMessageId: "unknown-1",
+      documentClass: "UNKNOWN",
+      recurrenceEvidence: "NONE",
+      recurrenceType: "UNKNOWN",
+      receivedDate: "2026-05-01",
+      contentFingerprint: "",
+    }),
+    bill({
+      sourceMessageId: "unknown-2",
+      documentClass: "UNKNOWN",
+      recurrenceEvidence: "NONE",
+      recurrenceType: "UNKNOWN",
+      receivedDate: "2026-06-01",
+      contentFingerprint: "",
+    }),
+  ]);
+  assert.deepEqual(selected, []);
 });
 
 test("does not promote repeated one-off purchases from the same merchant", () => {
@@ -73,18 +161,19 @@ test("does not promote repeated one-off purchases from the same merchant", () =>
   assert.deepEqual(selected, []);
 });
 
-test("deduplicates identical PDFs across forwarded Gmail messages by content hash", () => {
+test("deduplicates identical PDFs across forwarded Gmail messages by exact content SHA-256", () => {
+  const sharedFingerprint = pdfFingerprint("f");
   const selected = selectRecurringBills([
-    bill({ sourceMessageId: "original:pdf:a", contentFingerprint: "sha256:same" }),
-    bill({ sourceMessageId: "forwarded:pdf:b", contentFingerprint: "sha256:same" }),
+    bill({ sourceMessageId: "original:pdf:a", receivedDate: "2026-07-01", monthlyCost: 120, contentFingerprint: sharedFingerprint }),
+    bill({ sourceMessageId: "forwarded:pdf:b", receivedDate: "2026-07-02", monthlyCost: 121, contentFingerprint: sharedFingerprint }),
   ]);
   assert.equal(selected.length, 1);
 });
 
-test("deduplicates invoice and receipt representations of the same provider amount and date", () => {
+test("transaction dedupe still prefers recurring invoice over receipt for same provider amount and date", () => {
   const selected = selectRecurringBills([
-    bill({ sourceMessageId: "invoice", documentClass: "RECURRING_BILL", contentFingerprint: "sha256:invoice" }),
-    bill({ sourceMessageId: "receipt", documentClass: "RECEIPT_ONLY", contentFingerprint: "sha256:receipt" }),
+    bill({ sourceMessageId: "invoice", documentClass: "RECURRING_BILL", contentFingerprint: pdfFingerprint("1") }),
+    bill({ sourceMessageId: "receipt", documentClass: "RECEIPT_ONLY", contentFingerprint: pdfFingerprint("2") }),
   ]);
   assert.equal(selected.length, 1);
   assert.equal(selected[0].sourceMessageId, "invoice");
