@@ -51,6 +51,36 @@ class GmailRepository(
     private val shoppingRepository: ShoppingRepository,
     private val backendRepository: BackendRepository = BackendRepository()
 ) {
+    companion object {
+        internal fun formatRecoveryDiagnostic(state: GmailRecoveryDiagnosticResult): String =
+            buildString {
+                append("Recovery diagnostic · completed=")
+                append(state.initialBackfillCompleted)
+                append(" · parser=")
+                append(state.storedParserVersion)
+                append("→")
+                append(state.activeParserVersion)
+                append(" · invoices=")
+                append(state.authoritativeInvoiceCount)
+                append(" · imports=")
+                append(state.gmailMessageImportCount)
+                append(" · storedCandidates=")
+                append(state.storedCandidateCount)
+                append(" · normalized=")
+                append(state.normalizedCandidateCount)
+                append(" · replayable=")
+                append(state.replayableCandidateCount)
+                append(" · recurring=")
+                append(state.replayableRecurringCount)
+                append(" · uniqueSources=")
+                append(state.uniqueReplayableSourceCount)
+                append(" · duplicates=")
+                append(state.duplicateCandidateCount)
+                append(" · truncated=")
+                append(state.importsTruncated)
+            }
+    }
+
     private val _syncState = MutableStateFlow<GmailSyncState>(GmailSyncState.Idle)
     val syncState: StateFlow<GmailSyncState> = _syncState.asStateFlow()
 
@@ -66,35 +96,6 @@ class GmailRepository(
     private val _recoveryDiagnostic = MutableStateFlow("")
     val recoveryDiagnostic: StateFlow<String> = _recoveryDiagnostic.asStateFlow()
 
-    private fun formatRecoveryDiagnostic(state: GmailRecoveryDiagnosticResult): String {
-        val distribution = state.gmailMessageImportsParserVersionDistribution
-            .toSortedMap()
-            .entries
-            .joinToString(", ") { (version, count) -> "v$version=$count" }
-            .ifBlank { "none" }
-        val completedAt = state.initialBackfillCompletedAt.ifBlank { "unknown" }
-        return buildString {
-            append("Recovery diagnostic · completed=")
-            append(state.initialBackfillCompleted)
-            append(" · completedAt=")
-            append(completedAt)
-            append(" · parser=")
-            append(state.storedParserVersion)
-            append("→")
-            append(state.activeParserVersion)
-            append(" · invoices=")
-            append(state.authoritativeInvoiceCount)
-            append(" · imports=")
-            append(state.gmailMessageImportCount)
-            append(" · candidates=")
-            append(state.storedCandidateCount)
-            append(" · importParsers=")
-            append(distribution)
-            append(" · truncated=")
-            append(state.importsTruncated)
-        }
-    }
-
     private suspend fun refreshRecoveryDiagnosticIfAvailable(connected: Boolean) {
         if (!BuildConfig.DEBUG || !connected) {
             _recoveryDiagnostic.value = ""
@@ -102,7 +103,7 @@ class GmailRepository(
         }
         runCatching { backendRepository.getGmailSyncStatus(includeRecoveryDiagnostics = true) }
             .onSuccess { status ->
-                _recoveryDiagnostic.value = status.recoveryState?.let(::formatRecoveryDiagnostic).orEmpty()
+                _recoveryDiagnostic.value = status.recoveryState?.let { formatRecoveryDiagnostic(it) }.orEmpty()
             }
             .onFailure { error ->
                 // Diagnostic availability must never alter Gmail connection truth.
