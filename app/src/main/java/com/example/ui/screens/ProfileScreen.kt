@@ -148,7 +148,6 @@ private fun GmailAuthorityGroup(
         is FinancialSyncState.Failed -> "לא הצלחנו לבדוק את מצב Gmail כרגע. נסו שוב בעוד רגע."
         is FinancialSyncState.Ready, is FinancialSyncState.Partial -> when {
             connection == null -> "מצב Gmail לא ידוע כרגע."
-            connection.connected && connection.email.isNotBlank() -> "Gmail מחובר · ${connection.email}"
             connection.connected -> "Gmail מחובר"
             else -> "Gmail אינו מחובר."
         }
@@ -272,7 +271,7 @@ private fun AccountGroup(authState: AuthState, onGoogleSignIn: () -> Unit, onSig
                 val session = authState.session
                 V3SettingsRow(
                     title = session.displayName.ifBlank { "שם לא זמין" },
-                    subtitle = "${session.email.ifBlank { "כתובת דוא״ל לא זמינה" }}\nהתחברות לחשבון וחיבור Gmail הם שני מצבים נפרדים.",
+                    subtitle = session.email.ifBlank { "כתובת דוא״ל לא זמינה" },
                     icon = Icons.Default.AccountCircle
                 )
                 HorizontalDivider(color = V3Border)
