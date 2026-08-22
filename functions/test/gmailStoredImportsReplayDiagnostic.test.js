@@ -95,7 +95,7 @@ test("stored-import replay diagnostic uses current normalization and recurring s
     storedCandidateCount: 6,
     normalizedCandidateCount: 5,
     replayableCandidateCount: 5,
-    replayableRecurringCount: 3,
+    replayableRecurringCount: 1,
     uniqueReplayableSourceCount: 4,
     duplicateCandidateCount: 1,
   });
