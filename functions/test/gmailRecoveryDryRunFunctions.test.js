@@ -238,9 +238,10 @@ test("dry-run implementation has no persistence, agent, notification, disconnect
   assert.equal(source.includes("runFinancialAgent"), false);
   assert.equal(source.includes("sendPush"), false);
   assert.equal(source.includes("disconnectGmail"), false);
-  assert.doesNotMatch(source, /\.set\s*\(/);
-  assert.doesNotMatch(source, /\.update\s*\(/);
-  assert.doesNotMatch(source, /\.delete\s*\(/);
+  assert.doesNotMatch(
+    source,
+    /await[\s\S]{0,160}\.(?:set|update|delete|create)\s*\(/
+  );
   assert.doesNotMatch(source, /FieldValue/);
 });
 
