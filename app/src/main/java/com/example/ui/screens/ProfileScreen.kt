@@ -67,6 +67,7 @@ fun ProfileScreen(
     ) {
         item {
             V3ProfileHero(
+                title = "פרופיל",
                 displayName = heroSession?.displayName.orEmpty(),
                 email = heroSession?.email.orEmpty(),
                 authenticated = heroSession != null
