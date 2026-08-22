@@ -133,9 +133,7 @@ fun InvoicesScreen(
         }
 
         item {
-            V3SectionHeader(
-                title = if (selectedCategory == "הכל") "החשבוניות שלך" else selectedCategory
-            )
+            V3SectionHeader(title = "מה נכנס לתשלום")
         }
         when {
             filteredBills == null -> item { BillsStateCard(unknownBillsMessage(financialSyncState)) }
@@ -194,6 +192,7 @@ private fun PremiumPayableBillCard(
             )
         }
 
+        Text("האם אפשר לחסוך", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = V3MutedForeground)
         if (opportunity == null) {
             Text("אין כרגע חיסכון מאומת לחשבון הזה.", style = MaterialTheme.typography.bodySmall)
         } else {
@@ -212,6 +211,7 @@ private fun PremiumPayableBillCard(
             V3SecondaryButton("בדיקת חיסכון לפני התשלום", onOpenSavings, Modifier.fillMaxWidth())
         }
 
+        Text("מעבר לספק לתשלום", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = V3MutedForeground)
         when (paymentMode) {
             V3InvoicePaymentMode.NO_VERIFIED_PAYMENT_TARGET -> Text(
                 "אין יעד תשלום מאומת לחשבון הזה.",
