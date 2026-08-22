@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -94,7 +95,21 @@ fun DashboardScreen(
             V3ScreenHeader(
                 eyebrow = "CLICK & SAVE AI",
                 title = firstName?.let { "שלום, $it" } ?: "הכסף שלך, במבט אחד",
-                subtitle = "כבר בדקנו בשבילך מה כדאי לעשות עכשיו כדי לשלם פחות."
+                subtitle = "כבר בדקנו בשבילך מה כדאי לעשות עכשיו כדי לשלם פחות.",
+                action = {
+                    Surface(
+                        onClick = { onNavigateToTab(4) },
+                        shape = RoundedCornerShape(14.dp),
+                        color = V3PrimarySoft
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "פרופיל",
+                            tint = TechBluePrimary,
+                            modifier = Modifier.padding(10.dp).size(21.dp)
+                        )
+                    }
+                }
             )
         }
 
@@ -111,7 +126,7 @@ fun DashboardScreen(
             FinancialSyncState.CheckingConnection -> {
                 item {
                     V3MonitoringLine(
-                        label = gmailSyncStep.takeIf(String::isNotBlank) ?: "מחברים ומעדכנים את התמונה שלך",
+                        label = gmailSyncStep.takeIf(String::isNotBlank) ?: "מחברים את החשבון · אנחנו מעדכנים את התמונה שלך",
                         active = false,
                         modifier = Modifier.testTag("v3_monitoring_status")
                     )
@@ -121,7 +136,7 @@ fun DashboardScreen(
             FinancialSyncState.Recovering -> {
                 item {
                     V3MonitoringLine(
-                        label = gmailSyncStep.takeIf(String::isNotBlank) ?: "מסדרים ומעדכנים את התמונה שלך",
+                        label = gmailSyncStep.takeIf(String::isNotBlank) ?: "מסדרים את התמונה שלך · אנחנו מעדכנים את התמונה שלך",
                         active = false,
                         modifier = Modifier.testTag("v3_monitoring_status")
                     )
@@ -138,7 +153,7 @@ fun DashboardScreen(
                 )
             }
             is FinancialSyncState.Partial -> {
-                item { V3SoftStatusCard("המידע האחרון נשמר", "חלק מהמידע עדיין מתעדכן. אנחנו ממשיכים להציג רק את מה שכבר אומת.") }
+                item { V3SoftStatusCard("המידע האחרון נשמר", "אנחנו מעדכנים את התמונה שלך. חלק מהמידע עדיין מתעדכן, ולכן מוצג רק מה שכבר אומת.") }
                 val home = financialHome
                 if (home != null) {
                     authoritativeHomeItems(home, latestScan, state, isSyncing, gmailSyncStep, onNavigateToTab, onOpenInvoices)
