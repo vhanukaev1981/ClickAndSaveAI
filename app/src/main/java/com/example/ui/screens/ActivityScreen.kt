@@ -14,8 +14,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,6 +33,8 @@ import com.example.data.repository.activityOrNull
 import com.example.ui.MainViewModel
 import com.example.ui.components.ActivityTimelineItem
 import com.example.ui.components.V3ActivityTone
+import com.example.ui.components.V3Panel
+import com.example.ui.components.V3ScreenHeader
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -50,15 +50,14 @@ fun ActivityScreen(viewModel: MainViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 18.dp)
+            .padding(horizontal = 20.dp, vertical = 20.dp)
             .testTag("activity_screen"),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text("פעילות", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text(
-            "כאן מוצגים רק אירועים שנשמרו ואומתו. אירוע שלא תועד לא יוצג כאילו התרחש.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        V3ScreenHeader(
+            eyebrow = "יומן מאומת",
+            title = "פעילות",
+            subtitle = "כאן מוצגים רק אירועים שנשמרו ואומתו. אירוע שלא תועד לא יוצג כאילו התרחש."
         )
 
         when (financialSyncState) {
@@ -174,8 +173,7 @@ private fun activityTone(event: FinancialActivityEvent): V3ActivityTone = when (
 private fun activityGroupLabel(timestamp: String, now: Date = Date()): String {
     val datePrefix = timestamp.take(10)
     val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
-    val eventDate = runCatching { formatter.parse(datePrefix) }.getOrNull()
-        ?: return "פעילות קודמת"
+    val eventDate = runCatching { formatter.parse(datePrefix) }.getOrNull() ?: return "פעילות קודמת"
 
     val todayCalendar = Calendar.getInstance().apply {
         time = now
@@ -191,9 +189,7 @@ private fun activityGroupLabel(timestamp: String, now: Date = Date()): String {
         set(Calendar.SECOND, 0)
         set(Calendar.MILLISECOND, 0)
     }
-    val yesterdayCalendar = (todayCalendar.clone() as Calendar).apply {
-        add(Calendar.DAY_OF_YEAR, -1)
-    }
+    val yesterdayCalendar = (todayCalendar.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -1) }
     val weekStart = (todayCalendar.clone() as Calendar).apply {
         val daysFromSunday = (get(Calendar.DAY_OF_WEEK) - Calendar.SUNDAY + 7) % 7
         add(Calendar.DAY_OF_YEAR, -daysFromSunday)
@@ -222,16 +218,12 @@ private fun verificationLabel(status: String): String = when (status.uppercase()
 
 @Composable
 private fun ActivityStatusCard(title: String, description: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
+    V3Panel {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Top
         ) {
-            Icon(Icons.Outlined.ErrorOutline, contentDescription = null)
+            Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(description, style = MaterialTheme.typography.bodyMedium)
