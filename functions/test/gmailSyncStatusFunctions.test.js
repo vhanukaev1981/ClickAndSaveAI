@@ -131,6 +131,11 @@ test("recovery diagnostic is sanitized counts and parser metadata only", () => {
     gmailMessageImportCount: 3,
     gmailMessageImportsParserVersionDistribution: { "5": 1, "6": 2 },
     storedCandidateCount: 3,
+    normalizedCandidateCount: 3,
+    replayableCandidateCount: 3,
+    replayableRecurringCount: 0,
+    uniqueReplayableSourceCount: 3,
+    duplicateCandidateCount: 0,
     importsTruncated: false,
   });
 
