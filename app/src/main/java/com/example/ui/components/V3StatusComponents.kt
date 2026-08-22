@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -41,6 +42,7 @@ import com.example.ui.theme.V3EmeraldSoft
 import com.example.ui.theme.V3MutedForeground
 import com.example.ui.theme.V3Primary
 import com.example.ui.theme.V3PrimarySoft
+import com.example.ui.theme.V3Success
 import com.example.ui.theme.V3Surface
 import com.example.ui.theme.V3SurfaceSoft
 
@@ -122,7 +124,7 @@ fun V3PrimaryButton(
         onClick = onClick,
         modifier = modifier.height(48.dp),
         enabled = enabled,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.buttonColors(containerColor = V3Primary)
     ) {
         Text(label, style = MaterialTheme.typography.labelLarge)
@@ -140,7 +142,7 @@ fun V3SecondaryButton(
         onClick = onClick,
         modifier = modifier.height(48.dp),
         enabled = enabled,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, V3Border),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = V3Primary)
     ) {
@@ -242,6 +244,31 @@ fun V3SettingsRow(
 }
 
 @Composable
+fun V3MonitoringLine(
+    label: String,
+    active: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 1.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Surface(
+            modifier = Modifier.size(7.dp),
+            shape = CircleShape,
+            color = if (active) V3Success else V3MutedForeground
+        ) {}
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = V3MutedForeground,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
 fun MonitoringStatus(
     title: String,
     subtitle: String?,
@@ -276,6 +303,82 @@ fun MonitoringStatus(
                 }
             }
         }
+    }
+}
+
+data class V3SummaryItem(
+    val label: String,
+    val value: String,
+    val emphasized: Boolean = false,
+    val positive: Boolean = false
+)
+
+@Composable
+fun V3SummaryStrip(
+    items: List<V3SummaryItem>,
+    modifier: Modifier = Modifier
+) {
+    V3Panel(
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            items.take(3).forEach { item ->
+                Column(
+                    modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        text = item.value,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = when {
+                            item.positive -> V3Success
+                            item.emphasized -> V3Primary
+                            else -> MaterialTheme.colorScheme.onSurface
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = item.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = V3MutedForeground,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun V3Note(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.Info,
+            contentDescription = null,
+            tint = V3MutedForeground,
+            modifier = Modifier.size(16.dp)
+        )
+        Text(
+            text = text,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = V3MutedForeground
+        )
     }
 }
 
