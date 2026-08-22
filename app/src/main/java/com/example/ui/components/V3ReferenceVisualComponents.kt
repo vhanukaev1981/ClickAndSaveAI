@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -14,9 +15,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -45,8 +46,8 @@ import com.example.ui.theme.V3Success
 import com.example.ui.theme.V3Surface
 import com.example.ui.v3.asV3Money
 
-private val PremiumHeroShape = RoundedCornerShape(28.dp)
-private val PremiumCardShape = RoundedCornerShape(24.dp)
+private val PremiumHeroShape = RoundedCornerShape(22.dp)
+private val PremiumCardShape = RoundedCornerShape(18.dp)
 
 private fun premiumGradient() = Brush.linearGradient(
     colors = listOf(V3GradientBlue, V3GradientIndigo, V3GradientViolet)
@@ -62,45 +63,45 @@ fun V3GradientHeader(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(10.dp, PremiumHeroShape)
+            .shadow(3.dp, PremiumHeroShape)
             .clip(PremiumHeroShape)
             .background(premiumGradient())
-            .padding(horizontal = 22.dp, vertical = 22.dp)
+            .padding(horizontal = 18.dp, vertical = 16.dp)
     ) {
         Box(
             Modifier
-                .size(94.dp)
+                .size(74.dp)
                 .align(Alignment.TopStart)
-                .background(Color.White.copy(alpha = 0.07f), CircleShape)
+                .background(Color.White.copy(alpha = 0.06f), CircleShape)
         )
         Box(
             Modifier
-                .size(48.dp)
+                .size(34.dp)
                 .align(Alignment.BottomStart)
-                .background(Color.White.copy(alpha = 0.10f), CircleShape)
+                .background(Color.White.copy(alpha = 0.08f), CircleShape)
         )
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
             horizontalAlignment = Alignment.End
         ) {
             Text(
                 eyebrow,
-                color = Color.White.copy(alpha = 0.86f),
-                style = MaterialTheme.typography.labelLarge,
+                color = Color.White.copy(alpha = 0.82f),
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold
             )
             Text(
                 title,
                 color = Color.White,
-                fontSize = 28.sp,
-                lineHeight = 34.sp,
+                fontSize = 24.sp,
+                lineHeight = 29.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
                 subtitle,
-                color = Color.White.copy(alpha = 0.86f),
-                style = MaterialTheme.typography.bodyMedium
+                color = Color.White.copy(alpha = 0.82f),
+                style = MaterialTheme.typography.bodySmall
             )
         }
     }
@@ -115,35 +116,41 @@ fun V3FinancialOverviewCard(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth().shadow(6.dp, PremiumCardShape),
+        modifier = modifier.fillMaxWidth().shadow(2.dp, PremiumCardShape),
         shape = PremiumCardShape,
         color = V3Surface,
+        border = BorderStroke(1.dp, V3Border.copy(alpha = 0.72f)),
         tonalElevation = 0.dp
     ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("המצב הפיננסי שלי", style = MaterialTheme.typography.labelLarge, color = V3MutedForeground)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text("המצב הפיננסי שלי", style = MaterialTheme.typography.labelMedium, color = V3MutedForeground)
                     Text(
                         observedMonthlySpend?.asV3Money() ?: "לא ידוע",
-                        fontSize = 27.sp,
-                        lineHeight = 32.sp,
+                        fontSize = 24.sp,
+                        lineHeight = 28.sp,
                         fontWeight = FontWeight.Bold,
                         color = V3Navy
                     )
-                    Text("חיובים חודשיים שנצפו", style = MaterialTheme.typography.bodySmall, color = V3MutedForeground)
+                    Text("חיובים חודשיים שנצפו", style = MaterialTheme.typography.labelSmall, color = V3MutedForeground)
                 }
                 Box(
                     Modifier
-                        .size(54.dp)
+                        .size(44.dp)
                         .clip(CircleShape)
                         .background(Brush.linearGradient(listOf(V3GradientBlueSoft, V3GradientVioletSoft))),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, tint = V3GradientIndigo)
+                    Icon(
+                        Icons.AutoMirrored.Filled.TrendingUp,
+                        contentDescription = null,
+                        tint = V3GradientIndigo,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 PremiumMetricTile(
                     label = "חיסכון שמומש",
                     value = realizedMonthly?.asV3Money() ?: "לא ידוע",
@@ -171,12 +178,19 @@ fun V3FinancialOverviewCard(
 private fun PremiumMetricTile(label: String, value: String, accent: Color, modifier: Modifier = Modifier) {
     Column(
         modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(accent.copy(alpha = 0.08f))
-            .padding(horizontal = 10.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(accent.copy(alpha = 0.075f))
+            .padding(horizontal = 8.dp, vertical = 9.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        Text(value, fontWeight = FontWeight.Bold, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            value,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = accent,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
         Text(label, style = MaterialTheme.typography.labelSmall, color = V3MutedForeground, maxLines = 2)
     }
 }
@@ -192,45 +206,50 @@ fun V3SavingsDashboardHero(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(10.dp, PremiumHeroShape)
+            .shadow(4.dp, PremiumHeroShape)
             .clip(PremiumHeroShape)
             .background(premiumGradient())
-            .padding(20.dp)
+            .padding(horizontal = 16.dp, vertical = 15.dp)
     ) {
         Box(
             Modifier
-                .size(116.dp)
+                .size(88.dp)
                 .align(Alignment.TopStart)
-                .border(1.dp, Color.White.copy(alpha = 0.20f), CircleShape)
+                .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
         )
         Box(
             Modifier
-                .size(82.dp)
+                .size(52.dp)
                 .align(Alignment.TopStart)
-                .padding(17.dp)
-                .background(Color.White.copy(alpha = 0.10f), CircleShape)
+                .padding(10.dp)
+                .background(Color.White.copy(alpha = 0.08f), CircleShape)
         )
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("החיסכון שלי", color = Color.White.copy(alpha = 0.84f), fontWeight = FontWeight.SemiBold)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        "החיסכון שלי",
+                        color = Color.White.copy(alpha = 0.82f),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
                     Text(
                         realizedMonthly?.asV3Money() ?: "לא ידוע",
                         color = Color.White,
-                        fontSize = 30.sp,
-                        lineHeight = 36.sp,
+                        fontSize = 26.sp,
+                        lineHeight = 30.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Text("חיסכון חודשי שמומש", color = Color.White.copy(alpha = 0.76f), style = MaterialTheme.typography.bodySmall)
+                    Text("חיסכון חודשי שמומש", color = Color.White.copy(alpha = 0.74f), style = MaterialTheme.typography.labelSmall)
                 }
                 Box(
-                    Modifier.size(58.dp).background(Color.White.copy(alpha = 0.14f), CircleShape),
+                    Modifier.size(48.dp).background(Color.White.copy(alpha = 0.12f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    SavingsGlyph(contentDescription = "חיסכון", tint = Color.White)
+                    SavingsGlyph(contentDescription = "חיסכון", tint = Color.White, modifier = Modifier.size(23.dp))
                 }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 GlassMetric(
                     label = "פוטנציאל חודשי",
                     value = potentialMonthly?.asV3Money() ?: "לא ידוע",
@@ -255,13 +274,20 @@ fun V3SavingsDashboardHero(
 private fun GlassMetric(label: String, value: String, modifier: Modifier = Modifier) {
     Column(
         modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color.White.copy(alpha = 0.12f))
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = 0.10f))
+            .padding(horizontal = 8.dp, vertical = 7.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        Text(value, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(label, color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall)
+        Text(
+            value,
+            style = MaterialTheme.typography.titleSmall,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(label, color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelSmall, maxLines = 2)
     }
 }
 
@@ -275,34 +301,33 @@ fun V3AiExperienceHero(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(12.dp, PremiumHeroShape)
+            .shadow(4.dp, PremiumHeroShape)
             .clip(PremiumHeroShape)
             .background(premiumGradient())
-            .padding(horizontal = 20.dp, vertical = 24.dp)
+            .padding(horizontal = 18.dp, vertical = 18.dp)
     ) {
-        Box(Modifier.size(132.dp).align(Alignment.Center).border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape))
-        Box(Modifier.size(104.dp).align(Alignment.Center).border(1.dp, Color.White.copy(alpha = 0.28f), CircleShape))
+        Box(Modifier.size(108.dp).align(Alignment.Center).border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape))
+        Box(Modifier.size(86.dp).align(Alignment.Center).border(1.dp, Color.White.copy(alpha = 0.24f), CircleShape))
         Column(
             Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            Text("Click & Save AI ✦", color = Color.White.copy(alpha = 0.88f), fontWeight = FontWeight.Bold)
+            Text("Click & Save AI ✦", color = Color.White.copy(alpha = 0.86f), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             Box(
-                Modifier
-                    .size(82.dp)
-                    .shadow(16.dp, CircleShape)
-                    .background(Color.White.copy(alpha = 0.18f), CircleShape)
-                    .border(1.dp, Color.White.copy(alpha = 0.42f), CircleShape),
+                Modifier.size(68.dp)
+                    .shadow(5.dp, CircleShape)
+                    .background(Color.White.copy(alpha = 0.16f), CircleShape)
+                    .border(1.dp, Color.White.copy(alpha = 0.36f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Text("AI", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                Text("AI", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
             }
-            Text(title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = Color.White.copy(alpha = 0.82f), style = MaterialTheme.typography.bodyMedium)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White.copy(alpha = 0.88f), modifier = Modifier.size(16.dp))
-                Text(status, color = Color.White.copy(alpha = 0.86f), style = MaterialTheme.typography.labelMedium)
+            Text(title, color = Color.White, fontSize = 22.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = Color.White.copy(alpha = 0.80f), style = MaterialTheme.typography.bodySmall)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White.copy(alpha = 0.84f), modifier = Modifier.size(14.dp))
+                Text(status, color = Color.White.copy(alpha = 0.84f), style = MaterialTheme.typography.labelSmall)
             }
         }
     }
@@ -318,29 +343,30 @@ fun V3BillVisualCard(
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth().shadow(6.dp, PremiumCardShape),
+        modifier = modifier.fillMaxWidth().shadow(2.dp, PremiumCardShape),
         shape = PremiumCardShape,
         color = V3Surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, V3Border.copy(alpha = 0.75f))
+        border = BorderStroke(1.dp, V3Border.copy(alpha = 0.72f)),
+        tonalElevation = 0.dp
     ) {
-        Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(15.dp))
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(13.dp))
                         .background(Brush.linearGradient(listOf(V3GradientBlueSoft, V3GradientVioletSoft))),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = V3GradientIndigo)
+                    Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, tint = V3GradientIndigo, modifier = Modifier.size(20.dp))
                 }
-                Spacer(Modifier.size(11.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(providerName, fontWeight = FontWeight.Bold, color = V3Navy)
-                    Text(category, style = MaterialTheme.typography.bodySmall, color = V3MutedForeground)
+                Spacer(Modifier.size(9.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(providerName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = V3Navy)
+                    Text(category, style = MaterialTheme.typography.labelSmall, color = V3MutedForeground)
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(amountText, fontWeight = FontWeight.Bold, color = V3Navy)
+                    Text(amountText, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = V3Navy)
                     Text(dueText, style = MaterialTheme.typography.labelSmall, color = V3MutedForeground)
                 }
             }
@@ -362,38 +388,37 @@ fun V3ProfileHero(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(10.dp, PremiumHeroShape)
+            .shadow(4.dp, PremiumHeroShape)
             .clip(PremiumHeroShape)
             .background(premiumGradient())
-            .padding(horizontal = 20.dp, vertical = 22.dp)
+            .padding(horizontal = 18.dp, vertical = 16.dp)
     ) {
-        Box(Modifier.size(100.dp).align(Alignment.TopStart).background(Color.White.copy(alpha = 0.07f), CircleShape))
+        Box(Modifier.size(82.dp).align(Alignment.TopStart).background(Color.White.copy(alpha = 0.06f), CircleShape))
         Column(
             Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(7.dp)
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            Text(title, color = Color.White.copy(alpha = 0.84f), fontWeight = FontWeight.Bold)
+            Text(title, color = Color.White.copy(alpha = 0.82f), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
             Box(
-                Modifier
-                    .size(72.dp)
+                Modifier.size(56.dp)
                     .background(Color.White, CircleShape)
-                    .border(3.dp, Color.White.copy(alpha = 0.42f), CircleShape),
+                    .border(2.dp, Color.White.copy(alpha = 0.36f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Text(initial, color = V3GradientIndigo, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                Text(initial, color = V3GradientIndigo, fontSize = 21.sp, fontWeight = FontWeight.Bold)
             }
-            Text(name, color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+            Text(name, color = Color.White, fontSize = 21.sp, lineHeight = 25.sp, fontWeight = FontWeight.Bold)
             Text(
                 if (email.isNotBlank()) email else if (authenticated) "מחובר" else "לא מחובר",
-                color = Color.White.copy(alpha = 0.80f),
-                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.78f),
+                style = MaterialTheme.typography.labelMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.Default.Shield, contentDescription = null, tint = Color.White.copy(alpha = 0.82f), modifier = Modifier.size(15.dp))
-                Text("הנתונים וההרשאות שלך במקום אחד", color = Color.White.copy(alpha = 0.82f), style = MaterialTheme.typography.labelSmall)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Icon(Icons.Default.Shield, contentDescription = null, tint = Color.White.copy(alpha = 0.78f), modifier = Modifier.size(14.dp))
+                Text("הנתונים וההרשאות שלך במקום אחד", color = Color.White.copy(alpha = 0.78f), style = MaterialTheme.typography.labelSmall)
             }
         }
     }
