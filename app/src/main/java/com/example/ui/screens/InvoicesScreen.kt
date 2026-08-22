@@ -38,9 +38,10 @@ import com.example.data.repository.FinancialOpportunity
 import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.latestScanOrNull
 import com.example.ui.MainViewModel
+import com.example.ui.components.V3BillVisualCard
+import com.example.ui.components.V3GradientHeader
 import com.example.ui.components.V3Note
 import com.example.ui.components.V3Panel
-import com.example.ui.components.V3ScreenHeader
 import com.example.ui.components.V3SecondaryButton
 import com.example.ui.components.V3SectionHeader
 import com.example.ui.components.V3SummaryItem
@@ -77,10 +78,10 @@ fun InvoicesScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            V3ScreenHeader(
+            V3GradientHeader(
                 eyebrow = "חשבוניות",
                 title = "לתשלום",
-                subtitle = "החשבוניות שנכנסו ומה כדאי לבדוק לפני התשלום."
+                subtitle = "כל החשבונות שנכנסו ומה כדאי לבדוק לפני התשלום."
             )
         }
 
@@ -132,9 +133,7 @@ fun InvoicesScreen(
             }
         }
 
-        item {
-            V3SectionHeader(title = "מה נכנס לתשלום")
-        }
+        item { V3SectionHeader(title = "מה נכנס לתשלום") }
         when {
             filteredBills == null -> item { BillsStateCard(unknownBillsMessage(financialSyncState)) }
             filteredBills.isEmpty() -> item {
@@ -165,32 +164,18 @@ private fun PremiumPayableBillCard(
     onOpenSavings: () -> Unit
 ) {
     val paymentMode = bill.v3PaymentMode()
-    V3Panel(modifier = Modifier.testTag("v3_invoice_item")) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.Surface(shape = RoundedCornerShape(12.dp), color = V3PrimarySoft) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ReceiptLong,
-                    null,
-                    tint = TechBluePrimary,
-                    modifier = Modifier.padding(9.dp).size(20.dp)
-                )
-            }
-            Spacer(Modifier.size(10.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(bill.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
-                Text(bill.category.ifBlank { "קטגוריה לא ידועה" }, style = MaterialTheme.typography.bodySmall, color = V3MutedForeground)
-            }
-            Text(bill.monthlyCost.asV3Money(), fontWeight = FontWeight.Bold)
-        }
-
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("מועד לתשלום: לא ידוע", style = MaterialTheme.typography.bodySmall, color = V3MutedForeground)
-            Text(
-                if (bill.receivedDate.isNotBlank()) bill.receivedDate else "מועד קליטה לא ידוע",
-                style = MaterialTheme.typography.bodySmall,
-                color = V3MutedForeground
-            )
-        }
+    V3BillVisualCard(
+        providerName = bill.providerName.ifBlank { "ספק לא ידוע" },
+        category = bill.category.ifBlank { "קטגוריה לא ידועה" },
+        amountText = bill.monthlyCost.asV3Money(),
+        dueText = "מועד לתשלום: לא ידוע",
+        modifier = Modifier.testTag("v3_invoice_item")
+    ) {
+        Text(
+            if (bill.receivedDate.isNotBlank()) "נקלט: ${bill.receivedDate}" else "מועד קליטה לא ידוע",
+            style = MaterialTheme.typography.bodySmall,
+            color = V3MutedForeground
+        )
 
         Text("האם אפשר לחסוך", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = V3MutedForeground)
         if (opportunity == null) {
