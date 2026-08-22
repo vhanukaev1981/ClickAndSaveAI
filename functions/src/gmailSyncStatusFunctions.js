@@ -4,6 +4,11 @@ const { getFirestore } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { ACTIVE_GMAIL_PARSER_VERSION } = require("./gmailParserVersion");
 const { assertActiveAccount } = require("./accountAuthorization");
+const {
+  normalizeStoredCandidate,
+  storedCandidates,
+} = require("./gmailRecurringIngestionEngine");
+const { selectRecurringBills } = require("./gmailRecurringBillPolicy");
 const financialAgent = require("./financialAgentFunctions");
 
 const db = getFirestore();
@@ -63,6 +68,35 @@ function recoveryCandidateCount(data) {
   return data?.invoice && typeof data.invoice === "object" ? 1 : 0;
 }
 
+function buildStoredImportsReplayDiagnostic(importDocs = []) {
+  const safeImports = Array.isArray(importDocs) ? importDocs : [];
+  const storedCandidateCount = safeImports.reduce(
+    (sum, item) => sum + recoveryCandidateCount(item),
+    0
+  );
+  const normalizedCandidates = safeImports.flatMap((item) => storedCandidates(item));
+  const replayableCandidates = normalizedCandidates
+    .map((candidate) => normalizeStoredCandidate(candidate))
+    .filter(Boolean);
+  const replayableRecurring = selectRecurringBills(replayableCandidates)
+    .map((candidate) => normalizeStoredCandidate(candidate))
+    .filter(Boolean);
+  const uniqueReplayableSourceCount = new Set(
+    replayableCandidates
+      .map((candidate) => String(candidate.sourceMessageId || "").trim())
+      .filter(Boolean)
+  ).size;
+
+  return {
+    storedCandidateCount,
+    normalizedCandidateCount: normalizedCandidates.length,
+    replayableCandidateCount: replayableCandidates.length,
+    replayableRecurringCount: replayableRecurring.length,
+    uniqueReplayableSourceCount,
+    duplicateCandidateCount: Math.max(0, replayableCandidates.length - uniqueReplayableSourceCount),
+  };
+}
+
 function buildGmailRecoveryState({
   connection = null,
   authoritativeInvoiceCount = 0,
@@ -73,7 +107,6 @@ function buildGmailRecoveryState({
   const data = connection && typeof connection === "object" ? connection : {};
   const safeImports = Array.isArray(importDocs) ? importDocs : [];
   const parserDistribution = {};
-  let storedCandidateCount = 0;
 
   for (const item of safeImports) {
     const rawVersion = Number(item?.parserVersion || 0);
@@ -82,9 +115,9 @@ function buildGmailRecoveryState({
       : 0;
     const key = String(parserVersion);
     parserDistribution[key] = (parserDistribution[key] || 0) + 1;
-    storedCandidateCount += recoveryCandidateCount(item);
   }
 
+  const replayDiagnostic = buildStoredImportsReplayDiagnostic(safeImports);
   const hasExactImportCount = gmailMessageImportCount !== null &&
     gmailMessageImportCount !== undefined &&
     gmailMessageImportCount !== "";
@@ -100,7 +133,7 @@ function buildGmailRecoveryState({
       ? Math.floor(exactImportCount)
       : safeImports.length,
     gmailMessageImportsParserVersionDistribution: parserDistribution,
-    storedCandidateCount,
+    ...replayDiagnostic,
     importsTruncated: importsTruncated === true,
   };
 }
@@ -324,6 +357,7 @@ exports.getFinancialActivity = onCall(
 );
 
 exports._buildGmailSyncStatus = buildGmailSyncStatus;
+exports._buildStoredImportsReplayDiagnostic = buildStoredImportsReplayDiagnostic;
 exports._buildGmailRecoveryState = buildGmailRecoveryState;
 exports._loadGmailRecoveryState = loadGmailRecoveryState;
 exports._normalizeFinancialHomeContext = normalizeFinancialHomeContext;
