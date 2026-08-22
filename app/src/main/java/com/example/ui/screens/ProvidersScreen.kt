@@ -11,16 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -43,11 +37,16 @@ import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.OpportunityActionRepository
 import com.example.ui.MainViewModel
 import com.example.ui.components.OpportunityLifecycleChip
+import com.example.ui.components.SavingsGlyph
 import com.example.ui.components.SavingsHero
 import com.example.ui.components.V3EmptyState
+import com.example.ui.components.V3Panel
+import com.example.ui.components.V3PrimaryButton
+import com.example.ui.components.V3ScreenHeader
 import com.example.ui.components.V3SectionHeader
 import com.example.ui.components.VerificationBadge
 import com.example.ui.theme.TechBluePrimary
+import com.example.ui.theme.V3PrimarySoft
 import com.example.ui.v3.V3SavingsActionMode
 import com.example.ui.v3.asV3Money
 import com.example.ui.v3.hasAuthoritativeV3Offer
@@ -71,14 +70,15 @@ fun ProvidersScreen(viewModel: MainViewModel) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("providers_screen"),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 100.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 108.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("החיסכון שלך", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("מה כבר מומש, מה פוטנציאלי ומה באמת ניתן לבצע עכשיו.", style = MaterialTheme.typography.bodyMedium)
-            }
+            V3ScreenHeader(
+                eyebrow = "CLICK & SAVE",
+                title = "החיסכון שלך",
+                subtitle = "מה כבר מומש, מה פוטנציאלי ומה באמת ניתן לבצע עכשיו."
+            )
         }
 
         financialHome?.let { home ->
@@ -99,7 +99,12 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                 V3EmptyState("עדיין אין מספיק מידע", "יש להשלים חיבור מאומת לפני שנוכל להציג הזדמנויות חיסכון שנבדקו.")
             }
             (financialSyncState == FinancialSyncState.CheckingConnection || financialSyncState == FinancialSyncState.Recovering) && financialHome == null -> item {
-                Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.Center) { CircularProgressIndicator() }
+                V3Panel(containerColor = V3PrimarySoft) {
+                    Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                    }
+                    Text("בודקים את המידע המאומת…", style = MaterialTheme.typography.bodySmall)
+                }
             }
             financialSyncState is FinancialSyncState.Failed && financialHome == null -> item {
                 V3EmptyState(
@@ -110,7 +115,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                 )
             }
             financialSyncState is FinancialSyncState.Partial && financialHome == null -> item {
-                V3EmptyState("חלק מהמידע עדיין מתעדכן", "אין כרגע מספיק מידע מאומת להצגת חיסכון. UNKNOWN אינו אפס.")
+                V3EmptyState("חלק מהמידע עדיין מתעדכן", "אין כרגע מספיק מידע מאומת להצגת חיסכון. ערך חסר אינו אפס.")
             }
             else -> {
                 val opportunities = financialHome?.opportunities.orEmpty()
@@ -194,58 +199,56 @@ private fun OpportunityCard(opportunity: FinancialOpportunity, onAccept: () -> U
     val actionAvailable = opportunity.hasVerifiedSavingsActionTarget() &&
         matched != null && monthlySaving != null && monthlySaving > 0.0
 
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Savings, null, tint = TechBluePrimary)
-                Spacer(Modifier.size(9.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(opportunity.providerName, style = MaterialTheme.typography.titleMedium)
-                    Text(opportunity.category, style = MaterialTheme.typography.bodySmall)
-                }
-                OpportunityLifecycleChip(opportunity.v3LifecycleLabel())
+    V3Panel {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SavingsGlyph(modifier = Modifier.size(23.dp), contentDescription = "חיסכון")
+            Spacer(Modifier.size(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(opportunity.providerName, style = MaterialTheme.typography.titleMedium)
+                Text(opportunity.category, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            OpportunityLifecycleChip(opportunity.v3LifecycleLabel())
+        }
 
-            Text("החיוב שנצפה: ${opportunity.currentMonthlyCost.asV3Money()} לחודש")
+        Text("החיוב שנצפה: ${opportunity.currentMonthlyCost.asV3Money()} לחודש")
 
-            if (matched != null && monthlySaving != null && monthlySaving > 0.0) {
-                val effectiveMonthly = matched.effectiveMonthlyPrice ?: matched.monthlyPrice
-                Text("חלופה שנבדקה: ${matched.providerName} · ${effectiveMonthly.asV3Money()} לחודש")
-                Text(
-                    "חיסכון פוטנציאלי: ${monthlySaving.asV3Money()} בחודש",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TechBluePrimary
-                )
-                Text(
-                    opportunity.potentialAnnualSaving?.let { "חיסכון פוטנציאלי: ${it.asV3Money()} בשנה" }
-                        ?: "חיסכון שנתי פוטנציאלי: לא ידוע",
-                    fontWeight = FontWeight.SemiBold
-                )
-                VerificationBadge("אומת")
-                Text("החיסכון הפוטנציאלי אינו חיסכון ממומש.", style = MaterialTheme.typography.bodySmall)
-            } else {
-                val detectionText = if (opportunity.type == "COMPARE_AFTER_PRICE_INCREASE") {
-                    if (opportunity.hasQualifiedBillIncrease()) {
-                        "השוואה בין חיובים: החשבון עלה ב-${opportunity.monthlyIncrease!!.asV3Money()} וב-${String.format("%.1f", opportunity.percentIncrease)}%. זו לא הוכחה לשינוי תעריף."
-                    } else {
-                        "זוהה שינוי בין חיובים, אך אין כרגע ראיה שעומדת גם בסף ₪5 וגם בסף 5%, או שחסרים נתונים. לא הוכחה לשינוי תעריף."
-                    }
+        if (matched != null && monthlySaving != null && monthlySaving > 0.0) {
+            val effectiveMonthly = matched.effectiveMonthlyPrice ?: matched.monthlyPrice
+            Text("חלופה שנבדקה: ${matched.providerName} · ${effectiveMonthly.asV3Money()} לחודש")
+            Text(
+                "חיסכון פוטנציאלי: ${monthlySaving.asV3Money()} בחודש",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = TechBluePrimary
+            )
+            Text(
+                opportunity.potentialAnnualSaving?.let { "חיסכון פוטנציאלי: ${it.asV3Money()} בשנה" }
+                    ?: "חיסכון שנתי פוטנציאלי: לא ידוע",
+                fontWeight = FontWeight.SemiBold
+            )
+            VerificationBadge("אומת")
+            Text("החיסכון הפוטנציאלי אינו חיסכון ממומש.", style = MaterialTheme.typography.bodySmall)
+        } else {
+            val detectionText = if (opportunity.type == "COMPARE_AFTER_PRICE_INCREASE") {
+                if (opportunity.hasQualifiedBillIncrease()) {
+                    "השוואה בין חיובים: החשבון עלה ב-${opportunity.monthlyIncrease!!.asV3Money()} וב-${String.format("%.1f", opportunity.percentIncrease)}%. זו לא הוכחה לשינוי תעריף."
                 } else {
-                    "זהו שירות חודשי חוזר. לא נציג חיסכון או יעד פעולה בלי הצעה מאומתת."
+                    "זוהה שינוי בין חיובים, אך אין כרגע ראיה שעומדת גם בסף ₪5 וגם בסף 5%, או שחסרים נתונים. לא הוכחה לשינוי תעריף."
                 }
-                Text(detectionText)
+            } else {
+                "זהו שירות חודשי חוזר. לא נציג חיסכון או יעד פעולה בלי הצעה מאומתת."
             }
+            Text(detectionText)
+        }
 
-            realizedSavingMessage(opportunity)?.let { Text(it, fontWeight = FontWeight.Bold) }
+        realizedSavingMessage(opportunity)?.let { Text(it, fontWeight = FontWeight.Bold) }
 
-            when {
-                actionAvailable -> Button(onClick = onAccept, modifier = Modifier.fillMaxWidth()) { Text("בדיקת ההצעה") }
-                actionMode == V3SavingsActionMode.VIEW_ONLY -> Text("ההזדמנות היא לצפייה בלבד; אין יעד פעולה מאומת.", style = MaterialTheme.typography.bodySmall)
-                actionMode == V3SavingsActionMode.NO_VERIFIED_ACTION_TARGET -> Text("אין כרגע יעד פעולה מאומת להצעה.", style = MaterialTheme.typography.bodySmall)
-                actionMode == V3SavingsActionMode.DIRECT_PLAN_JOIN -> Text("חיבור ישיר למסלול אינו זמין ללא יעד מאומת.", style = MaterialTheme.typography.bodySmall)
-                else -> Unit
-            }
+        when {
+            actionAvailable -> V3PrimaryButton("בדיקת ההצעה", onAccept, Modifier.fillMaxWidth())
+            actionMode == V3SavingsActionMode.VIEW_ONLY -> Text("ההזדמנות היא לצפייה בלבד; אין יעד פעולה מאומת.", style = MaterialTheme.typography.bodySmall)
+            actionMode == V3SavingsActionMode.NO_VERIFIED_ACTION_TARGET -> Text("אין כרגע יעד פעולה מאומת להצעה.", style = MaterialTheme.typography.bodySmall)
+            actionMode == V3SavingsActionMode.DIRECT_PLAN_JOIN -> Text("חיבור ישיר למסלול אינו זמין ללא יעד מאומת.", style = MaterialTheme.typography.bodySmall)
+            else -> Unit
         }
     }
 }
@@ -300,10 +303,8 @@ private fun SavingsActionDialog(
 
 @Composable
 private fun MessageCard(title: String, body: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, fontWeight = FontWeight.Bold)
-            Text(body, style = MaterialTheme.typography.bodySmall)
-        }
+    V3Panel(containerColor = V3PrimarySoft) {
+        Text(title, fontWeight = FontWeight.Bold)
+        Text(body, style = MaterialTheme.typography.bodySmall)
     }
 }
