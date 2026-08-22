@@ -59,6 +59,8 @@ import com.example.ui.theme.V3PrimarySoft
 import com.example.ui.v3.asV3Money
 import com.example.ui.v3.toV3SavingsSummary
 
+private fun premiumGreeting(firstName: String): String = "שלום, \u2066$firstName\u2069"
+
 @Composable
 fun DashboardScreen(
     viewModel: MainViewModel,
@@ -97,7 +99,7 @@ fun DashboardScreen(
             Box {
                 V3GradientHeader(
                     eyebrow = "CLICK & SAVE AI",
-                    title = firstName?.let { "שלום, $it" } ?: "הכסף שלך, במבט אחד",
+                    title = firstName?.let(::premiumGreeting) ?: "הכסף שלך, במבט אחד",
                     subtitle = "כל מה שכדאי לדעת עכשיו כדי לשלם פחות."
                 )
                 Surface(
