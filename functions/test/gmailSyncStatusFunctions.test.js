@@ -103,3 +103,48 @@ test("entry exposes the authoritative product-state callables", () => {
   assert.equal(entry.getFinancialHome, status.getFinancialHome);
   assert.equal(entry.getFinancialActivity, status.getFinancialActivity);
 });
+
+test("recovery diagnostic is sanitized counts and parser metadata only", () => {
+  const result = status._buildGmailRecoveryState({
+    connection: {
+      initialBackfillCompleted: true,
+      initialBackfillCompletedAt: "2026-08-20T08:00:00.000Z",
+      parserVersion: 6,
+      email: "must-not-leak@example.invalid",
+      encryptedRefreshToken: "must-not-leak-token",
+    },
+    authoritativeInvoiceCount: 0,
+    importDocs: [
+      { parserVersion: 5, candidates: [{ sourceMessageId: "a", providerName: "Secret A", monthlyCost: 1 }] },
+      { parserVersion: 6, invoices: [{ sourceMessageId: "b", providerName: "Secret B", monthlyCost: 2 }] },
+      { parserVersion: 6, invoice: { sourceMessageId: "c", providerName: "Secret C", monthlyCost: 3 } },
+    ],
+    importsTruncated: false,
+  });
+
+  assert.deepEqual(result, {
+    initialBackfillCompleted: true,
+    initialBackfillCompletedAt: "2026-08-20T08:00:00.000Z",
+    storedParserVersion: 6,
+    activeParserVersion: 7,
+    authoritativeInvoiceCount: 0,
+    gmailMessageImportCount: 3,
+    gmailMessageImportsParserVersionDistribution: { "5": 1, "6": 2 },
+    storedCandidateCount: 3,
+    importsTruncated: false,
+  });
+
+  const serialized = JSON.stringify(result);
+  for (const forbidden of [
+    "must-not-leak@example.invalid",
+    "must-not-leak-token",
+    "Secret A",
+    "Secret B",
+    "Secret C",
+    "sourceMessageId",
+    "providerName",
+    "monthlyCost",
+  ]) {
+    assert.equal(serialized.includes(forbidden), false, `diagnostic leaked ${forbidden}`);
+  }
+});
