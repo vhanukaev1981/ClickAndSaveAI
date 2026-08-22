@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
+require("../src/entry");
 const status = require("../src/gmailSyncStatusFunctions");
 
 test("stored-import replay diagnostic uses current normalization and recurring selection semantics", () => {
