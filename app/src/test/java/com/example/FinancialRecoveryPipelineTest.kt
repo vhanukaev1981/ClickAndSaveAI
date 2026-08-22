@@ -12,7 +12,6 @@ import com.example.data.repository.latestScanOrNull
 import com.example.data.repository.observedRecurringMonthlySpendOrNull
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -151,19 +150,21 @@ class FinancialRecoveryPipelineTest {
     }
 
     @Test
-    fun firstRecoveryScanFailureIsFailedButNeverAuthRequiredOrKnownZero() = runBlocking {
+    fun firstRecoveryScanFailurePreservesConfirmedGmailConnectionWithoutInventingFinancialTruth() = runBlocking {
+        val connection = GmailConnectionResult(true, "user@example.com", "gmail-readonly-v1")
         val recovery = FinancialSessionRecovery(
-            getConnectionStatus = {
-                GmailConnectionResult(true, "user@example.com", "gmail-readonly-v1")
-            },
+            getConnectionStatus = { connection },
             recoverInvoices = { throw IllegalStateException("temporary scan failure") },
             getFinancialHome = { home }
         )
 
         val result = recovery.refresh(previous = null)
 
-        assertTrue(result is FinancialSyncState.Failed)
-        assertFalse((result as FinancialSyncState.Failed).isAuthRequired)
+        assertTrue(result is FinancialSyncState.Partial)
+        val partial = result as FinancialSyncState.Partial
+        assertEquals(connection, partial.gmailConnection)
+        assertNull(partial.latestScan)
+        assertNull(partial.financialHome)
         assertNull(result.observedRecurringMonthlySpendOrNull)
     }
 }
