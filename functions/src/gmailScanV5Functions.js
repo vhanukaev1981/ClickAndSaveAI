@@ -16,8 +16,10 @@ const {
   loadPdfAttachmentBase64,
   normalizeStoredCandidate,
   pdfSourceDocumentId,
+  resolvePdfBodyCandidates,
   storedCandidates,
 } = require("./gmailRecurringIngestionEngine");
+const { pdfClassificationResults } = require("./gmailPdfAnalysisState");
 const {
   pdfContentFingerprint,
   selectRecurringBills,
@@ -92,8 +94,6 @@ async function listQueryMessageIds(accessToken, query) {
 }
 
 async function listGmailCandidateMessageIds(accessToken) {
-  // Keep PDF discovery independent from subject/sender heuristics so no-subject mail
-  // and application/octet-stream attachments with a .pdf filename are still reached.
   const broadBillingQuery = `newer_than:${INITIAL_GMAIL_LOOKBACK} {חשבונית קבלה "הודעת תשלום" "פירוט חיוב" "חשבון חודשי" invoice receipt bill statement subscription billing}`;
   const pdfFallbackQuery = `newer_than:${INITIAL_GMAIL_LOOKBACK} has:attachment filename:pdf`;
   const results = await Promise.all([
@@ -178,7 +178,6 @@ async function processMessage(uid, accessToken, messageId) {
 
   const message = await response.json().catch(() => ({}));
   const pdfAttachments = collectPdfAttachments(message.payload);
-  const pdfCandidates = [];
   let allPdfsAnalyzed = true;
 
   for (let index = 0; index < pdfAttachments.length; index += 1) {
@@ -192,14 +191,13 @@ async function processMessage(uid, accessToken, messageId) {
       // Explicit call kept here as a regression-visible invariant: exact PDF bytes
       // drive cross-forward deduplication, never Gmail message ids alone.
       pdfContentFingerprint(pdfBase64);
-      const candidate = await analyzePdfCandidate(
+      await analyzePdfCandidate(
         message,
         pdfBase64,
         attachment.filename,
         pdfSourceDocumentId(messageId, attachment, index),
         geminiApiKey.value()
       );
-      if (candidate) pdfCandidates.push(candidate);
     } catch (error) {
       allPdfsAnalyzed = false;
       logger.warn("Gmail PDF analysis failed and will be retried", {
@@ -212,7 +210,11 @@ async function processMessage(uid, accessToken, messageId) {
   }
 
   const fallbackBody = bodyCandidate(parseGmailMessage(message));
-  const candidates = pdfCandidates.length > 0 ? pdfCandidates : (fallbackBody ? [fallbackBody] : []);
+  const { candidates } = resolvePdfBodyCandidates({
+    pdfAttachmentCount: pdfAttachments.length,
+    pdfOutcomes: pdfClassificationResults(message),
+    fallbackBody,
+  });
   const previousCandidates = storedCandidates(existingData);
   const previousIds = new Set(previousCandidates.map((candidate) => candidate.sourceMessageId));
   const importedCount = candidates.filter((candidate) => !previousIds.has(candidate.sourceMessageId)).length;
