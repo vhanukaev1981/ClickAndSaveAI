@@ -11,7 +11,13 @@ const {
   loadPdfAttachmentBase64,
   normalizeStoredCandidate,
   pdfSourceDocumentId,
+  resolvePdfBodyCandidates,
 } = require("./gmailRecurringIngestionEngine");
+const {
+  PDF_ANALYSIS_STATES,
+  candidatePdfAnalysisState,
+  pdfClassificationResults,
+} = require("./gmailPdfAnalysisState");
 const {
   pdfContentFingerprint,
   selectRecurringBills,
@@ -38,6 +44,7 @@ const DOCUMENT_CLASSES = new Set([
 ]);
 const UNKNOWN_REASON_KEYS = [
   "BODY_FALLBACK_NO_PDF_CANDIDATE",
+  "BODY_FALLBACK_PDF_ANALYSIS_FAILURE",
   "PDF_CLASSIFIER_UNKNOWN_OR_UNSUPPORTED_CLASS",
   "NORMALIZED_UNSUPPORTED_DOCUMENT_CLASS",
 ];
@@ -201,7 +208,6 @@ async function scanMailbox(accessToken) {
     if (!response.ok) continue;
     const message = await response.json().catch(() => ({}));
     const pdfAttachments = collectPdfAttachments(message.payload);
-    const messagePdfCandidates = [];
 
     for (let index = 0; index < pdfAttachments.length; index += 1) {
       const attachment = pdfAttachments[index];
@@ -216,20 +222,19 @@ async function scanMailbox(accessToken) {
           pdfSourceDocumentId(messageId, attachment, index),
           geminiApiKey.value()
         );
-        if (candidate) {
-          messagePdfCandidates.push(candidate);
-          pdfCandidateCount += 1;
-        }
+        if (candidate) pdfCandidateCount += 1;
       } catch {
-        // Count-only dry-run intentionally treats an individual PDF analysis
-        // failure as a non-candidate and never logs message/attachment details.
+        // Count-only dry-run intentionally records no message/attachment detail.
+        // The absence of a semantic result is resolved below as PDF_ANALYSIS_FAILURE.
       }
     }
 
     const fallbackBody = bodyCandidate(parseGmailMessage(message));
-    const messageCandidates = messagePdfCandidates.length > 0
-      ? messagePdfCandidates
-      : (fallbackBody ? [fallbackBody] : []);
+    const { candidates: messageCandidates } = resolvePdfBodyCandidates({
+      pdfAttachmentCount: pdfAttachments.length,
+      pdfOutcomes: pdfClassificationResults(message),
+      fallbackBody,
+    });
     if (messageCandidates.length > 0) candidateMessageCount += 1;
     candidates.push(...messageCandidates);
   }
@@ -314,6 +319,20 @@ function unknownReasonFor(rawCandidate, normalizedCandidate) {
   if (!DOCUMENT_CLASSES.has(rawClass)) {
     return "NORMALIZED_UNSUPPORTED_DOCUMENT_CLASS";
   }
+
+  const pdfState = candidatePdfAnalysisState(rawCandidate);
+  if (pdfState === PDF_ANALYSIS_STATES.PDF_CLASSIFICATION_RESULT) {
+    return "PDF_CLASSIFIER_UNKNOWN_OR_UNSUPPORTED_CLASS";
+  }
+  if (pdfState === PDF_ANALYSIS_STATES.PDF_ANALYSIS_FAILURE) {
+    return "BODY_FALLBACK_PDF_ANALYSIS_FAILURE";
+  }
+  if (pdfState === PDF_ANALYSIS_STATES.NO_PDF) {
+    return "BODY_FALLBACK_NO_PDF_CANDIDATE";
+  }
+
+  // Preserve truthful compatibility for synthetic/legacy diagnostic candidates
+  // that predate the internal runtime-state marker.
   if (contentDedupeKey(normalizedCandidate)) {
     return "PDF_CLASSIFIER_UNKNOWN_OR_UNSUPPORTED_CLASS";
   }
@@ -447,6 +466,7 @@ exports.runGmailRecoveryDryRun = onCall(
 
 Object.defineProperties(module.exports, {
   _executeRecoveryDryRun: { value: executeRecoveryDryRun, enumerable: false },
+  _scanMailbox: { value: scanMailbox, enumerable: false },
   _summarizeSelection: { value: summarizeSelection, enumerable: false },
   RECOVERY_DRY_RUN_VERSION: { value: RECOVERY_DRY_RUN_VERSION, enumerable: false },
 });
