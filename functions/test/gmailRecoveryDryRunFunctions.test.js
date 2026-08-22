@@ -193,6 +193,7 @@ test("dry-run returns sanitized count-only evidence using the current recurring 
   assert.equal(result.unknownCount, 1);
   assert.deepEqual(result.unknownReasonCounts, {
     BODY_FALLBACK_NO_PDF_CANDIDATE: 0,
+    BODY_FALLBACK_PDF_ANALYSIS_FAILURE: 0,
     PDF_CLASSIFIER_UNKNOWN_OR_UNSUPPORTED_CLASS: 1,
     NORMALIZED_UNSUPPORTED_DOCUMENT_CLASS: 0,
   });
