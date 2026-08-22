@@ -5,7 +5,6 @@ const crypto = require("node:crypto");
 const RECURRING_DOCUMENT_CLASS = "RECURRING_BILL";
 const REPEATED_PROVIDER_EVIDENCE = "REPEATED_PROVIDER_HISTORY";
 const HARD_REJECT_CLASSES = new Set(["ONE_OFF", "REFUND", "CONTRACT", "UNKNOWN"]);
-const HISTORY_ELIGIBLE_CLASSES = new Set(["RECURRING_BILL", "RECEIPT_ONLY"]);
 const MIN_HISTORY_GAP_MS = 14 * 24 * 60 * 60 * 1000;
 
 function normalizeText(value) {
@@ -97,6 +96,15 @@ function hasExplicitRecurrence(item) {
   return Boolean(evidence && evidence !== "NONE" && evidence !== REPEATED_PROVIDER_EVIDENCE);
 }
 
+function isHistoryEligible(item) {
+  if (item?.documentClass === RECURRING_DOCUMENT_CLASS) return true;
+  // RECEIPT_ONLY history remains available only for trusted PDF-backed candidates.
+  // Body candidates deliberately have an empty contentFingerprint and can never
+  // become recurring merely because the same provider repeats later.
+  if (item?.documentClass === "RECEIPT_ONLY") return Boolean(contentDedupeKey(item));
+  return false;
+}
+
 function hasDistinctHistoryDates(items) {
   const dates = [...new Set(items.map((item) => parseDate(item?.receivedDate)).filter((value) => value !== null))]
     .sort((a, b) => a - b);
@@ -115,7 +123,7 @@ function selectRecurringBills(input) {
 
   const eligible = transactionUnique.filter((item) =>
     !HARD_REJECT_CLASSES.has(item.documentClass) &&
-    HISTORY_ELIGIBLE_CLASSES.has(item.documentClass)
+    isHistoryEligible(item)
   );
   const groups = new Map();
   for (const item of eligible) {

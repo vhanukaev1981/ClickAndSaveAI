@@ -6,6 +6,11 @@ const {
   normalizePdfInvoiceCandidate,
 } = require("./gmailParser");
 const { pdfContentFingerprint } = require("./gmailRecurringBillPolicy");
+const {
+  PDF_ANALYSIS_STATES,
+  recordPdfClassificationResult,
+  resolvePdfBodyCandidates,
+} = require("./gmailPdfAnalysisState");
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const DOCUMENT_CLASSES = new Set([
@@ -120,9 +125,6 @@ async function analyzePdfCandidate(message, pdfBase64, filename, sourceDocumentI
   });
 
   const raw = JSON.parse(response.text || "{}");
-  const normalized = normalizePdfInvoiceCandidate(raw, message, sourceDocumentId);
-  if (!normalized) return null;
-
   const documentClass = boundedEnum(raw.documentClass, DOCUMENT_CLASSES, "UNKNOWN");
   let recurrenceEvidence = boundedEnum(raw.recurrenceEvidence, RECURRENCE_EVIDENCE, "NONE");
   let recurrenceType = boundedEnum(raw.recurrenceType, RECURRENCE_TYPES, "UNKNOWN");
@@ -131,24 +133,30 @@ async function analyzePdfCandidate(message, pdfBase64, filename, sourceDocumentI
     if (documentClass !== "RECEIPT_ONLY") recurrenceType = "UNKNOWN";
   }
 
-  return {
+  const normalized = normalizePdfInvoiceCandidate(raw, message, sourceDocumentId);
+  const candidate = normalized ? {
     ...normalized,
     documentClass,
     recurrenceEvidence,
     recurrenceType,
     contentFingerprint: pdfContentFingerprint(pdfBase64),
-  };
+  } : null;
+
+  // Successful model analysis is semantically distinct from monetary normalization.
+  // Record the supported semantic result transiently even when isInvoice=false or
+  // normalization cannot produce a monetary candidate. Parser/body fallback then
+  // cannot override a successfully analyzed PDF.
+  recordPdfClassificationResult(message, { documentClass, candidate });
+  return candidate;
 }
 
 function bodyCandidate(invoice) {
   if (!invoice) return null;
-  // Body heuristics remain useful for audit/recovery but are intentionally not
-  // strong enough to create a user-visible recurring bill without PDF evidence.
   return {
     ...invoice,
-    documentClass: "UNKNOWN",
-    recurrenceEvidence: "NONE",
-    recurrenceType: "UNKNOWN",
+    documentClass: boundedEnum(invoice.documentClass, DOCUMENT_CLASSES, "UNKNOWN"),
+    recurrenceEvidence: boundedEnum(invoice.recurrenceEvidence, RECURRENCE_EVIDENCE, "NONE"),
+    recurrenceType: boundedEnum(invoice.recurrenceType, RECURRENCE_TYPES, "UNKNOWN"),
     contentFingerprint: "",
   };
 }
@@ -184,11 +192,13 @@ function storedCandidates(data) {
 
 module.exports = {
   MAX_PDF_BYTES,
+  PDF_ANALYSIS_STATES,
   analyzePdfCandidate,
   bodyCandidate,
   loadPdfAttachmentBase64,
   normalizeStoredCandidate,
   pdfSourceDocumentId,
   recurringPdfPrompt,
+  resolvePdfBodyCandidates,
   storedCandidates,
 };
