@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -92,10 +93,9 @@ fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 items.forEachIndexed { index, item ->
-                    val selected = selectedTab == index
                     PremiumNavDestination(
                         item = item,
-                        selected = selected,
+                        selected = selectedTab == index,
                         onClick = { onTabSelected(index) },
                         modifier = Modifier.weight(1f)
                     )
@@ -114,13 +114,14 @@ private fun PremiumNavDestination(
 ) {
     Column(
         modifier = modifier
+            .heightIn(min = 52.dp)
             .clip(RoundedCornerShape(14.dp))
             .selectable(selected = selected, onClick = onClick, role = Role.Tab)
             .background(if (selected) V3PrimarySoft else V3Surface)
             .padding(horizontal = 2.dp, vertical = 7.dp)
             .testTag(item.testTag),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp)
+        verticalArrangement = Arrangement.Center
     ) {
         Box(
             modifier = Modifier.size(width = 30.dp, height = 23.dp),
@@ -143,6 +144,7 @@ private fun PremiumNavDestination(
         }
         Text(
             text = item.label,
+            modifier = Modifier.padding(top = 3.dp),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
             color = if (selected) V3Primary else V3MutedForeground,
