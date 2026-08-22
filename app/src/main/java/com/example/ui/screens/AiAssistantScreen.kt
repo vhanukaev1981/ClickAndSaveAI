@@ -18,8 +18,8 @@ import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,13 +40,19 @@ import androidx.compose.ui.unit.dp
 import com.example.ai.DealAnalysisResult
 import com.example.ui.ChatMessage
 import com.example.ui.MainViewModel
+import com.example.ui.components.V3Note
 import com.example.ui.components.V3Panel
+import com.example.ui.components.V3PrimaryButton
 import com.example.ui.components.V3ScreenHeader
+import com.example.ui.components.V3SecondaryButton
+import com.example.ui.components.V3SectionHeader
 import com.example.ui.components.VerificationBadge
 import com.example.ui.theme.TechBluePrimary
 import com.example.ui.theme.V3AiSoft
 import com.example.ui.theme.V3AiViolet
 import com.example.ui.theme.V3Border
+import com.example.ui.theme.V3MutedForeground
+import com.example.ui.theme.V3Primary
 import com.example.ui.theme.V3PrimarySoft
 import com.example.ui.theme.V3Surface
 import com.example.ui.v3.V3AiSuggestion
@@ -99,6 +105,7 @@ fun AiAssistantContent(
 ) {
     var analysisInput by remember { mutableStateOf("") }
     var chatInput by remember { mutableStateOf("") }
+    var showDetailedCheck by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("ai_assistant_screen"),
@@ -109,21 +116,13 @@ fun AiAssistantContent(
             V3ScreenHeader(
                 eyebrow = "AI · CLICK & SAVE",
                 title = "עוזר החיסכון שלך",
-                subtitle = "הצעות מדורגות לפי מידע פיננסי מאומת שזמין כרגע.",
+                subtitle = "כבר בדקנו בשבילך מה כדאי לבדוק עכשיו — בלי לנחש ובלי להמציא סכומים.",
                 action = {
                     Surface(shape = RoundedCornerShape(14.dp), color = V3AiSoft, border = BorderStroke(1.dp, V3Border)) {
                         Icon(Icons.Default.AutoAwesome, null, tint = V3AiViolet, modifier = Modifier.padding(10.dp).size(21.dp))
                     }
                 }
             )
-            Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                VerificationBadge("הצעות יזומות: מבוססות על מידע מאומת")
-                Text(
-                    "בשיחה חופשית ההקשר הפיננסי המלא עדיין אינו מובטח; כשאין נתון סמכותי, לא נניח אותו.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
 
         if (!authenticated) {
@@ -134,108 +133,82 @@ fun AiAssistantContent(
                         Spacer(Modifier.size(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text("כדי להשתמש בעוזר צריך להתחבר", fontWeight = FontWeight.Bold)
-                            Text("אפשר להתחבר דרך מסך פרופיל. העוזר לא יציג מידע אישי לפני התחברות.", style = MaterialTheme.typography.bodySmall)
+                            Text("אחרי ההתחברות נציג רק מידע שניתן לבסס על המקורות המחוברים.", style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
             }
+        } else {
+            item {
+                if (primarySuggestions.isNotEmpty()) {
+                    V3Panel(containerColor = V3AiSoft) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(shape = RoundedCornerShape(12.dp), color = V3Surface, border = BorderStroke(1.dp, V3Border)) {
+                                Icon(Icons.Default.AutoAwesome, null, tint = V3AiViolet, modifier = Modifier.padding(9.dp).size(20.dp))
+                            }
+                            Spacer(Modifier.size(10.dp))
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("מצאתי מה כדאי לבדוק עכשיו", fontWeight = FontWeight.Bold)
+                                Text(primarySuggestions.first().label, style = MaterialTheme.typography.bodySmall, color = V3MutedForeground)
+                            }
+                        }
+                        VerificationBadge("מבוסס על מידע מאומת שזמין כרגע")
+                    }
+                } else {
+                    V3Panel {
+                        Text("עדיין אין לי מספיק מידע כדי להיות יזום", fontWeight = FontWeight.Bold)
+                        Text(
+                            "ברגע שיהיה איתות פיננסי מאומת, אציג כאן את הדבר שהכי כדאי לבדוק.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = V3MutedForeground
+                        )
+                    }
+                }
+            }
         }
 
-        item { Text("הצעות בשבילך", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+        item { V3SectionHeader("מה שכדאי לבדוק עכשיו") }
         if (primarySuggestions.isEmpty()) {
             item {
                 V3Panel {
-                    Text("אין כרגע הצעות אישיות מאומתות", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("אין כרגע הצעות אישיות מאומתות", style = MaterialTheme.typography.bodyMedium, color = V3MutedForeground)
                 }
             }
         } else {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    primarySuggestions.forEachIndexed { index, suggestion ->
-                        AssistChip(
-                            onClick = { if (authenticated && !isChatLoading) onSend(suggestion.prompt) },
-                            enabled = authenticated && !isChatLoading,
-                            label = { Text(suggestion.label) },
-                            leadingIcon = { Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp), tint = V3AiViolet) },
-                            modifier = Modifier.fillMaxWidth().testTag("ai_primary_suggestion_$index")
-                        )
-                    }
-                }
-            }
-        }
-
-        item { Text("אפשר לבדוק גם", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                secondarySuggestions.forEachIndexed { index, prompt ->
-                    AssistChip(
-                        onClick = { if (authenticated && !isChatLoading) onSend(prompt) },
-                        enabled = authenticated && !isChatLoading,
-                        label = { Text(prompt) },
-                        leadingIcon = { Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp), tint = V3AiViolet) },
-                        modifier = Modifier.fillMaxWidth().testTag("ai_secondary_suggestion_$index")
-                    )
-                }
-            }
-        }
-
-        item {
-            V3Panel {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(shape = RoundedCornerShape(12.dp), color = V3PrimarySoft) {
-                        Icon(Icons.Default.Shield, null, tint = TechBluePrimary, modifier = Modifier.padding(9.dp).size(19.dp))
-                    }
-                    Spacer(Modifier.size(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("בדיקת חשבון או מסלול", fontWeight = FontWeight.Bold)
-                        Text(
-                            "תאר את מה שאתה רוצה לבדוק. המלצה מסחרית נשארת כפופה למידע ומקור שניתן לאמת.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                OutlinedTextField(
-                    value = analysisInput,
-                    onValueChange = { analysisInput = it },
-                    label = { Text("מה לבדוק?") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    shape = RoundedCornerShape(14.dp)
+            items(primarySuggestions.take(6), key = { "primary:${it.prompt}" }) { suggestion ->
+                AiSuggestionCard(
+                    label = suggestion.label,
+                    enabled = authenticated && !isChatLoading,
+                    primary = true,
+                    onClick = { onSend(suggestion.prompt) }
                 )
-                Button(
-                    onClick = { onAnalyze(analysisInput) },
-                    enabled = authenticated && analysisInput.isNotBlank() && !isAnalyzing,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    if (isAnalyzing) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.size(8.dp))
-                    }
-                    Text(if (isAnalyzing) "בודק..." else "בדיקת המסלול")
-                }
-                if (errorMessage.isNotBlank()) {
-                    Text(errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                }
-                analysis?.let { DealAnalysisResultCard(it) }
             }
         }
 
+        item { V3SectionHeader("עוד דברים שכדאי לבדוק") }
+        items(secondarySuggestions.take(6), key = { "secondary:$it" }) { prompt ->
+            AiSuggestionCard(
+                label = prompt,
+                enabled = authenticated && !isChatLoading,
+                primary = false,
+                onClick = { onSend(prompt) }
+            )
+        }
+
+        item { V3SectionHeader("שיחה") }
         if (messages.isNotEmpty()) {
-            item { Text("השיחה שלך", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
             items(messages, key = { it.id }) { message -> ChatMessageBubble(message) }
         }
-
         item {
             V3Panel {
                 OutlinedTextField(
                     value = chatInput,
                     onValueChange = { chatInput = it },
-                    label = { Text("שאל את עוזר החיסכון") },
+                    placeholder = { Text("מה תרצה לבדוק?") },
                     modifier = Modifier.fillMaxWidth().testTag("ai_message_input"),
-                    minLines = 2,
-                    shape = RoundedCornerShape(14.dp)
+                    minLines = 1,
+                    maxLines = 3,
+                    shape = RoundedCornerShape(16.dp)
                 )
                 Button(
                     onClick = {
@@ -247,14 +220,111 @@ fun AiAssistantContent(
                     },
                     enabled = authenticated && chatInput.isNotBlank() && !isChatLoading,
                     modifier = Modifier.fillMaxWidth().testTag("ai_send"),
-                    shape = RoundedCornerShape(14.dp)
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = V3Primary)
                 ) {
                     if (isChatLoading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     else Icon(Icons.AutoMirrored.Filled.Send, null)
                     Spacer(Modifier.size(7.dp))
-                    Text(if (isChatLoading) "בודק..." else "שלח")
+                    Text(if (isChatLoading) "בודק..." else "שאל")
                 }
             }
+        }
+
+        item {
+            V3SecondaryButton(
+                label = if (showDetailedCheck) "סגור בדיקה מפורטת" else "בדיקה מפורטת של מסלול",
+                onClick = { showDetailedCheck = !showDetailedCheck },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = authenticated
+            )
+        }
+        if (showDetailedCheck) {
+            item {
+                V3Panel {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(shape = RoundedCornerShape(12.dp), color = V3PrimarySoft) {
+                            Icon(Icons.Default.Shield, null, tint = TechBluePrimary, modifier = Modifier.padding(9.dp).size(19.dp))
+                        }
+                        Spacer(Modifier.size(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("בדיקה מפורטת", fontWeight = FontWeight.Bold)
+                            Text(
+                                "המלצה מסחרית נשארת כפופה למידע ומקור שניתן לאמת.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = V3MutedForeground
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = analysisInput,
+                        onValueChange = { analysisInput = it },
+                        label = { Text("מה לבדוק?") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        shape = RoundedCornerShape(16.dp)
+                    )
+                    V3PrimaryButton(
+                        label = if (isAnalyzing) "בודק..." else "בדוק את המסלול",
+                        onClick = { onAnalyze(analysisInput) },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = authenticated && analysisInput.isNotBlank() && !isAnalyzing
+                    )
+                    analysis?.let { DealAnalysisResultCard(it) }
+                }
+            }
+        } else if (analysis != null) {
+            item {
+                V3Panel(containerColor = V3AiSoft) {
+                    Text("תוצאת הבדיקה האחרונה", fontWeight = FontWeight.Bold)
+                    DealAnalysisResultCard(analysis)
+                }
+            }
+        }
+
+        if (errorMessage.isNotBlank()) {
+            item {
+                V3Panel {
+                    Text(errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+
+        item {
+            V3Note("העוזר עונה לפי המידע הזמין מהמקורות המחוברים. הוא לא ממציא סכומים, לא מבטיח חיסכון, וכל פעולה מול ספק מתבצעת רק באישור מפורש שלך.")
+        }
+    }
+}
+
+@Composable
+private fun AiSuggestionCard(
+    label: String,
+    enabled: Boolean,
+    primary: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = if (primary) V3Surface else V3PrimarySoft,
+        border = BorderStroke(1.dp, V3Border),
+        shadowElevation = if (primary) 1.dp else 0.dp
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp), tint = V3AiViolet)
+            Text(
+                text = label,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else V3MutedForeground
+            )
         }
     }
 }
