@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -44,12 +45,13 @@ import com.example.data.repository.latestScanOrNull
 import com.example.ui.MainViewModel
 import com.example.ui.components.NextBestActionCard
 import com.example.ui.components.SavingsHero
+import com.example.ui.components.V3FinancialOverviewCard
+import com.example.ui.components.V3GradientHeader
 import com.example.ui.components.V3HomeActivityRow
 import com.example.ui.components.V3HomeIncreaseCard
 import com.example.ui.components.V3MonitoringLine
 import com.example.ui.components.V3Note
 import com.example.ui.components.V3Panel
-import com.example.ui.components.V3ScreenHeader
 import com.example.ui.components.V3SectionHeader
 import com.example.ui.components.V3SoftStatusCard
 import com.example.ui.theme.TechBluePrimary
@@ -92,25 +94,26 @@ fun DashboardScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            V3ScreenHeader(
-                eyebrow = "CLICK & SAVE AI",
-                title = firstName?.let { "שלום, $it" } ?: "הכסף שלך, במבט אחד",
-                subtitle = "כבר בדקנו בשבילך מה כדאי לעשות עכשיו כדי לשלם פחות.",
-                action = {
-                    Surface(
-                        onClick = { onNavigateToTab(4) },
-                        shape = RoundedCornerShape(14.dp),
-                        color = V3PrimarySoft
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "פרופיל",
-                            tint = TechBluePrimary,
-                            modifier = Modifier.padding(10.dp).size(21.dp)
-                        )
-                    }
+            Box {
+                V3GradientHeader(
+                    eyebrow = "CLICK & SAVE AI",
+                    title = firstName?.let { "שלום, $it" } ?: "הכסף שלך, במבט אחד",
+                    subtitle = "כל מה שכדאי לדעת עכשיו כדי לשלם פחות."
+                )
+                Surface(
+                    onClick = { onNavigateToTab(4) },
+                    modifier = Modifier.align(Alignment.TopStart).padding(14.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.16f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "פרופיל",
+                        tint = androidx.compose.ui.graphics.Color.White,
+                        modifier = Modifier.padding(10.dp).size(21.dp)
+                    )
                 }
-            )
+            }
         }
 
         when (val state = financialSyncState) {
@@ -213,6 +216,16 @@ private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItem
             },
             active = connection?.connected == true && !isSyncing,
             modifier = Modifier.testTag("v3_monitoring_status")
+        )
+    }
+
+    item {
+        V3FinancialOverviewCard(
+            observedMonthlySpend = home.context.observedRecurringMonthlySpend,
+            realizedMonthly = summary.realizedMonthly,
+            potentialMonthly = summary.potentialMonthly,
+            serviceCount = home.context.recurringServiceCount,
+            modifier = Modifier.testTag("v3_financial_overview")
         )
     }
 
