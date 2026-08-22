@@ -12,39 +12,46 @@ import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
     primary = TechBlueLight,
-    onPrimary = SurfaceLight,
-    secondary = EmeraldSavings,
-    onSecondary = SurfaceLight,
-    tertiary = AmberDeal,
-    background = BackgroundDark,
+    onPrimary = V3Surface,
+    secondary = V3Teal,
+    onSecondary = V3Surface,
+    tertiary = V3Success,
+    background = V3Navy,
     surface = SurfaceDark,
     surfaceVariant = SurfaceVariantDark,
     onBackground = TextPrimaryDark,
     onSurface = TextPrimaryDark,
     onSurfaceVariant = TextSecondaryDark,
-    error = AlertRed
+    outline = ColorDarkOutline,
+    error = V3Destructive
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = TechBluePrimary,
-    onPrimary = SurfaceLight,
-    primaryContainer = V3BlueSoft,
-    onPrimaryContainer = BrandNavy,
-    secondary = EmeraldSavings,
-    onSecondary = SurfaceLight,
-    secondaryContainer = V3EmeraldSoft,
-    onSecondaryContainer = BrandNavy,
-    tertiary = AmberDeal,
-    tertiaryContainer = V3AmberSoft,
+    primary = V3Primary,
+    onPrimary = V3Surface,
+    primaryContainer = V3PrimarySoft,
+    onPrimaryContainer = V3Navy,
+    secondary = V3Success,
+    onSecondary = V3Surface,
+    secondaryContainer = V3SuccessSoft,
+    onSecondaryContainer = V3Navy,
+    tertiary = V3Teal,
+    onTertiary = V3Surface,
+    tertiaryContainer = V3PrimarySoft,
+    onTertiaryContainer = V3Navy,
     background = V3Background,
-    surface = SurfaceLight,
-    surfaceVariant = V3SurfaceSoft,
-    onBackground = TextPrimaryLight,
-    onSurface = TextPrimaryLight,
-    onSurfaceVariant = TextSecondaryLight,
-    error = AlertRed,
+    surface = V3Surface,
+    surfaceVariant = V3Muted,
+    onBackground = V3Navy,
+    onSurface = V3Navy,
+    onSurfaceVariant = V3MutedForeground,
+    outline = V3Border,
+    outlineVariant = V3Border,
+    error = V3Destructive,
     errorContainer = V3ErrorSoft
 )
+
+private val ColorDarkOutline = Color(0xFF334155)
 
 @Composable
 fun ClickAndSaveTheme(
