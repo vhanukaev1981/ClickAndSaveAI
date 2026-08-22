@@ -63,6 +63,7 @@ fun ProfileScreen(
     val financialSyncState by viewModel.financialSyncState.collectAsState()
     val privacyOperationState by viewModel.privacyOperationState.collectAsState()
     val gmailSyncStep by viewModel.gmailSyncStep.collectAsState()
+    val gmailRecoveryDiagnostic by viewModel.gmailRepository.recoveryDiagnostic.collectAsState()
     var pendingConfirmation by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
@@ -89,6 +90,16 @@ fun ProfileScreen(
                 gmailSyncStep = gmailSyncStep,
                 onRequestGmailAuthorization = onRequestGmailAuthorization
             )
+        }
+        if (BuildConfig.DEBUG && gmailRecoveryDiagnostic.isNotBlank()) {
+            item {
+                Text(
+                    text = gmailRecoveryDiagnostic,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("gmail_recovery_diagnostic")
+                )
+            }
         }
 
         item { V3SectionHeader("פרטיות והרשאות") }
