@@ -191,6 +191,11 @@ test("dry-run returns sanitized count-only evidence using the current recurring 
   assert.equal(result.rejectedReceiptOnlyCount, 1);
   assert.equal(result.rejectedContractCount, 1);
   assert.equal(result.unknownCount, 1);
+  assert.deepEqual(result.unknownReasonCounts, {
+    BODY_FALLBACK_NO_PDF_CANDIDATE: 0,
+    PDF_CLASSIFIER_UNKNOWN_OR_UNSUPPORTED_CLASS: 1,
+    NORMALIZED_UNSUPPORTED_DOCUMENT_CLASS: 0,
+  });
 
   const serialized = JSON.stringify(result);
   for (const forbidden of [
@@ -223,6 +228,7 @@ test("dry-run returns sanitized count-only evidence using the current recurring 
     "result",
     "uniqueRecurringSourceCount",
     "unknownCount",
+    "unknownReasonCounts",
   ].sort());
 });
 
