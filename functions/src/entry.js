@@ -54,6 +54,7 @@ const providerDispatchFunctions = require("./providerDispatchFunctions");
 const commerceFunnelFunctions = require("./commerceFunnelFunctions");
 const gmailScanV5Functions = require("./gmailScanV5Functions");
 const gmailSyncStatusFunctions = require("./gmailSyncStatusFunctions");
+const gmailRecoveryDryRunFunctions = require("./gmailRecoveryDryRunFunctions");
 const gmailIncrementalReconciliation = require("./gmailIncrementalReconciliation");
 const gmailReliableScanFunctions = require("./gmailReliableScanFunctions");
 const gmailReliabilityGuard = require("./gmailReliabilityGuard");
@@ -84,6 +85,9 @@ module.exports = {
   ...providerDispatchFunctions,
   ...commerceFunnelFunctions,
   ...gmailSyncStatusFunctions,
+  // Explicit Staging-only, authenticated recovery diagnostic. It is intentionally separate
+  // from both normal refresh and parser/history lifecycle code and has no persistence path.
+  ...gmailRecoveryDryRunFunctions,
   ...gmailScanV5Functions,
   ...gmailIncrementalReconciliation,
   // Public scan is reliability-aware: initial/recovery backfills are bounded and subsequent
