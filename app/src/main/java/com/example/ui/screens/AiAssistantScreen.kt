@@ -67,6 +67,25 @@ private val SECONDARY_SAVINGS_ASSISTANT_PROMPTS = listOf(
     "תסביר לי את החשבון הזה"
 )
 
+private fun consumerAiError(message: String): String = when {
+    message.contains("temporarily unavailable", ignoreCase = true) ||
+        message.contains("unavailable", ignoreCase = true) ->
+        "שירות ה-AI אינו זמין כרגע. נסה שוב בעוד רגע."
+    else -> "לא הצלחנו להשלים את הבדיקה כרגע. נסה שוב בעוד רגע."
+}
+
+private fun consumerAiMessage(message: ChatMessage): String {
+    if (message.isUser) return message.text
+    return when {
+        message.text.contains("Backend מאומת", ignoreCase = true) ->
+            "אני כאן כדי לעזור לך להבין מה כדאי לבדוק ולחסוך. אציג רק מידע שאפשר לבסס על המקורות המחוברים."
+        message.text.contains("temporarily unavailable", ignoreCase = true) ||
+            message.text.contains("unavailable", ignoreCase = true) ->
+            "שירות ה-AI אינו זמין כרגע. נסה שוב בעוד רגע."
+        else -> message.text
+    }
+}
+
 @Composable
 fun AiAssistantScreen(viewModel: MainViewModel) {
     val analysis by viewModel.aiDealAnalysis.collectAsState()
@@ -182,12 +201,11 @@ fun AiAssistantContent(
         }
 
         item { V3SectionHeader("עוד דברים שכדאי לבדוק") }
-        items(secondarySuggestions.take(6), key = { "secondary:$it" }) { prompt ->
-            AiSuggestionCard(
-                label = prompt,
+        item {
+            AiSuggestionGrid(
+                prompts = secondarySuggestions.take(6),
                 enabled = authenticated && !isChatLoading,
-                primary = false,
-                onClick = { onSend(prompt) }
+                onSelect = onSend
             )
         }
 
@@ -281,7 +299,11 @@ fun AiAssistantContent(
         if (errorMessage.isNotBlank()) {
             item {
                 V3Panel {
-                    Text(errorMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    Text(
+                        consumerAiError(errorMessage),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             }
         }
@@ -293,31 +315,71 @@ fun AiAssistantContent(
 }
 
 @Composable
+private fun AiSuggestionGrid(
+    prompts: List<String>,
+    enabled: Boolean,
+    onSelect: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        prompts.chunked(2).forEach { rowPrompts ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowPrompts.forEach { prompt ->
+                    AiSuggestionCard(
+                        label = prompt,
+                        enabled = enabled,
+                        primary = false,
+                        onClick = { onSelect(prompt) },
+                        modifier = Modifier.weight(1f),
+                        compact = true
+                    )
+                }
+                if (rowPrompts.size == 1) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AiSuggestionCard(
     label: String,
     enabled: Boolean,
     primary: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
 ) {
     Surface(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         color = if (primary) V3Surface else V3GradientBlueSoft,
         border = BorderStroke(1.dp, V3Border),
         shadowElevation = if (primary) 3.dp else 1.dp
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 14.dp),
+            modifier = Modifier.fillMaxWidth().padding(
+                horizontal = if (compact) 11.dp else 15.dp,
+                vertical = if (compact) 10.dp else 14.dp
+            ),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 10.dp)
         ) {
-            Icon(Icons.Default.AutoAwesome, null, Modifier.size(18.dp), tint = V3AiViolet)
+            Icon(
+                Icons.Default.AutoAwesome,
+                null,
+                Modifier.size(if (compact) 16.dp else 18.dp),
+                tint = V3AiViolet
+            )
             Text(
                 text = label,
                 modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyMedium,
+                style = if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = if (enabled) MaterialTheme.colorScheme.onSurface else V3MutedForeground
             )
@@ -338,7 +400,7 @@ fun ChatMessageBubble(message: ChatMessage) {
         ) {
             Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(if (isUser) "אתה" else "Click & Save AI", style = MaterialTheme.typography.labelMedium, color = if (isUser) TechBluePrimary else V3AiViolet)
-                Text(message.text, style = MaterialTheme.typography.bodyMedium)
+                Text(consumerAiMessage(message), style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
