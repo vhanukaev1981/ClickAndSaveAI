@@ -9,9 +9,11 @@ const financialAgent = require("./financialAgentFunctions");
 const db = getFirestore();
 const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const INITIAL_GMAIL_LOOKBACK = "6m";
+const STAGING_PROJECT_ID = "clickandsaveai-staging";
 const MAX_HOME_ITEMS = 20;
 const MAX_ACTIVITY_IMPORTS = 50;
 const MAX_ACTIVITY_EVENTS = 100;
+const MAX_RECOVERY_DIAGNOSTIC_IMPORTS = 1000;
 
 function requireAuth(request) {
   const uid = request.auth?.uid;
@@ -53,6 +55,74 @@ function buildGmailSyncStatus(connection) {
     upgradeRequired: connected && !initialBackfillCompleted,
     lookback: INITIAL_GMAIL_LOOKBACK,
   };
+}
+
+function recoveryCandidateCount(data) {
+  if (Array.isArray(data?.candidates)) return data.candidates.length;
+  if (Array.isArray(data?.invoices)) return data.invoices.length;
+  return data?.invoice && typeof data.invoice === "object" ? 1 : 0;
+}
+
+function buildGmailRecoveryState({
+  connection = null,
+  authoritativeInvoiceCount = 0,
+  gmailMessageImportCount = null,
+  importDocs = [],
+  importsTruncated = false,
+} = {}) {
+  const data = connection && typeof connection === "object" ? connection : {};
+  const safeImports = Array.isArray(importDocs) ? importDocs : [];
+  const parserDistribution = {};
+  let storedCandidateCount = 0;
+
+  for (const item of safeImports) {
+    const rawVersion = Number(item?.parserVersion || 0);
+    const parserVersion = Number.isFinite(rawVersion) && rawVersion >= 0
+      ? Math.floor(rawVersion)
+      : 0;
+    const key = String(parserVersion);
+    parserDistribution[key] = (parserDistribution[key] || 0) + 1;
+    storedCandidateCount += recoveryCandidateCount(item);
+  }
+
+  const exactImportCount = Number(gmailMessageImportCount);
+  return {
+    initialBackfillCompleted: data.initialBackfillCompleted === true ||
+      Boolean(data.initialBackfillCompletedAt),
+    initialBackfillCompletedAt: timestampToIso(data.initialBackfillCompletedAt),
+    storedParserVersion: Math.max(0, Number(data.parserVersion || 0)),
+    activeParserVersion: ACTIVE_GMAIL_PARSER_VERSION,
+    authoritativeInvoiceCount: Math.max(0, Number(authoritativeInvoiceCount || 0)),
+    gmailMessageImportCount: Number.isFinite(exactImportCount) && exactImportCount >= 0
+      ? Math.floor(exactImportCount)
+      : safeImports.length,
+    gmailMessageImportsParserVersionDistribution: parserDistribution,
+    storedCandidateCount,
+    importsTruncated: importsTruncated === true,
+  };
+}
+
+async function loadGmailRecoveryState(uid, connection) {
+  const userRef = db.collection("users").doc(uid);
+  const invoiceRef = userRef.collection("gmailInvoices");
+  const importRef = userRef.collection("gmailMessageImports");
+  const [invoiceCountSnapshot, importCountSnapshot, importSnapshot] = await Promise.all([
+    invoiceRef.count().get(),
+    importRef.count().get(),
+    importRef.limit(MAX_RECOVERY_DIAGNOSTIC_IMPORTS + 1).get(),
+  ]);
+  const importsTruncated = importSnapshot.size > MAX_RECOVERY_DIAGNOSTIC_IMPORTS;
+  const importDocs = importSnapshot.docs
+    .slice(0, MAX_RECOVERY_DIAGNOSTIC_IMPORTS)
+    .map((doc) => doc.data());
+
+  return buildGmailRecoveryState({
+    connection,
+    authoritativeInvoiceCount: invoiceCountSnapshot.data().count,
+    gmailMessageImportCount: importCountSnapshot.data().count,
+    importDocs,
+    importsTruncated,
+  });
 }
 
 function normalizeFinancialHomeContext(context) {
@@ -184,7 +254,20 @@ exports.getGmailSyncStatus = onCall(
   async (request) => {
     const uid = requireAuth(request);
     const snapshot = await db.collection("gmailConnections").doc(uid).get();
-    return buildGmailSyncStatus(snapshot.exists ? snapshot.data() : null);
+    const connection = snapshot.exists ? snapshot.data() : null;
+    const result = buildGmailSyncStatus(connection);
+
+    if (request.data?.includeRecoveryDiagnostics === true) {
+      if (process.env.GCLOUD_PROJECT !== STAGING_PROJECT_ID) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Recovery diagnostics are available only in Staging."
+        );
+      }
+      result.recoveryState = await loadGmailRecoveryState(uid, connection);
+    }
+
+    return result;
   }
 );
 
@@ -238,5 +321,7 @@ exports.getFinancialActivity = onCall(
 );
 
 exports._buildGmailSyncStatus = buildGmailSyncStatus;
+exports._buildGmailRecoveryState = buildGmailRecoveryState;
+exports._loadGmailRecoveryState = loadGmailRecoveryState;
 exports._normalizeFinancialHomeContext = normalizeFinancialHomeContext;
 exports._buildFinancialActivityLedger = buildFinancialActivityLedger;
