@@ -85,7 +85,10 @@ function buildGmailRecoveryState({
     storedCandidateCount += recoveryCandidateCount(item);
   }
 
-  const exactImportCount = Number(gmailMessageImportCount);
+  const hasExactImportCount = gmailMessageImportCount !== null &&
+    gmailMessageImportCount !== undefined &&
+    gmailMessageImportCount !== "";
+  const exactImportCount = hasExactImportCount ? Number(gmailMessageImportCount) : NaN;
   return {
     initialBackfillCompleted: data.initialBackfillCompleted === true ||
       Boolean(data.initialBackfillCompletedAt),
