@@ -104,6 +104,7 @@ test("UNKNOWN candidates produce only sanitized aggregate reason counts while cl
   assert.equal(summary.unknownCount, 3);
   assert.deepEqual(summary.unknownReasonCounts, {
     BODY_FALLBACK_NO_PDF_CANDIDATE: 1,
+    BODY_FALLBACK_PDF_ANALYSIS_FAILURE: 0,
     PDF_CLASSIFIER_UNKNOWN_OR_UNSUPPORTED_CLASS: 1,
     NORMALIZED_UNSUPPORTED_DOCUMENT_CLASS: 1,
   });
@@ -145,6 +146,7 @@ test("controlled recovery response keeps the count-only contract and exposes rea
   assert.equal(result.unknownCount, 1);
   assert.deepEqual(result.unknownReasonCounts, {
     BODY_FALLBACK_NO_PDF_CANDIDATE: 1,
+    BODY_FALLBACK_PDF_ANALYSIS_FAILURE: 0,
     PDF_CLASSIFIER_UNKNOWN_OR_UNSUPPORTED_CLASS: 0,
     NORMALIZED_UNSUPPORTED_DOCUMENT_CLASS: 0,
   });
