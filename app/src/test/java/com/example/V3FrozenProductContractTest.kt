@@ -12,13 +12,13 @@ class V3FrozenProductContractTest {
         val labels = listOf("בית", "חיסכון", "AI", "לתשלום", "פרופיל")
         var previous = -1
         labels.forEach { label ->
-            val position = nav.indexOf("PremiumNavItem(\"$label\"")
+            val position = nav.indexOf("\"$label\"")
             assertTrue("missing primary label $label", position >= 0)
             assertTrue("primary navigation order changed at $label", position > previous)
             previous = position
         }
-        assertFalse(nav.contains("PremiumNavItem(\"פעילות\""))
-        assertFalse(nav.contains("PremiumNavItem(\"אני\""))
+        assertFalse(nav.contains("\"פעילות\""))
+        assertFalse(nav.contains("\"אני\""))
         listOf("nav_home", "nav_savings", "nav_ai", "nav_pay", "nav_profile").forEach { tag -> assertTrue("missing nav tag $tag", nav.contains("\"$tag\"")) }
         assertTrue(nav.contains("items.forEachIndexed"))
         assertTrue(nav.contains("onTabSelected(index)"))
