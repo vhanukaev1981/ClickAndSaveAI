@@ -50,10 +50,11 @@ class FinancialRecoveryPipelineTest {
     fun connectedRecoveryCallsServerInRequiredOrderAndReachesReady() = runBlocking {
         val order = mutableListOf<String>()
         val states = mutableListOf<FinancialSyncState>()
+        val connection = GmailConnectionResult(true, "user@example.com", "gmail-readonly-v1")
         val recovery = FinancialSessionRecovery(
             getConnectionStatus = {
                 order += "connection"
-                GmailConnectionResult(true, "user@example.com", "gmail-readonly-v1")
+                connection
             },
             recoverInvoices = {
                 order += "scan"
@@ -70,7 +71,7 @@ class FinancialRecoveryPipelineTest {
         assertEquals(listOf("connection", "scan", "home"), order)
         assertEquals(FinancialSyncState.CheckingConnection, states.first())
         assertTrue(states.contains(FinancialSyncState.Recovering))
-        assertEquals(FinancialSyncState.Ready(scan, home), result)
+        assertEquals(FinancialSyncState.Ready(scan, home, gmailConnection = connection), result)
         assertEquals(result, states.last())
     }
 
@@ -100,10 +101,9 @@ class FinancialRecoveryPipelineTest {
 
     @Test
     fun financialHomeFailureAfterBillRecoveryRetainsBillsButNotInventedTotals() = runBlocking {
+        val connection = GmailConnectionResult(true, "user@example.com", "gmail-readonly-v1")
         val recovery = FinancialSessionRecovery(
-            getConnectionStatus = {
-                GmailConnectionResult(true, "user@example.com", "gmail-readonly-v1")
-            },
+            getConnectionStatus = { connection },
             recoverInvoices = { scan },
             getFinancialHome = { throw IllegalStateException("home unavailable") }
         )
@@ -114,7 +114,8 @@ class FinancialRecoveryPipelineTest {
         assertEquals(scan, result.latestScanOrNull)
         assertNull(result.financialHomeOrNull)
         assertNull(result.observedRecurringMonthlySpendOrNull)
-        assertTrue((result as FinancialSyncState.Partial).reason.isNotBlank())
+        assertEquals(connection, (result as FinancialSyncState.Partial).gmailConnection)
+        assertTrue(result.reason.isNotBlank())
     }
 
     @Test
@@ -123,10 +124,11 @@ class FinancialRecoveryPipelineTest {
         var scanCalls = 0
         var homeCalls = 0
         val previous = FinancialSyncState.Ready(scan, home)
+        val connection = GmailConnectionResult(true, "user@example.com", "gmail-readonly-v1")
         val recovery = FinancialSessionRecovery(
             getConnectionStatus = {
                 connectionCalls += 1
-                GmailConnectionResult(true, "user@example.com", "gmail-readonly-v1")
+                connection
             },
             recoverInvoices = {
                 scanCalls += 1
@@ -146,6 +148,7 @@ class FinancialRecoveryPipelineTest {
         assertTrue(result is FinancialSyncState.Partial)
         assertEquals(scan, result.latestScanOrNull)
         assertEquals(home, result.financialHomeOrNull)
+        assertEquals(connection, (result as FinancialSyncState.Partial).gmailConnection)
         assertEquals(99.0, result.observedRecurringMonthlySpendOrNull!!, 0.0)
     }
 
