@@ -40,10 +40,10 @@ import androidx.compose.ui.unit.dp
 import com.example.ai.DealAnalysisResult
 import com.example.ui.ChatMessage
 import com.example.ui.MainViewModel
+import com.example.ui.components.V3AiExperienceHero
 import com.example.ui.components.V3Note
 import com.example.ui.components.V3Panel
 import com.example.ui.components.V3PrimaryButton
-import com.example.ui.components.V3ScreenHeader
 import com.example.ui.components.V3SecondaryButton
 import com.example.ui.components.V3SectionHeader
 import com.example.ui.components.VerificationBadge
@@ -51,6 +51,7 @@ import com.example.ui.theme.TechBluePrimary
 import com.example.ui.theme.V3AiSoft
 import com.example.ui.theme.V3AiViolet
 import com.example.ui.theme.V3Border
+import com.example.ui.theme.V3GradientBlueSoft
 import com.example.ui.theme.V3MutedForeground
 import com.example.ui.theme.V3Primary
 import com.example.ui.theme.V3PrimarySoft
@@ -113,15 +114,10 @@ fun AiAssistantContent(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            V3ScreenHeader(
-                eyebrow = "AI · CLICK & SAVE",
+            V3AiExperienceHero(
                 title = "עוזר החיסכון שלך",
-                subtitle = "כבר בדקנו בשבילך מה כדאי לבדוק עכשיו — בלי לנחש ובלי להמציא סכומים.",
-                action = {
-                    Surface(shape = RoundedCornerShape(14.dp), color = V3AiSoft, border = BorderStroke(1.dp, V3Border)) {
-                        Icon(Icons.Default.AutoAwesome, null, tint = V3AiViolet, modifier = Modifier.padding(10.dp).size(21.dp))
-                    }
-                }
+                subtitle = "אני מרכז עבורך את הדברים שכדאי לבדוק עכשיו — רק לפי המידע שיש לנו.",
+                status = if (authenticated) "מוכן לבדיקה" else "התחברות נדרשת"
             )
         }
 
@@ -141,7 +137,7 @@ fun AiAssistantContent(
         } else {
             item {
                 if (primarySuggestions.isNotEmpty()) {
-                    V3Panel(containerColor = V3AiSoft) {
+                    V3Panel(containerColor = V3GradientBlueSoft) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Surface(shape = RoundedCornerShape(12.dp), color = V3Surface, border = BorderStroke(1.dp, V3Border)) {
                                 Icon(Icons.Default.AutoAwesome, null, tint = V3AiViolet, modifier = Modifier.padding(9.dp).size(20.dp))
@@ -152,7 +148,7 @@ fun AiAssistantContent(
                                 Text(primarySuggestions.first().label, style = MaterialTheme.typography.bodySmall, color = V3MutedForeground)
                             }
                         }
-                        VerificationBadge("מבוסס על מידע מאומת שזמין כרגע")
+                        VerificationBadge("מבוסס על המידע הזמין כרגע")
                     }
                 } else {
                     V3Panel {
@@ -250,7 +246,7 @@ fun AiAssistantContent(
                         Column(Modifier.weight(1f)) {
                             Text("בדיקה מפורטת", fontWeight = FontWeight.Bold)
                             Text(
-                                "המלצה מסחרית נשארת כפופה למידע ומקור שניתן לאמת.",
+                                "המלצה מסחרית נשארת כפופה למידע שניתן לאמת.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = V3MutedForeground
                             )
@@ -307,13 +303,13 @@ private fun AiSuggestionCard(
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = if (primary) V3Surface else V3PrimarySoft,
+        shape = RoundedCornerShape(18.dp),
+        color = if (primary) V3Surface else V3GradientBlueSoft,
         border = BorderStroke(1.dp, V3Border),
-        shadowElevation = if (primary) 1.dp else 0.dp
+        shadowElevation = if (primary) 3.dp else 1.dp
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
