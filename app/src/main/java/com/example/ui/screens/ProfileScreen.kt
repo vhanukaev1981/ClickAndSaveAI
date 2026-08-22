@@ -1,10 +1,8 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Login
@@ -39,7 +37,7 @@ import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.gmailConnectionOrNull
 import com.example.ui.MainViewModel
 import com.example.ui.PrivacyOperationUiState
-import com.example.ui.components.V3ScreenHeader
+import com.example.ui.components.V3ProfileHero
 import com.example.ui.components.V3SectionHeader
 import com.example.ui.components.V3SettingsGroup
 import com.example.ui.components.V3SettingsRow
@@ -60,6 +58,7 @@ fun ProfileScreen(
     val financialSyncState by viewModel.financialSyncState.collectAsState()
     val privacyOperationState by viewModel.privacyOperationState.collectAsState()
     var pendingConfirmation by remember { mutableStateOf<String?>(null) }
+    val heroSession = (authState as? AuthState.Authenticated)?.session
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("profile_screen"),
@@ -67,10 +66,10 @@ fun ProfileScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            V3ScreenHeader(
-                eyebrow = "החשבון שלך",
-                title = "פרופיל",
-                subtitle = "החיבורים, הפרטיות, הפעילות והאבטחה שלך במקום אחד."
+            V3ProfileHero(
+                displayName = heroSession?.displayName.orEmpty(),
+                email = heroSession?.email.orEmpty(),
+                authenticated = heroSession != null
             )
         }
 
