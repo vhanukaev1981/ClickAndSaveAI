@@ -56,14 +56,15 @@ function passingDependencies(candidates) {
 
 test("UNKNOWN candidates produce only sanitized aggregate reason counts while classification remains unchanged", () => {
   const candidates = [
-    candidate({ sourceMessageId: "recurring", providerName: "SECRET_RECURRING" }),
-    candidate({ sourceMessageId: "one-off", providerName: "SECRET_ONE_OFF", documentClass: "ONE_OFF", recurrenceEvidence: "NONE", recurrenceType: "UNKNOWN" }),
-    candidate({ sourceMessageId: "refund", providerName: "SECRET_REFUND", documentClass: "REFUND", recurrenceEvidence: "NONE", recurrenceType: "UNKNOWN" }),
-    candidate({ sourceMessageId: "receipt", providerName: "SECRET_RECEIPT", documentClass: "RECEIPT_ONLY", recurrenceEvidence: "NONE", recurrenceType: "UNKNOWN" }),
-    candidate({ sourceMessageId: "contract", providerName: "SECRET_CONTRACT", documentClass: "CONTRACT", recurrenceEvidence: "NONE", recurrenceType: "UNKNOWN" }),
+    candidate({ sourceMessageId: "recurring", providerName: "SECRET_RECURRING", receivedDate: "2026-07-01" }),
+    candidate({ sourceMessageId: "one-off", providerName: "SECRET_ONE_OFF", receivedDate: "2026-07-02", documentClass: "ONE_OFF", recurrenceEvidence: "NONE", recurrenceType: "UNKNOWN", contentFingerprint: `sha256:${"2".repeat(64)}` }),
+    candidate({ sourceMessageId: "refund", providerName: "SECRET_REFUND", receivedDate: "2026-07-03", documentClass: "REFUND", recurrenceEvidence: "NONE", recurrenceType: "UNKNOWN", contentFingerprint: `sha256:${"3".repeat(64)}` }),
+    candidate({ sourceMessageId: "receipt", providerName: "SECRET_RECEIPT", receivedDate: "2026-07-04", documentClass: "RECEIPT_ONLY", recurrenceEvidence: "NONE", recurrenceType: "UNKNOWN", contentFingerprint: `sha256:${"4".repeat(64)}` }),
+    candidate({ sourceMessageId: "contract", providerName: "SECRET_CONTRACT", receivedDate: "2026-07-05", documentClass: "CONTRACT", recurrenceEvidence: "NONE", recurrenceType: "UNKNOWN", contentFingerprint: `sha256:${"5".repeat(64)}` }),
     candidate({
       sourceMessageId: "body-unknown",
       providerName: "SECRET_BODY_UNKNOWN",
+      receivedDate: "2026-07-06",
       documentClass: "UNKNOWN",
       recurrenceEvidence: "NONE",
       recurrenceType: "UNKNOWN",
@@ -72,6 +73,7 @@ test("UNKNOWN candidates produce only sanitized aggregate reason counts while cl
     candidate({
       sourceMessageId: "pdf-unknown",
       providerName: "SECRET_PDF_UNKNOWN",
+      receivedDate: "2026-07-07",
       documentClass: "UNKNOWN",
       recurrenceEvidence: "NONE",
       recurrenceType: "UNKNOWN",
@@ -80,6 +82,7 @@ test("UNKNOWN candidates produce only sanitized aggregate reason counts while cl
     candidate({
       sourceMessageId: "normalized-fallback",
       providerName: "SECRET_NORMALIZED_UNKNOWN",
+      receivedDate: "2026-07-08",
       documentClass: "UNSUPPORTED_CLASSIFIER_VALUE",
       recurrenceEvidence: "NONE",
       recurrenceType: "UNKNOWN",
@@ -163,16 +166,20 @@ test("controlled recovery response keeps the count-only contract and exposes rea
 });
 
 test("classification policy behavior is unchanged for all document classes", () => {
-  const selected = selectRecurringBills([
-    candidate({ sourceMessageId: "recurring" }),
-    candidate({ sourceMessageId: "one-off", documentClass: "ONE_OFF", recurrenceEvidence: "NONE", recurrenceType: "UNKNOWN" }),
-    candidate({ sourceMessageId: "refund", documentClass: "REFUND", recurrenceEvidence: "NONE", recurrenceType: "UNKNOWN" }),
-    candidate({ sourceMessageId: "receipt", providerName: "Receipt Provider", documentClass: "RECEIPT_ONLY", recurrenceEvidence: "NONE", recurrenceType: "UNKNOWN" }),
-    candidate({ sourceMessageId: "contract", documentClass: "CONTRACT", recurrenceEvidence: "NONE", recurrenceType: "UNKNOWN" }),
-    candidate({ sourceMessageId: "unknown", documentClass: "UNKNOWN", recurrenceEvidence: "NONE", recurrenceType: "UNKNOWN" }),
-  ]);
+  const recurring = candidate({ sourceMessageId: "recurring" });
+  assert.deepEqual(selectRecurringBills([recurring]).map((item) => item.documentClass), ["RECURRING_BILL"]);
 
-  assert.deepEqual(selected.map((item) => item.sourceMessageId), ["recurring"]);
+  for (const documentClass of ["ONE_OFF", "REFUND", "RECEIPT_ONLY", "CONTRACT", "UNKNOWN"]) {
+    const item = candidate({
+      sourceMessageId: `synthetic-${documentClass.toLowerCase()}`,
+      providerName: `Synthetic ${documentClass}`,
+      documentClass,
+      recurrenceEvidence: "NONE",
+      recurrenceType: "UNKNOWN",
+    });
+    assert.deepEqual(selectRecurringBills([item]), [], `${documentClass} classification changed`);
+    assert.equal(item.documentClass, documentClass);
+  }
 });
 
 test("diagnostic change cannot introduce persistence, reconnect, scope expansion, or automatic recovery", () => {
