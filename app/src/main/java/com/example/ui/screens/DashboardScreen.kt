@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,11 +20,10 @@ import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,9 +49,14 @@ import com.example.ui.components.FinancialSnapshot
 import com.example.ui.components.MonitoringStatus
 import com.example.ui.components.NextBestActionCard
 import com.example.ui.components.SavingsHero
+import com.example.ui.components.V3Panel
+import com.example.ui.components.V3ScreenHeader
 import com.example.ui.components.V3SectionHeader
 import com.example.ui.components.V3SoftStatusCard
 import com.example.ui.theme.TechBluePrimary
+import com.example.ui.theme.V3Border
+import com.example.ui.theme.V3PrimarySoft
+import com.example.ui.theme.V3Surface
 import com.example.ui.v3.asV3Money
 import com.example.ui.v3.toV3SavingsSummary
 
@@ -84,18 +90,15 @@ fun DashboardScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("dashboard_screen"),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 108.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("הכסף שלך, במבט אחד", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text(
-                    "מה כבר חסכת, מה עוד אפשר לחסוך ומה כדאי לעשות עכשיו.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            V3ScreenHeader(
+                eyebrow = "CLICK & SAVE",
+                title = "הכסף שלך, במבט אחד",
+                subtitle = "מה כבר חסכת, מה עוד אפשר לחסוך ומה כדאי לעשות עכשיו."
+            )
         }
 
         when (val state = financialSyncState) {
@@ -252,13 +255,16 @@ private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItem
             )
         }
         items(recentInvoices.take(3), key = { it.sourceMessageId }) { invoice ->
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Row(modifier = Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, tint = TechBluePrimary)
+            V3Panel {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Surface(shape = RoundedCornerShape(12.dp), color = V3PrimarySoft) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ReceiptLong,
+                            contentDescription = null,
+                            tint = TechBluePrimary,
+                            modifier = Modifier.padding(9.dp).size(20.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.size(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(invoice.providerName, fontWeight = FontWeight.Bold)
@@ -290,15 +296,17 @@ private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItem
 @Composable
 private fun HomeShortcut(
     title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    Surface(
         onClick = onClick,
         modifier = modifier,
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        color = V3Surface,
+        border = BorderStroke(1.dp, V3Border),
+        shadowElevation = 1.dp
     ) {
         Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, tint = TechBluePrimary)
@@ -309,20 +317,14 @@ private fun HomeShortcut(
 
 @Composable
 private fun HomeStatusCard(title: String, body: String, action: (@Composable () -> Unit)? = null) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.ErrorOutline, contentDescription = null)
-                Spacer(modifier = Modifier.size(8.dp))
-                Text(title, fontWeight = FontWeight.Bold)
-            }
-            Text(body, style = MaterialTheme.typography.bodyMedium)
-            action?.invoke()
+    V3Panel {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = TechBluePrimary)
+            Spacer(modifier = Modifier.size(8.dp))
+            Text(title, fontWeight = FontWeight.Bold)
         }
+        Text(body, style = MaterialTheme.typography.bodyMedium)
+        action?.invoke()
     }
 }
 
