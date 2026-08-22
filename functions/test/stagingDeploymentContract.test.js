@@ -55,6 +55,8 @@ test("staging deploy preserves current main hardening controls", () => {
 test("staging deploy includes only required Firebase Core targets", () => {
   assert.match(workflow, /firebase deploy/);
   assert.match(workflow, /--project clickandsaveai-staging/);
-  assert.match(workflow, /--only firestore:rules,firestore:indexes,functions/);
+  assert.match(workflow, /--only firestore:rules,firestore:indexes/);
+  assert.match(workflow, /--only functions/);
   assert.match(workflow, /--non-interactive/);
+  assert.doesNotMatch(workflow, /--only[^\n]*(hosting|storage|database)/);
 });

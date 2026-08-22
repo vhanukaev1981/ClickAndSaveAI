@@ -3,6 +3,9 @@
     "source": "functions",
     "codebase": "default",
     "runtime": "nodejs22",
+    "predeploy": [
+      "bash scripts/staging-artifact-cleanup-predeploy.sh"
+    ],
     "ignore": [
       "node_modules",
       ".git",

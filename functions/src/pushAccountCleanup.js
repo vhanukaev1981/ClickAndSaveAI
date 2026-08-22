@@ -11,7 +11,7 @@ const PRODUCTION_AUTH_CLEANUP_SERVICE_ACCOUNT =
   "clicksave-auth-cleanup@click-save-ai-production.iam.gserviceaccount.com";
 const authCleanupServiceAccount = projectID
   .equals("click-save-ai-production")
-  .thenElse(PRODUCTION_AUTH_CLEANUP_SERVICE_ACCOUNT, "default");
+  .thenElse(PRODUCTION_AUTH_CLEANUP_SERVICE_ACCOUNT, "");
 
 async function deletePushRegistrations(uid) {
   const collection = db.collection("users").doc(uid).collection("pushTokens");

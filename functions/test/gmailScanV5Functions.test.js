@@ -11,9 +11,9 @@ const assert = require("node:assert/strict");
 const entry = require("../src/entry");
 const scan = require("../src/gmailScanV5Functions");
 
-test("public scanGmailInvoices export stays on the stable scan module with active revision 6", () => {
-  assert.equal(scan.GMAIL_PARSER_VERSION_ACTIVE, 6);
-  assert.equal(scan.GMAIL_PARSER_VERSION_V5, 6);
+test("public scanGmailInvoices export stays on the stable scan module with active revision 7", () => {
+  assert.equal(scan.GMAIL_PARSER_VERSION_ACTIVE, 7);
+  assert.equal(scan.GMAIL_PARSER_VERSION_V5, 7);
   assert.equal(entry.scanGmailInvoices, scan.scanGmailInvoices);
 });
 
@@ -25,10 +25,14 @@ test("stored invoice normalization preserves an explicit canonical service type"
     serviceType: "INTERNET_1000_MBPS",
     monthlyCost: 129,
     receivedDate: "2026-08-01",
+    documentClass: "RECURRING_BILL",
+    recurrenceEvidence: "TELECOM_SERVICE",
+    recurrenceType: "FIXED_MONTHLY",
   });
 
   assert.equal(invoice.serviceType, "INTERNET_1000_MBPS");
   assert.equal(invoice.monthlyCost, 129);
+  assert.equal(invoice.documentClass, "RECURRING_BILL");
 });
 
 test("stored invoice normalization does not invent a service type", () => {
@@ -41,6 +45,7 @@ test("stored invoice normalization does not invent a service type", () => {
   });
 
   assert.equal(Object.hasOwn(invoice, "serviceType"), false);
+  assert.equal(invoice.documentClass, "UNKNOWN");
 });
 
 test("scan callable preserves aggregate recovery metadata required by staging proof", () => {
@@ -62,4 +67,5 @@ test("scan callable preserves aggregate recovery metadata required by staging pr
     assert.match(returnBlock, new RegExp(`\\b${field}\\b`), `scan response lost ${field}`);
   }
   assert.match(source, /const INITIAL_GMAIL_LOOKBACK = "6m"/);
+  assert.match(source, /initialBackfillCompletedAt/);
 });

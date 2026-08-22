@@ -28,8 +28,12 @@ function syncMode(connection, activeParserVersion = ACTIVE_GMAIL_PARSER_VERSION)
   const data = connection && typeof connection === "object" ? connection : {};
   if (data.initialBackfillCompleted !== true) return "INITIAL_BACKFILL";
   if (data.historyRecoveryRequired === true) return "RECOVERY_REQUIRED";
-  const storedParserVersion = Math.max(0, Number(data.parserVersion || 0));
-  if (storedParserVersion < activeParserVersion) return "PARSER_UPGRADE_BACKFILL";
+
+  // Parser upgrades never reopen the six-month mailbox window. Once the initial
+  // baseline exists, all subsequent processing stays on Gmail History/watch.
+  // `activeParserVersion` remains an explicit argument because callers use the
+  // same policy across releases and tests, but it must not alter the lifecycle.
+  void activeParserVersion;
   return "INCREMENTAL";
 }
 

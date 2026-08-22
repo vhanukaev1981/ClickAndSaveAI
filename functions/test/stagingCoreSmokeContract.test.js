@@ -217,13 +217,17 @@ test("WIF smoke mints short-lived Firebase Auth and App Check tokens for an expl
   assert.equal(calls[3][2].returnSecureToken, true);
 });
 
-test("deployment runs authenticated staging truth smoke only after Firebase deploy and uploads sanitized evidence", () => {
+test("deployment runs authenticated staging truth smoke only after verified Firestore and Functions deploy and uploads sanitized evidence", () => {
   const workflow = fs.readFileSync(workflowPath, "utf8");
-  const deployIndex = workflow.indexOf("Deploy functions and Firestore to staging");
+  const firestoreIndex = workflow.indexOf("Deploy Firestore to staging");
+  const functionsIndex = workflow.indexOf("Deploy Functions to staging with guarded classifier");
+  const activeIndex = workflow.indexOf("Verify deployed staging Functions are ACTIVE");
   const smokeIndex = workflow.indexOf("Run authenticated staging truth smoke");
 
-  assert.ok(deployIndex >= 0, "Firebase deploy step is missing");
-  assert.ok(smokeIndex > deployIndex, "staging smoke must run only after Firebase deploy");
+  assert.ok(firestoreIndex >= 0, "Firestore deploy step is missing");
+  assert.ok(functionsIndex > firestoreIndex, "Functions deploy must follow successful Firestore deploy");
+  assert.ok(activeIndex > functionsIndex, "deployed Functions must be independently verified before smoke");
+  assert.ok(smokeIndex > activeIndex, "staging smoke must run only after verified Firebase deploy");
   assert.match(workflow, /STAGING_SMOKE_USER_UID/);
   assert.match(workflow, /GCP_DEPLOY_SERVICE_ACCOUNT/);
   assert.doesNotMatch(workflow, /STAGING_TEST_FIREBASE_REFRESH_TOKEN/);

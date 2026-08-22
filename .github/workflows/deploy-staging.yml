@@ -69,15 +69,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          RUNS="$(gh api --method GET "/repos/$GITHUB_REPOSITORY/actions/workflows/android-ci.yml/runs?head_sha=$SOURCE_SHA&per_page=20")"
-          STATUS="$(printf '%s' "$RUNS" | jq -r '.workflow_runs[0].status // ""')"
-          CONCLUSION="$(printf '%s' "$RUNS" | jq -r '.workflow_runs[0].conclusion // ""')"
-          RUN_NUMBER="$(printf '%s' "$RUNS" | jq -r '.workflow_runs[0].run_number // ""')"
-          if [[ "$STATUS" != "completed" || "$CONCLUSION" != "success" ]]; then
-            echo "Exact source SHA $SOURCE_SHA does not have completed successful CI." >&2
-            exit 1
-          fi
-          echo "Verified CI #$RUN_NUMBER SUCCESS for exact source SHA $SOURCE_SHA."
+          required_workflows=(
+            'android-ci.yml|Android and Backend CI'
+            'production-operations-ci.yml|Production Operations CI'
+            'production-enablement-ci.yml|Production Enablement Security CI'
+          )
+          for entry in "${required_workflows[@]}"; do
+            IFS='|' read -r workflow_file workflow_name <<< "$entry"
+            RUNS="$(gh api --method GET "/repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_file/runs?head_sha=$SOURCE_SHA&per_page=20")"
+            STATUS="$(printf '%s' "$RUNS" | jq -r '.workflow_runs[0].status // ""')"
+            CONCLUSION="$(printf '%s' "$RUNS" | jq -r '.workflow_runs[0].conclusion // ""')"
+            RUN_NUMBER="$(printf '%s' "$RUNS" | jq -r '.workflow_runs[0].run_number // ""')"
+            if [[ "$STATUS" != "completed" || "$CONCLUSION" != "success" ]]; then
+              echo "$workflow_name is not completed SUCCESS for exact source SHA $SOURCE_SHA." >&2
+              exit 1
+            fi
+            echo "Verified $workflow_name #$RUN_NUMBER SUCCESS for exact source SHA $SOURCE_SHA."
+          done
 
       - name: Verify staging deployment configuration
         env:
@@ -227,15 +235,97 @@ jobs:
           grep -Fq 'status: "RETRYABLE_FAILURE"' "$source_file"
           echo 'Verified intentional retry policy with deterministic delivery identity, transaction lease and terminal-state suppression.'
 
-      - name: Deploy functions and Firestore to staging
+      - name: Run Staging Artifact Registry cleanup preflight
+        env:
+          STAGING_ARTIFACT_CLEANUP_EVIDENCE: ${{ runner.temp }}/staging-artifact-cleanup-preflight.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/staging-artifact-cleanup-preflight.sh
+          echo 'STAGING_ARTIFACT_CLEANUP_PREFLIGHT_VERIFIED=1' >> "$GITHUB_ENV"
+
+      - name: Upload sanitized Staging Artifact Registry cleanup evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-artifact-cleanup-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/staging-artifact-cleanup-preflight.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Deploy Firestore to staging
         shell: bash
         run: |
           set -euo pipefail
           firebase deploy \
             --project clickandsaveai-staging \
-            --only firestore:rules,firestore:indexes,functions \
+            --only firestore:rules,firestore:indexes \
             --non-interactive \
             --force
+          touch "$RUNNER_TEMP/staging-firestore-deploy-proven"
+
+      - name: Deploy Functions to staging with guarded classifier
+        env:
+          FIREBASE_DEPLOY_LOG: ${{ runner.temp }}/firebase-functions-deploy.log
+          DEPLOYED_FUNCTIONS: ${{ runner.temp }}/staging-deployed-functions.txt
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/staging-firestore-deploy-proven"
+          set +e
+          firebase deploy \
+            --project clickandsaveai-staging \
+            --only functions \
+            --non-interactive \
+            --force \
+            2>&1 | tee "$FIREBASE_DEPLOY_LOG"
+          FIREBASE_DEPLOY_EXIT="${PIPESTATUS[0]}"
+          set -e
+          echo "Firebase deploy exit code: $FIREBASE_DEPLOY_EXIT"
+
+          # The classifier recognizes only the explicit Firebase post-success text
+          # "Functions successfully deployed but could not set up cleanup policy"
+          # together with successful function operations and no fatal deploy evidence.
+          if ! node scripts/staging-firebase-deploy-classifier.mjs \
+            --exit-code "$FIREBASE_DEPLOY_EXIT" \
+            --log "$FIREBASE_DEPLOY_LOG" \
+            --write-functions "$DEPLOYED_FUNCTIONS"; then
+            echo 'Firebase Functions deployment was not proven safe to continue.' >&2
+            exit 1
+          fi
+
+      - name: Verify deployed staging Functions are ACTIVE
+        env:
+          DEPLOYED_FUNCTIONS: ${{ runner.temp }}/staging-deployed-functions.txt
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -s "$DEPLOYED_FUNCTIONS" ]]; then
+            echo 'Firebase reported no function create/update operations; deploy exited successfully.'
+            exit 0
+          fi
+          while IFS= read -r function_name; do
+            [[ -n "$function_name" ]] || continue
+            if state="$(gcloud functions describe "$function_name" \
+              --gen2 \
+              --region=us-central1 \
+              --project=clickandsaveai-staging \
+              --format='value(state)' 2>/dev/null)"; then
+              generation='GEN_2'
+            elif state="$(gcloud functions describe "$function_name" \
+              --region=us-central1 \
+              --project=clickandsaveai-staging \
+              --format='value(status)' 2>/dev/null)"; then
+              generation='GEN_1'
+            else
+              echo "Unable to independently describe deployed function $function_name." >&2
+              exit 1
+            fi
+            if [[ "$state" != "ACTIVE" ]]; then
+              echo "Deployed function $function_name is not ACTIVE ($generation state=$state)." >&2
+              exit 1
+            fi
+            echo "Verified ACTIVE: $function_name ($generation)."
+          done < "$DEPLOYED_FUNCTIONS"
 
       - name: Run authenticated staging truth smoke
         env:
