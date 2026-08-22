@@ -38,12 +38,12 @@ import com.example.data.repository.OpportunityActionRepository
 import com.example.ui.MainViewModel
 import com.example.ui.components.OpportunityLifecycleChip
 import com.example.ui.components.SavingsGlyph
-import com.example.ui.components.SavingsHero
 import com.example.ui.components.V3EmptyState
+import com.example.ui.components.V3GradientHeader
 import com.example.ui.components.V3Note
 import com.example.ui.components.V3Panel
 import com.example.ui.components.V3PrimaryButton
-import com.example.ui.components.V3ScreenHeader
+import com.example.ui.components.V3SavingsDashboardHero
 import com.example.ui.components.V3SectionHeader
 import com.example.ui.components.V3SummaryItem
 import com.example.ui.components.V3SummaryStrip
@@ -86,21 +86,21 @@ fun ProvidersScreen(viewModel: MainViewModel) {
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            V3ScreenHeader(
+            V3GradientHeader(
                 eyebrow = "חיסכון",
                 title = "החיסכון שלך",
-                subtitle = "איפה אפשר לשלם פחות, מה בתהליך ומה כבר נחסך בפועל."
+                subtitle = "מה כבר התממש, מה בתהליך ואיפה אפשר לשלם פחות."
             )
         }
 
         if (summary != null) {
             item {
-                SavingsHero(
+                V3SavingsDashboardHero(
                     realizedMonthly = summary.realizedMonthly,
                     realizedAnnual = summary.realizedAnnual,
                     potentialMonthly = summary.potentialMonthly,
                     potentialAnnual = summary.potentialAnnual,
-                    realizedKnownZero = summary.realizedKnownZero
+                    modifier = Modifier.testTag("v3_savings_hero")
                 )
             }
             item {
