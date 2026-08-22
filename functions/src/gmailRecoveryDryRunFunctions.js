@@ -28,6 +28,29 @@ const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const INITIAL_GMAIL_LOOKBACK = "6m";
 const GMAIL_LIST_PAGE_SIZE = 100;
 const RECOVERY_DRY_RUN_VERSION = "staging-controlled-gmail-recovery-dry-run-v1";
+const DOCUMENT_CLASSES = new Set([
+  "RECURRING_BILL",
+  "ONE_OFF",
+  "REFUND",
+  "RECEIPT_ONLY",
+  "CONTRACT",
+  "UNKNOWN",
+]);
+const UNKNOWN_REASON_KEYS = [
+  "BODY_FALLBACK_NO_PDF_CANDIDATE",
+  "PDF_CLASSIFIER_UNKNOWN_OR_UNSUPPORTED_CLASS",
+  "NORMALIZED_UNSUPPORTED_DOCUMENT_CLASS",
+];
+
+function zeroUnknownReasonCounts() {
+  return Object.fromEntries(UNKNOWN_REASON_KEYS.map((key) => [key, 0]));
+}
+
+function sanitizedUnknownReasonCounts(value) {
+  return Object.fromEntries(
+    UNKNOWN_REASON_KEYS.map((key) => [key, Number(value?.[key] || 0)])
+  );
+}
 
 function zeroCounts() {
   return {
@@ -43,6 +66,7 @@ function zeroCounts() {
     rejectedReceiptOnlyCount: 0,
     rejectedContractCount: 0,
     unknownCount: 0,
+    unknownReasonCounts: zeroUnknownReasonCounts(),
   };
 }
 
@@ -64,6 +88,7 @@ function responseEnvelope(result, credentialPreflight, failureStage, counts = ze
     rejectedReceiptOnlyCount: Number(counts.rejectedReceiptOnlyCount || 0),
     rejectedContractCount: Number(counts.rejectedContractCount || 0),
     unknownCount: Number(counts.unknownCount || 0),
+    unknownReasonCounts: sanitizedUnknownReasonCounts(counts.unknownReasonCounts),
   };
 }
 
@@ -279,10 +304,30 @@ function recurringSourceKey(item) {
   ].join("|");
 }
 
+function rawDocumentClass(candidate) {
+  return String(candidate?.documentClass || "").trim().toUpperCase();
+}
+
+function unknownReasonFor(rawCandidate, normalizedCandidate) {
+  if (normalizedCandidate?.documentClass !== "UNKNOWN") return "";
+  const rawClass = rawDocumentClass(rawCandidate);
+  if (!DOCUMENT_CLASSES.has(rawClass)) {
+    return "NORMALIZED_UNSUPPORTED_DOCUMENT_CLASS";
+  }
+  if (contentDedupeKey(normalizedCandidate)) {
+    return "PDF_CLASSIFIER_UNKNOWN_OR_UNSUPPORTED_CLASS";
+  }
+  return "BODY_FALLBACK_NO_PDF_CANDIDATE";
+}
+
 function summarizeSelection(rawCandidates, scanCounts) {
-  const normalized = (Array.isArray(rawCandidates) ? rawCandidates : [])
-    .map(normalizeStoredCandidate)
-    .filter(Boolean);
+  const normalizedPairs = (Array.isArray(rawCandidates) ? rawCandidates : [])
+    .map((raw) => ({ raw, normalized: normalizeStoredCandidate(raw) }))
+    .filter((pair) => Boolean(pair.normalized));
+  const normalized = normalizedPairs.map((pair) => pair.normalized);
+  const rawByNormalized = new WeakMap(
+    normalizedPairs.map((pair) => [pair.normalized, pair.raw])
+  );
   const policyUnique = policyEquivalentUnique(normalized);
   const recurring = selectRecurringBills(normalized)
     .map(normalizeStoredCandidate)
@@ -295,6 +340,12 @@ function summarizeSelection(rawCandidates, scanCounts) {
   const rejected = policyUnique.filter((item) => !selectedSources.has(String(item.sourceMessageId || "")));
   const classCount = (documentClass) => rejected
     .filter((item) => item.documentClass === documentClass).length;
+  const unknownReasonCounts = zeroUnknownReasonCounts();
+  for (const item of rejected) {
+    if (item.documentClass !== "UNKNOWN") continue;
+    const reason = unknownReasonFor(rawByNormalized.get(item), item);
+    if (reason) unknownReasonCounts[reason] += 1;
+  }
 
   return {
     messagesExamined: scanCounts.messagesExamined,
@@ -309,6 +360,7 @@ function summarizeSelection(rawCandidates, scanCounts) {
     rejectedReceiptOnlyCount: classCount("RECEIPT_ONLY"),
     rejectedContractCount: classCount("CONTRACT"),
     unknownCount: classCount("UNKNOWN"),
+    unknownReasonCounts,
   };
 }
 
