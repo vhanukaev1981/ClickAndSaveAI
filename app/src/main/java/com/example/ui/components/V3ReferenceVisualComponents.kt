@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -352,12 +351,13 @@ fun V3BillVisualCard(
 
 @Composable
 fun V3ProfileHero(
+    title: String = "פרופיל",
     displayName: String,
     email: String,
     authenticated: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val name = displayName.ifBlank { if (authenticated) "החשבון שלך" else "פרופיל" }
+    val name = displayName.ifBlank { if (authenticated) "החשבון שלך" else title }
     val initial = name.trim().firstOrNull()?.uppercase() ?: "C"
     Box(
         modifier = modifier
@@ -373,7 +373,7 @@ fun V3ProfileHero(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            Text("הפרופיל שלי", color = Color.White.copy(alpha = 0.84f), fontWeight = FontWeight.Bold)
+            Text(title, color = Color.White.copy(alpha = 0.84f), fontWeight = FontWeight.Bold)
             Box(
                 Modifier
                     .size(72.dp)
