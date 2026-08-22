@@ -13,11 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,6 +22,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.repository.FinancialActivityEvent
@@ -34,6 +31,14 @@ import com.example.data.repository.FinancialRefreshReason
 import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.activityOrNull
 import com.example.ui.MainViewModel
+import com.example.ui.components.ActivityTimelineItem
+import com.example.ui.components.V3ActivityTone
+import com.example.ui.components.V3Panel
+import com.example.ui.components.V3ScreenHeader
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun ActivityScreen(viewModel: MainViewModel) {
@@ -45,14 +50,14 @@ fun ActivityScreen(viewModel: MainViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 18.dp),
+            .padding(horizontal = 20.dp, vertical = 20.dp)
+            .testTag("activity_screen"),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text("פעילות", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text(
-            "כאן מוצגים רק אירועים שנשמרו ואומתו. אירוע שלא תועד לא יוצג כאילו התרחש.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        V3ScreenHeader(
+            eyebrow = "יומן מאומת",
+            title = "פעילות",
+            subtitle = "כאן מוצגים רק אירועים שנשמרו ואומתו. אירוע שלא תועד לא יוצג כאילו התרחש."
         )
 
         when (financialSyncState) {
@@ -112,7 +117,26 @@ private fun VerifiedActivityHistory(activity: FinancialActivityResult?) {
         return
     }
 
-    activity.events.forEach { event -> ActivityEventCard(event) }
+    var previousGroup: String? = null
+    activity.events.forEach { event ->
+        val group = activityGroupLabel(event.timestamp)
+        if (group != previousGroup) {
+            Text(
+                text = group,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            previousGroup = group
+        }
+        ActivityTimelineItem(
+            title = activityTitle(event),
+            supporting = activitySupportingText(event),
+            timeLabel = event.timestamp.takeIf(String::isNotBlank),
+            tone = activityTone(event),
+            modifier = Modifier.testTag("v3_activity_timeline_item")
+        )
+    }
     if (!activity.isCompleteHistory) {
         Text(
             "מוצגת פעילות חלקית לפי המידע הזמין כרגע.",
@@ -122,43 +146,60 @@ private fun VerifiedActivityHistory(activity: FinancialActivityResult?) {
     }
 }
 
-@Composable
-private fun ActivityEventCard(event: FinancialActivityEvent) {
-    val title = when (event.type) {
-        "GMAIL_CONNECTED" -> "Gmail חובר לקריאה בלבד"
-        "SCAN_COMPLETED" -> "סריקת Gmail הושלמה"
-        "BILL_DETECTED" -> "זוהה חשבון"
-        "RECURRING_SERVICE_DETECTED" -> "זוהה שירות חוזר"
-        "OPPORTUNITY_FOUND" -> "נמצאה הזדמנות חיסכון"
-        else -> "פעילות בחשבון"
-    }
-    val details = buildList {
-        add(activityStatusLabel(event.status))
-        event.providerName?.let { add("ספק: $it") }
-        event.category?.let { add("קטגוריה: $it") }
-        event.observedAmount?.let { add("סכום שנצפה: ${money(it)}") }
-        event.verificationStatus?.let { add(verificationLabel(it)) }
-    }.joinToString(" • ")
+private fun activityTitle(event: FinancialActivityEvent): String = when (event.type) {
+    "GMAIL_CONNECTED" -> "Gmail חובר לקריאה בלבד"
+    "SCAN_COMPLETED" -> "סריקת Gmail הושלמה"
+    "BILL_DETECTED" -> "זוהה חשבון"
+    "RECURRING_SERVICE_DETECTED" -> "זוהה שירות חוזר"
+    "OPPORTUNITY_FOUND" -> "נמצאה הזדמנות חיסכון"
+    else -> "פעילות בחשבון"
+}
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Icon(
-                if (event.type == "GMAIL_CONNECTED") Icons.Outlined.MailOutline else Icons.Outlined.History,
-                contentDescription = null
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(event.timestamp, style = MaterialTheme.typography.labelSmall)
-                Text(details, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
+private fun activitySupportingText(event: FinancialActivityEvent): String = buildList {
+    add(activityStatusLabel(event.status))
+    event.providerName?.takeIf(String::isNotBlank)?.let { add("ספק: $it") }
+    event.category?.takeIf(String::isNotBlank)?.let { add("קטגוריה: $it") }
+    event.observedAmount?.let { add("סכום שנצפה: ${money(it)}") }
+    event.verificationStatus?.takeIf(String::isNotBlank)?.let { add(verificationLabel(it)) }
+}.joinToString(" • ")
+
+private fun activityTone(event: FinancialActivityEvent): V3ActivityTone = when (event.status.uppercase()) {
+    "COMPLETED", "READY", "SUCCESS" -> V3ActivityTone.SUCCESS
+    "PENDING", "PROCESSING", "IN_PROGRESS" -> V3ActivityTone.ATTENTION
+    "FAILED", "ERROR" -> V3ActivityTone.NEUTRAL
+    else -> V3ActivityTone.INFO
+}
+
+private fun activityGroupLabel(timestamp: String, now: Date = Date()): String {
+    val datePrefix = timestamp.take(10)
+    val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
+    val eventDate = runCatching { formatter.parse(datePrefix) }.getOrNull() ?: return "פעילות קודמת"
+
+    val todayCalendar = Calendar.getInstance().apply {
+        time = now
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val eventCalendar = Calendar.getInstance().apply {
+        time = eventDate
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    val yesterdayCalendar = (todayCalendar.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -1) }
+    val weekStart = (todayCalendar.clone() as Calendar).apply {
+        val daysFromSunday = (get(Calendar.DAY_OF_WEEK) - Calendar.SUNDAY + 7) % 7
+        add(Calendar.DAY_OF_YEAR, -daysFromSunday)
+    }
+
+    return when {
+        eventCalendar.timeInMillis == todayCalendar.timeInMillis -> "היום"
+        eventCalendar.timeInMillis == yesterdayCalendar.timeInMillis -> "אתמול"
+        !eventCalendar.before(weekStart) && eventCalendar.before(todayCalendar) -> "השבוע"
+        else -> "פעילות קודמת"
     }
 }
 
@@ -177,16 +218,12 @@ private fun verificationLabel(status: String): String = when (status.uppercase()
 
 @Composable
 private fun ActivityStatusCard(title: String, description: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
+    V3Panel {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.Top
         ) {
-            Icon(Icons.Outlined.ErrorOutline, contentDescription = null)
+            Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(description, style = MaterialTheme.typography.bodyMedium)

@@ -11,17 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -42,19 +35,30 @@ import com.example.data.repository.FinancialOpportunity
 import com.example.data.repository.FinancialRefreshReason
 import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.OpportunityActionRepository
-import com.example.data.repository.OpportunityActionResult
 import com.example.ui.MainViewModel
+import com.example.ui.components.OpportunityLifecycleChip
+import com.example.ui.components.SavingsGlyph
+import com.example.ui.components.V3EmptyState
+import com.example.ui.components.V3Note
+import com.example.ui.components.V3Panel
+import com.example.ui.components.V3PrimaryButton
+import com.example.ui.components.V3SavingsDashboardHero
+import com.example.ui.components.V3SectionHeader
+import com.example.ui.components.V3SummaryItem
+import com.example.ui.components.V3SummaryStrip
+import com.example.ui.components.VerificationBadge
 import com.example.ui.theme.TechBluePrimary
+import com.example.ui.theme.V3PrimarySoft
+import com.example.ui.theme.V3Success
+import com.example.ui.v3.V3SavingsActionMode
+import com.example.ui.v3.asV3Money
+import com.example.ui.v3.hasAuthoritativeV3Offer
+import com.example.ui.v3.hasQualifiedBillIncrease
+import com.example.ui.v3.hasVerifiedSavingsActionTarget
+import com.example.ui.v3.toV3SavingsSummary
+import com.example.ui.v3.v3LifecycleLabel
+import com.example.ui.v3.v3SavingsActionMode
 import kotlinx.coroutines.launch
-
-private const val IN_APP_PROVIDER_REQUEST = "IN_APP_PROVIDER_REQUEST"
-private val lockedOpportunityStatuses = setOf(
-    "USER_ACCEPTED",
-    "PROVIDER_PROCESSING",
-    "ACTIVATED",
-    "DEAL_COMPLETED",
-    "COMPLETED"
-)
 
 @Composable
 fun ProvidersScreen(viewModel: MainViewModel) {
@@ -64,158 +68,168 @@ fun ProvidersScreen(viewModel: MainViewModel) {
     val actionRepository = remember { OpportunityActionRepository() }
     val scope = rememberCoroutineScope()
     var error by remember { mutableStateOf("") }
-    var selectedOpportunity by remember { mutableStateOf<FinancialOpportunity?>(null) }
     var actionMessage by remember { mutableStateOf("") }
+    var selectedOpportunity by remember { mutableStateOf<FinancialOpportunity?>(null) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag("providers_screen")
+    val allOpportunities = financialHome?.opportunities.orEmpty()
+    val openOpportunities = allOpportunities.filter { it.savingRealizationState != "REALIZED" }
+    val inProgress = openOpportunities.filter(FinancialOpportunity::hasActionInProgress)
+    val realized = allOpportunities.filter {
+        it.savingRealizationState == "REALIZED" && it.realizedMonthlySaving != null
+    }
+    val summary = financialHome?.toV3SavingsSummary()
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().testTag("providers_screen"),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 108.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        if (summary != null) {
             item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                    shape = RoundedCornerShape(22.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = TechBluePrimary)
-                            Spacer(modifier = Modifier.size(8.dp))
-                            Text(
-                                "הזדמנויות ש-Click&SaveAI מצאה",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Text(
-                            "המערכת מדרגת הזדמנויות לפי הערך הפוטנציאלי עבורך. חיסכון מוצג כהערכה עד שהוא מתממש בפועל. יצירת בקשה אינה אישור שהפרטים נמסרו לספק.",
-                            style = MaterialTheme.typography.bodyMedium
+                V3SavingsDashboardHero(
+                    realizedMonthly = summary.realizedMonthly,
+                    realizedAnnual = summary.realizedAnnual,
+                    potentialMonthly = summary.potentialMonthly,
+                    potentialAnnual = summary.potentialAnnual,
+                    modifier = Modifier.testTag("v3_savings_hero")
+                )
+            }
+            item {
+                V3SummaryStrip(
+                    listOf(
+                        V3SummaryItem(
+                            label = "שירותים במעקב",
+                            value = financialHome?.context?.recurringServiceCount?.toString() ?: "לא ידוע"
+                        ),
+                        V3SummaryItem(
+                            label = "שווים בדיקה",
+                            value = openOpportunities.size.toString(),
+                            emphasized = true
+                        ),
+                        V3SummaryItem(
+                            label = "חיסכון שאומת",
+                            value = summary.realizedMonthly?.asV3Money()
+                                ?: if (summary.realizedKnownZero) "₪0.00" else "לא ידוע",
+                            positive = summary.realizedMonthly != null && summary.realizedMonthly > 0.0
                         )
+                    )
+                )
+            }
+        }
+
+        when {
+            financialSyncState == FinancialSyncState.Unauthenticated || financialSyncState == FinancialSyncState.Disconnected -> item {
+                V3EmptyState("עדיין אין מספיק מידע", "יש להשלים חיבור מאומת לפני שנוכל להציג הזדמנויות חיסכון שנבדקו.")
+            }
+            (financialSyncState == FinancialSyncState.CheckingConnection || financialSyncState == FinancialSyncState.Recovering) && financialHome == null -> item {
+                V3Panel(containerColor = V3PrimarySoft) {
+                    Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
                     }
+                    Text("בודקים את המידע המאומת…", style = MaterialTheme.typography.bodySmall)
                 }
             }
-
-            when {
-                financialSyncState == FinancialSyncState.Unauthenticated ||
-                    financialSyncState == FinancialSyncState.Disconnected -> {
-                    item {
-                        MessageCard(
-                            title = "עדיין אין מספיק מידע",
-                            body = "יש להשלים חיבור מאומת לפני שניתן להציג הזדמנויות חיסכון שנבדקו."
-                        )
-                    }
-                }
-
-                (financialSyncState == FinancialSyncState.CheckingConnection ||
-                    financialSyncState == FinancialSyncState.Recovering) && financialHome == null -> {
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(24.dp),
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    }
-                }
-
-                financialSyncState is FinancialSyncState.Failed && financialHome == null -> {
-                    item {
-                        MessageCard(
-                            title = "לא ניתן להשלים את הבדיקה",
-                            body = "המידע הפיננסי אינו זמין כרגע. לא נציג ערכי חיסכון משוערים במקום מידע שחסר."
-                        )
-                    }
-                }
-
-                financialSyncState is FinancialSyncState.Partial && financialHome == null -> {
-                    item {
-                        MessageCard(
-                            title = "עדיין אין מספיק מידע",
-                            body = "הסנכרון חלקי ואין כרגע מספיק מידע מאומת להצגת חיסכון."
-                        )
-                    }
-                }
-
-                else -> {
-                    val opportunities = financialHome?.opportunities.orEmpty()
-                    if (opportunities.isEmpty()) {
-                        item {
-                            MessageCard(
-                                title = "ה-AI ממשיך לבדוק",
-                                body = "כרגע אין צורך לחפש ידנית. אם יזוהה שירות שניתן לייעל או תימצא הצעה מתאימה, היא תופיע כאן אוטומטית."
-                            )
-                        }
-                    } else {
-                        items(opportunities, key = { it.id }) { opportunity ->
-                            OpportunityCard(
-                                opportunity = opportunity,
-                                onAccept = {
-                                    if (opportunity.actionMode == IN_APP_PROVIDER_REQUEST) {
-                                        val displayedOfferId = authoritativeMatchedOffer(opportunity)?.offerId.orEmpty()
-                                        if (displayedOfferId.isBlank()) {
-                                            error = "ההצעה השתנתה, פגה או אינה מאומתת כרגע."
-                                        } else {
-                                            scope.launch {
-                                                runCatching {
-                                                    actionRepository.recordSavingsActionStarted(
-                                                        opportunityId = opportunity.id,
-                                                        expectedOfferId = displayedOfferId
-                                                    )
-                                                }.onSuccess {
-                                                    error = ""
-                                                    selectedOpportunity = opportunity
-                                                }.onFailure {
-                                                    error = "לא ניתן להתחיל את בקשת החיסכון כרגע. ההצעה תיבדק מחדש לפני ניסיון נוסף."
-                                                }
+            financialSyncState is FinancialSyncState.Failed && financialHome == null -> item {
+                V3EmptyState(
+                    title = "לא הצלחנו להשלים את הבדיקה",
+                    body = "המידע הפיננסי אינו זמין כרגע. לא נציג ערכי חיסכון משוערים במקום מידע שחסר.",
+                    actionLabel = "נסה שוב",
+                    onAction = { viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY) }
+                )
+            }
+            financialSyncState is FinancialSyncState.Partial && financialHome == null -> item {
+                V3EmptyState("חלק מהמידע עדיין מתעדכן", "אין כרגע מספיק מידע מאומת להצגת חיסכון. ערך חסר אינו אפס.")
+            }
+            else -> {
+                item { V3SectionHeader("אפשר לחסוך") }
+                if (openOpportunities.isEmpty()) {
+                    item { V3EmptyState("כרגע אין הזדמנויות מאומתות", "נמשיך לבדוק עבורך כשהמידע יתעדכן.") }
+                } else {
+                    items(openOpportunities, key = { "opportunity:${it.id}" }) { opportunity ->
+                        OpportunityCard(
+                            opportunity = opportunity,
+                            onAccept = {
+                                if (opportunity.hasVerifiedSavingsActionTarget()) {
+                                    val offerId = opportunity.matchedOffer?.offerId.orEmpty()
+                                    if (offerId.isBlank()) {
+                                        error = "אין כרגע יעד פעולה מאומת להצעה."
+                                    } else {
+                                        scope.launch {
+                                            runCatching {
+                                                actionRepository.recordSavingsActionStarted(opportunity.id, offerId)
+                                            }.onSuccess {
+                                                error = ""
+                                                selectedOpportunity = opportunity
+                                            }.onFailure {
+                                                error = "לא ניתן להתחיל את בקשת החיסכון כרגע. ההצעה תיבדק מחדש לפני ניסיון נוסף."
                                             }
                                         }
                                     }
                                 }
-                            )
-                        }
+                            }
+                        )
+                    }
+                }
+
+                item { V3SectionHeader("בתהליך") }
+                if (inProgress.isEmpty()) {
+                    item {
+                        V3EmptyState(
+                            "אין כרגע פעולה בתהליך",
+                            "פעולה תופיע כאן רק אחרי שתאשר אותה, עם המצב האמיתי שלה."
+                        )
+                    }
+                } else {
+                    items(inProgress, key = { "progress:${it.id}" }) { opportunity ->
+                        SavingsProgressCard(opportunity)
+                    }
+                }
+
+                item { V3SectionHeader("נחסך בפועל") }
+                if (realized.isEmpty()) {
+                    item {
+                        V3EmptyState(
+                            "עדיין לא נחסך סכום מאומת",
+                            "ברגע שמעבר יושלם והחיסכון יאומת, הסכום החודשי והשנתי יופיעו כאן."
+                        )
+                    }
+                } else {
+                    items(realized, key = { "realized:${it.id}" }) { opportunity ->
+                        RealizedSavingCard(opportunity)
                     }
                 }
             }
+        }
 
-            if (actionMessage.isNotBlank()) {
-                item { MessageCard(title = "מצב הבקשה", body = actionMessage) }
-            }
-            if (error.isNotBlank()) {
-                item { MessageCard(title = "לא ניתן להשלים את הבדיקה", body = error) }
-            }
+        if (actionMessage.isNotBlank()) item { MessageCard("מצב הבקשה", actionMessage) }
+        if (error.isNotBlank()) item { MessageCard("לא ניתן להשלים את הבדיקה", error) }
+        item {
+            V3Note("חיסכון פוטנציאלי אינו חיסכון ממומש. פתיחת בדיקה או בקשה אינה הוכחה למסירה לספק, להשלמת עסקה או לחיסכון בפועל.")
         }
     }
 
     selectedOpportunity?.let { opportunity ->
-        if (opportunity.actionMode == IN_APP_PROVIDER_REQUEST) {
+        if (opportunity.hasVerifiedSavingsActionTarget()) {
             SavingsActionDialog(
                 opportunity = opportunity,
                 defaultName = session.displayName,
                 defaultEmail = session.email,
                 onDismiss = { selectedOpportunity = null },
-                onSubmit = { name, phone, email ->
-                    val displayedOfferId = authoritativeMatchedOffer(opportunity)?.offerId.orEmpty()
+                onSubmit = { name, phone, email, consent ->
+                    val offerId = opportunity.matchedOffer?.offerId.orEmpty()
                     selectedOpportunity = null
                     scope.launch {
                         runCatching {
                             actionRepository.acceptSavingsOpportunity(
                                 opportunityId = opportunity.id,
-                                expectedOfferId = displayedOfferId,
+                                expectedOfferId = offerId,
                                 contactName = name,
                                 phone = phone,
                                 contactEmail = email,
-                                consentAccepted = true
+                                consentAccepted = consent
                             )
-                        }.onSuccess { result ->
-                            actionMessage = actionHandoffMessage(result)
+                        }.onSuccess {
+                            actionMessage = "הפעולה נרשמה. מסירה לספק, השלמת עסקה וחיסכון ממומש יוצגו רק לפי ראיה מאומתת."
                             error = ""
                             viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY)
                         }.onFailure {
@@ -231,247 +245,128 @@ fun ProvidersScreen(viewModel: MainViewModel) {
 }
 
 @Composable
-private fun OpportunityCard(
-    opportunity: FinancialOpportunity,
-    onAccept: () -> Unit
-) {
-    val matched = authoritativeMatchedOffer(opportunity)
+private fun OpportunityCard(opportunity: FinancialOpportunity, onAccept: () -> Unit) {
+    val matched = opportunity.matchedOffer?.takeIf { opportunity.hasAuthoritativeV3Offer() }
     val monthlySaving = opportunity.potentialMonthlySaving
-    val lifecycleLocked = opportunityLifecycleLocked(opportunity)
-    val inAppActionAvailable = opportunity.actionMode == IN_APP_PROVIDER_REQUEST
+    val actionMode = opportunity.v3SavingsActionMode()
+    val actionAvailable = opportunity.hasVerifiedSavingsActionTarget() &&
+        matched != null && monthlySaving != null && monthlySaving > 0.0
 
-    Card(shape = RoundedCornerShape(20.dp)) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.Savings,
-                    contentDescription = null,
-                    tint = TechBluePrimary
-                )
-                Spacer(modifier = Modifier.size(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "${opportunity.providerName} • ${opportunity.category}",
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "החיוב שנצפה: ${money(opportunity.currentMonthlyCost)} לחודש",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+    V3Panel {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SavingsGlyph(modifier = Modifier.size(23.dp), contentDescription = "חיסכון")
+            Spacer(Modifier.size(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(opportunity.providerName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(opportunity.category, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            OpportunityLifecycleChip(opportunity.v3LifecycleLabel())
+        }
 
-            if (matched != null && monthlySaving != null && monthlySaving > 0.0) {
-                val effectiveMonthly = matched.effectiveMonthlyPrice ?: matched.monthlyPrice
-                val annualSaving = opportunity.potentialAnnualSaving
-                val annualSavingText = if (annualSaving != null && annualSaving > 0.0) {
-                    " • ${money(annualSaving)} בשנה"
-                } else {
-                    ""
-                }
-                Text(
-                    "נמצאה הצעה מאומתת ועדכנית של ${matched.providerName} בעלות חודשית אפקטיבית של ${money(effectiveMonthly)}.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    "חיסכון פוטנציאלי: ${money(monthlySaving)} בחודש$annualSavingText",
-                    color = TechBluePrimary,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    offerTrustText(
-                        verification = matched.verificationState,
-                        freshness = matched.freshnessState,
-                        eligibility = matched.eligibilityState
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (matched.verifiedAt.isBlank()) {
-                    Text(
-                        "מועד בדיקת ההצעה אינו ידוע",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    Text(
-                        "ההצעה נבדקה לאחרונה: ${matched.verifiedAt}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                matched.firstYearCost?.let {
-                    Text(
-                        "עלות שנה ראשונה: ${money(it)}${matched.oneTimeFees?.takeIf { fee -> fee > 0.0 }?.let { fee -> " • כולל ${money(fee)} עלויות חד-פעמיות" } ?: ""}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                matched.requiredRecurringFees?.takeIf { it > 0.0 }?.let { recurringFee ->
-                    Text(
-                        "העלות כוללת ${money(recurringFee)} לחודש דמי חובה${matched.requiredRecurringFeesDescription.takeIf { it.isNotBlank() }?.let { description -> " ($description)" } ?: ""}.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Text(
-                    "החיסכון הפוטנציאלי הוא הערכה לפי מחיר צרכני מלא לשנה הראשונה. הוא אינו חיסכון ממומש. ההצעה נבדקת מחדש לפני כל פעולה.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        Text("החיוב שנצפה: ${opportunity.currentMonthlyCost.asV3Money()} לחודש")
 
-                realizedSavingMessage(opportunity)?.let { message ->
-                    Text(message, fontWeight = FontWeight.Bold)
-                }
-                val lifecycleMessage = opportunityHandoffMessage(opportunity)
-                when {
-                    lifecycleLocked -> Text(lifecycleMessage, fontWeight = FontWeight.Bold)
-                    inAppActionAvailable -> {
-                        if (opportunity.completionState == "DEAL_REJECTED" ||
-                            opportunity.status.equals("PROVIDER_REJECTED", ignoreCase = true)
-                        ) {
-                            Text(
-                                "הבקשה הקודמת לא הושלמה. אם ההצעה עדיין בתוקף אפשר לנסות שוב.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Button(onClick = onAccept, modifier = Modifier.fillMaxWidth()) {
-                            Text("בדוק בקשה לחיסכון פוטנציאלי של ${money(monthlySaving)} בחודש")
-                        }
-                    }
-                    else -> {
-                        Text(
-                            "זו ההצעה הטובה ביותר שמצאנו כרגע. מעבר ישיר דרך Click&SaveAI עדיין לא זמין להצעה הזו, ולכן לא נשלח את פרטיך לספק.",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
+        if (matched != null && monthlySaving != null && monthlySaving > 0.0) {
+            val effectiveMonthly = matched.effectiveMonthlyPrice ?: matched.monthlyPrice
+            Text("חלופה שנבדקה: ${matched.providerName} · ${effectiveMonthly.asV3Money()} לחודש")
+            Text(
+                "חיסכון פוטנציאלי: ${monthlySaving.asV3Money()} בחודש",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = TechBluePrimary
+            )
+            Text(
+                opportunity.potentialAnnualSaving?.let { "חיסכון פוטנציאלי: ${it.asV3Money()} בשנה" }
+                    ?: "חיסכון שנתי פוטנציאלי: לא ידוע",
+                fontWeight = FontWeight.SemiBold
+            )
+            VerificationBadge("אומת")
+            Text("חיסכון פוטנציאלי אינו חיסכון ממומש.", style = MaterialTheme.typography.bodySmall)
+        } else {
+            val detectionText = if (opportunity.type == "COMPARE_AFTER_PRICE_INCREASE") {
+                if (opportunity.hasQualifiedBillIncrease()) {
+                    "השוואה בין חיובים: החשבון עלה ב-${opportunity.monthlyIncrease!!.asV3Money()} וב-${String.format("%.1f", opportunity.percentIncrease)}%. זו לא הוכחה לשינוי תעריף."
+                } else {
+                    "זוהה שינוי בין חיובים, אך אין כרגע ראיה שעומדת גם בסף ₪5 וגם בסף 5%, או שחסרים נתונים. לא הוכחה לשינוי תעריף."
                 }
             } else {
-                val detectionText = if (opportunity.type == "COMPARE_AFTER_PRICE_INCREASE") {
-                    opportunity.percentIncrease?.let { percent ->
-                        "זוהתה עליית מחיר של ${String.format("%.1f", percent)}%. Click&SaveAI מחפשת עבורך חלופה מתאימה."
-                    } ?: "זוהה שינוי שמצדיק בדיקה, אך שיעור השינוי אינו ידוע. Click&SaveAI מחפשת עבורך חלופה מתאימה."
-                } else {
-                    "זהו שירות חודשי חוזר. Click&SaveAI בודקת באופן יזום אם קיימת חלופה טובה ומתאימה יותר."
-                }
-                Text(detectionText, style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "לא נציג סכום חיסכון ולא נפנה לספק עד שתימצא הצעה מאומתת, עדכנית ומתאימה לשירות שלך.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    offerTrustText(
-                        verification = opportunity.offerVerificationState,
-                        freshness = opportunity.offerFreshnessState,
-                        eligibility = opportunity.userEligibilityState
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                val lifecycleMessage = opportunityHandoffMessage(opportunity)
-                if (lifecycleMessage.isNotBlank()) {
-                    Text(lifecycleMessage, fontWeight = FontWeight.Bold)
-                }
+                "זהו שירות חודשי חוזר. לא נציג חיסכון או יעד פעולה בלי הצעה מאומתת."
             }
+            Text(detectionText)
+        }
+
+        when {
+            actionAvailable -> V3PrimaryButton("בדיקת ההצעה", onAccept, Modifier.fillMaxWidth())
+            actionMode == V3SavingsActionMode.VIEW_ONLY -> Text("ההזדמנות היא לצפייה בלבד; אין יעד פעולה מאומת.", style = MaterialTheme.typography.bodySmall)
+            actionMode == V3SavingsActionMode.NO_VERIFIED_ACTION_TARGET -> Text("אין כרגע יעד פעולה מאומת להצעה.", style = MaterialTheme.typography.bodySmall)
+            actionMode == V3SavingsActionMode.DIRECT_PLAN_JOIN -> Text("חיבור ישיר למסלול אינו זמין ללא יעד מאומת.", style = MaterialTheme.typography.bodySmall)
+            else -> Unit
         }
     }
 }
 
-private fun authoritativeMatchedOffer(opportunity: FinancialOpportunity) =
-    opportunity.matchedOffer?.takeIf { offer ->
-        opportunity.offerVerificationState == "VERIFIED" &&
-            opportunity.offerFreshnessState == "FRESH" &&
-            opportunity.userEligibilityState == "ELIGIBLE" &&
-            offer.verificationState == "VERIFIED" &&
-            offer.freshnessState == "FRESH" &&
-            offer.eligibilityState == "ELIGIBLE"
-    }
+private fun FinancialOpportunity.hasActionInProgress(): Boolean =
+    savingRealizationState != "REALIZED" && (
+        consentState != "NOT_CONSENTED" ||
+            requestState != "NOT_CREATED" ||
+            deliveryAttemptState != "NOT_ATTEMPTED" ||
+            submissionState != "NOT_SUBMITTED" ||
+            completionState == "DEAL_COMPLETED"
+        )
 
-private fun offerTrustText(
-    verification: String,
-    freshness: String,
-    eligibility: String
-): String = when {
-    verification == "VERIFIED" && freshness == "FRESH" && eligibility == "ELIGIBLE" ->
-        "ההצעה אומתה, עדכנית ומתאימה לנתונים שלך."
-    verification != "VERIFIED" -> "סטטוס אימות ההצעה לא ידוע. ההצעה עדיין בבדיקה."
-    freshness != "FRESH" -> "ההצעה דורשת בדיקה מחדש לפני פעולה."
-    eligibility != "ELIGIBLE" -> "ההתאמה להצעה עדיין לא הושלמה."
-    else -> "ההצעה עדיין בבדיקה."
+@Composable
+private fun SavingsProgressCard(opportunity: FinancialOpportunity) {
+    V3Panel(containerColor = V3PrimarySoft) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SavingsGlyph(modifier = Modifier.size(22.dp), contentDescription = "פעולת חיסכון")
+            Spacer(Modifier.size(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(opportunity.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
+                Text(opportunity.category.ifBlank { "קטגוריה לא ידועה" }, style = MaterialTheme.typography.bodySmall)
+            }
+            OpportunityLifecycleChip(opportunity.v3LifecycleLabel())
+        }
+        Text(
+            "הבקשה בתהליך. מסירה לספק, השלמת עסקה וחיסכון ממומש יוצגו רק אחרי ראיה מתאימה.",
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
 }
 
-private fun opportunityLifecycleLocked(opportunity: FinancialOpportunity): Boolean {
-    if (opportunity.completionState == "DEAL_REJECTED" ||
-        opportunity.status.equals("PROVIDER_REJECTED", ignoreCase = true)
-    ) {
-        return false
+@Composable
+private fun RealizedSavingCard(opportunity: FinancialOpportunity) {
+    V3Panel {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SavingsGlyph(modifier = Modifier.size(23.dp), tint = V3Success, contentDescription = "חיסכון שאומת")
+            Spacer(Modifier.size(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(opportunity.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
+                Text(opportunity.category.ifBlank { "קטגוריה לא ידועה" }, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Text(
+            "${opportunity.realizedMonthlySaving!!.asV3Money()} נחסכו בפועל בחודש",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = V3Success
+        )
+        Text(
+            opportunity.realizedAnnualSaving?.let { "${it.asV3Money()} בשנה לפי הראיה שנקלטה" }
+                ?: "החיסכון השנתי עדיין לא ידוע",
+            style = MaterialTheme.typography.bodySmall
+        )
     }
-    return opportunity.requestState == "REQUEST_CREATED" ||
-        opportunity.deliveryAttemptState == "ATTEMPTED" ||
-        opportunity.submissionState == "SUBMITTED" ||
-        opportunity.deliveryState == "DELIVERY_CONFIRMED" ||
-        opportunity.providerContactState == "CONTACTED" ||
-        opportunity.completionState == "DEAL_COMPLETED" ||
-        opportunity.status.uppercase() in lockedOpportunityStatuses
-}
-
-private fun opportunityHandoffMessage(opportunity: FinancialOpportunity): String = when {
-    opportunity.completionState == "DEAL_COMPLETED" ->
-        "קיימת ראיה שהעסקה הושלמה. אין בכך כשלעצמו הוכחה שחיסכון כספי התממש."
-    opportunity.providerContactState == "CONTACTED" ->
-        "קיימת ראיה שהספק יצר קשר. העסקה עדיין אינה מסומנת כהושלמה."
-    opportunity.deliveryState == "DELIVERY_CONFIRMED" ->
-        "קיים אישור מסירה של הבקשה. אישור מסירה אינו אישור שהספק יצר קשר."
-    opportunity.submissionState == "SUBMITTED" ->
-        "הבקשה נשלחה למסלול המסירה, אך עדיין אין אישור שהספק קיבל אותה."
-    opportunity.deliveryAttemptState == "ATTEMPTED" && opportunity.deliveryState == "DELIVERY_FAILED" ->
-        "בוצע ניסיון מסירה שלא אושר. אין אישור שהבקשה הגיעה לספק."
-    opportunity.requestState == "REQUEST_CREATED" ->
-        "הבקשה נוצרה ב-Click&SaveAI. אין עדיין אישור שהיא נשלחה או נמסרה לספק."
-    else -> ""
 }
 
 private fun realizedSavingMessage(opportunity: FinancialOpportunity): String? = when {
-    opportunity.savingRealizationState == "REALIZED" && opportunity.realizedMonthlySaving != null ->
-        "חיסכון ממומש לפי ראיה שנקלטה: ${money(opportunity.realizedMonthlySaving)} בחודש."
+    opportunity.savingRealizationState == "REALIZED" && opportunity.realizedMonthlySaving != null -> buildString {
+        append("חיסכון ממומש לפי ראיה שנקלטה: ${opportunity.realizedMonthlySaving.asV3Money()} בחודש")
+        append(opportunity.realizedAnnualSaving?.let { " · ${it.asV3Money()} בשנה" } ?: " · שנתי: לא ידוע")
+    }
     opportunity.savingRealizationState == "NOT_REALIZED" && opportunity.realizedMonthlySaving == 0.0 ->
         "לפי הראיה שנקלטה, החיסכון הממומש הידוע הוא ₪0.00 בחודש."
     opportunity.savingRealizationState == "UNKNOWN" && opportunity.completionState == "DEAL_COMPLETED" ->
         "החיסכון הממומש עדיין אינו ידוע."
     else -> null
-}
-
-private fun actionHandoffMessage(result: OpportunityActionResult): String {
-    val potential = result.potentialMonthlySaving
-        ?.takeIf { it > 0.0 }
-        ?.let { " החיסכון הפוטנציאלי לפי ההצעה הוא ${money(it)} בחודש; זה אינו חיסכון ממומש." }
-        ?: " סכום החיסכון הפוטנציאלי אינו ידוע."
-    return when {
-        result.savingRealizationState == "REALIZED" && result.realizedMonthlySaving != null ->
-            "קיימת ראיה לחיסכון ממומש של ${money(result.realizedMonthlySaving)} בחודש."
-        result.savingRealizationState == "NOT_REALIZED" && result.realizedMonthlySaving == 0.0 ->
-            "קיימת ראיה לכך שהחיסכון הממומש הידוע הוא ₪0.00 בחודש."
-        result.completionState == "DEAL_COMPLETED" ->
-            "קיימת ראיה שהעסקה הושלמה, אך החיסכון הממומש עדיין אינו ידוע.$potential"
-        result.providerContactState == "CONTACTED" ->
-            "קיימת ראיה שהספק יצר קשר, אך העסקה עדיין לא הושלמה.$potential"
-        result.deliveryState == "DELIVERY_CONFIRMED" ->
-            "קיים אישור מסירה של הבקשה. זה אינו אישור שהספק יצר קשר או שהעסקה הושלמה.$potential"
-        result.submissionState == "SUBMITTED" ->
-            "הבקשה נשלחה למסלול המסירה, אך עדיין אין אישור שהספק קיבל אותה.$potential"
-        result.deliveryAttemptState == "ATTEMPTED" && result.deliveryState == "DELIVERY_FAILED" ->
-            "ניסיון המסירה לא אושר. אין אישור שהבקשה הגיעה לספק.$potential"
-        result.requestState == "REQUEST_CREATED" ->
-            "הבקשה נוצרה ב-Click&SaveAI. אין עדיין אישור שהיא נשלחה או נמסרה לספק.$potential"
-        else -> "מצב הבקשה עדיין אינו ידוע.$potential"
-    }
 }
 
 @Composable
@@ -480,55 +375,31 @@ private fun SavingsActionDialog(
     defaultName: String,
     defaultEmail: String,
     onDismiss: () -> Unit,
-    onSubmit: (String, String, String) -> Unit
+    onSubmit: (String, String, String, Boolean) -> Unit
 ) {
     var name by remember(opportunity.id) { mutableStateOf(defaultName) }
     var phone by remember(opportunity.id) { mutableStateOf("") }
     var email by remember(opportunity.id) { mutableStateOf(defaultEmail) }
-    var accepted by remember(opportunity.id) { mutableStateOf(false) }
+    var consent by remember(opportunity.id) { mutableStateOf(false) }
+    val canSubmit = name.isNotBlank() && phone.isNotBlank() && email.isNotBlank() && consent
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("אישור יצירת בקשה") },
+        title = { Text("בקשת חיסכון אצל ${opportunity.providerName}") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text(
-                    "Click&SaveAI תשתמש בפרטי הקשר ובהצעה שבחרת כדי ליצור בקשה. לא נשלח תוכן Gmail. יצירת הבקשה אינה אישור שהפרטים נמסרו לספק."
-                )
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("שם") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it },
-                    label = { Text("טלפון") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("אימייל") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("הפרטים יישלחו רק לאחר אישור. פתיחת בקשה אינה הוכחה למסירה, התקשרות, עסקה או חיסכון ממומש.")
+                OutlinedTextField(name, { name = it }, label = { Text("שם") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(phone, { phone = it }, label = { Text("טלפון") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(email, { email = it }, label = { Text("דוא״ל") }, modifier = Modifier.fillMaxWidth())
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = accepted, onCheckedChange = { accepted = it })
-                    Text("אני מאשר/ת להשתמש בפרטי הקשר לצורך יצירת הבקשה.")
+                    Checkbox(consent, { consent = it })
+                    Text("אני מאשר להעביר את פרטי הקשר לצורך בקשת החיסכון הזו.")
                 }
             }
         },
         confirmButton = {
-            Button(
-                onClick = { onSubmit(name.trim(), phone.trim(), email.trim()) },
-                enabled = accepted && name.isNotBlank() && phone.isNotBlank() && email.isNotBlank()
-            ) {
-                Text("צור בקשה")
-            }
+            Button(onClick = { onSubmit(name.trim(), phone.trim(), email.trim(), consent) }, enabled = canSubmit) { Text("שלח בקשה") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("ביטול") } }
     )
@@ -536,15 +407,8 @@ private fun SavingsActionDialog(
 
 @Composable
 private fun MessageCard(title: String, body: String) {
-    Card(
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(title, fontWeight = FontWeight.Bold)
-            Text(body, style = MaterialTheme.typography.bodyMedium)
-        }
+    V3Panel(containerColor = V3PrimarySoft) {
+        Text(title, fontWeight = FontWeight.Bold)
+        Text(body, style = MaterialTheme.typography.bodySmall)
     }
 }
-
-private fun money(value: Double): String = "₪${String.format("%.2f", value)}"
