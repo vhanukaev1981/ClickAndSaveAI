@@ -16,12 +16,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -39,8 +36,12 @@ import com.example.data.repository.FinancialOpportunity
 import com.example.data.repository.FinancialSyncState
 import com.example.data.repository.latestScanOrNull
 import com.example.ui.MainViewModel
+import com.example.ui.components.V3Panel
+import com.example.ui.components.V3ScreenHeader
+import com.example.ui.components.V3SecondaryButton
 import com.example.ui.components.V3SectionHeader
 import com.example.ui.theme.TechBluePrimary
+import com.example.ui.theme.V3PrimarySoft
 import com.example.ui.v3.V3InvoicePaymentMode
 import com.example.ui.v3.asV3Money
 import com.example.ui.v3.hasAuthoritativeV3Offer
@@ -64,18 +65,15 @@ fun InvoicesScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("invoices_screen").testTag("v3_invoice_list"),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 108.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("לתשלום", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text(
-                    "חשבונות שנקלטו ממקור מאומת. שדה שלא קיים בנתונים נשאר לא ידוע.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            V3ScreenHeader(
+                eyebrow = "חשבונות מאומתים",
+                title = "לתשלום",
+                subtitle = "חשבונות שנקלטו ממקור מאומת. שדה שלא קיים בנתונים נשאר לא ידוע."
+            )
         }
 
         item { V3SectionHeader("מה נכנס לתשלום") }
@@ -85,7 +83,8 @@ fun InvoicesScreen(
                     FilterChip(
                         selected = selectedCategory == category,
                         onClick = { selectedCategory = category },
-                        label = { Text(category) }
+                        label = { Text(category) },
+                        shape = RoundedCornerShape(999.dp)
                     )
                 }
             }
@@ -113,11 +112,8 @@ fun InvoicesScreen(
 
         item { V3SectionHeader("מעבר לספק לתשלום") }
         item {
-            Card(
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+            V3Panel(containerColor = V3PrimarySoft) {
+                Row(verticalAlignment = Alignment.Top) {
                     Icon(Icons.Default.Info, null, tint = TechBluePrimary)
                     Spacer(Modifier.size(10.dp))
                     Text("Click & Save לא גובה כסף ולא משלם עבורך. מעבר לתשלום יוצג רק כשקיים יעד תשלום מאומת לחשבון עצמו.")
@@ -135,18 +131,22 @@ fun InvoicesScreen(
 
 @Composable
 private fun PayableBillCard(bill: BackendInvoice) {
-    Card(modifier = Modifier.fillMaxWidth().testTag("v3_invoice_item"), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(bill.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
-            Text(bill.category.ifBlank { "קטגוריה לא ידועה" }, style = MaterialTheme.typography.bodySmall)
-            Text("סכום שנצפה: ${bill.monthlyCost.asV3Money()}", fontWeight = FontWeight.SemiBold)
-            Text("מועד לתשלום: לא ידוע", style = MaterialTheme.typography.bodySmall)
-            Text(
-                if (bill.receivedDate.isNotBlank()) "זוהה ב: ${bill.receivedDate}" else "מועד הקליטה לא ידוע",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text("מקור: Gmail בקריאה בלבד • ${verificationLabel(bill.verificationStatus)}", style = MaterialTheme.typography.bodySmall)
+    V3Panel(modifier = Modifier.testTag("v3_invoice_item")) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.AutoMirrored.Filled.ReceiptLong, null, tint = TechBluePrimary)
+            Spacer(Modifier.size(10.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(bill.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
+                Text(bill.category.ifBlank { "קטגוריה לא ידועה" }, style = MaterialTheme.typography.bodySmall)
+            }
+            Text(bill.monthlyCost.asV3Money(), fontWeight = FontWeight.Bold)
         }
+        Text("מועד לתשלום: לא ידוע", style = MaterialTheme.typography.bodySmall)
+        Text(
+            if (bill.receivedDate.isNotBlank()) "זוהה ב: ${bill.receivedDate}" else "מועד הקליטה לא ידוע",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Text("מקור: Gmail בקריאה בלבד • ${verificationLabel(bill.verificationStatus)}", style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -156,22 +156,21 @@ private fun InvoiceSavingCard(
     opportunity: FinancialOpportunity?,
     onOpenSavings: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(bill.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
-            if (opportunity == null) {
-                Text("אין כרגע חיסכון מאומת לחשבון הזה. UNKNOWN אינו מוצג כאפס.")
-            } else {
-                val monthly = opportunity.potentialMonthlySaving
-                val annual = opportunity.potentialAnnualSaving
-                Text(
-                    if (monthly != null) "חיסכון פוטנציאלי: ${monthly.asV3Money()} בחודש" else "חיסכון חודשי פוטנציאלי: לא ידוע",
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(if (annual != null) "חיסכון פוטנציאלי: ${annual.asV3Money()} בשנה" else "חיסכון שנתי פוטנציאלי: לא ידוע")
-                Text("זהו פוטנציאל לפי הצעה מאומתת — לא חיסכון ממומש.", style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(onClick = onOpenSavings, modifier = Modifier.fillMaxWidth()) { Text("לבדיקת חיסכון") }
-            }
+    V3Panel {
+        Text(bill.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
+        if (opportunity == null) {
+            Text("אין כרגע חיסכון מאומת לחשבון הזה. ערך חסר אינו מוצג כאפס.")
+        } else {
+            val monthly = opportunity.potentialMonthlySaving
+            val annual = opportunity.potentialAnnualSaving
+            Text(
+                if (monthly != null) "חיסכון פוטנציאלי: ${monthly.asV3Money()} בחודש" else "חיסכון חודשי פוטנציאלי: לא ידוע",
+                fontWeight = FontWeight.SemiBold,
+                color = TechBluePrimary
+            )
+            Text(if (annual != null) "חיסכון פוטנציאלי: ${annual.asV3Money()} בשנה" else "חיסכון שנתי פוטנציאלי: לא ידוע")
+            Text("זהו פוטנציאל לפי הצעה מאומתת — לא חיסכון ממומש.", style = MaterialTheme.typography.bodySmall)
+            V3SecondaryButton("לבדיקת חיסכון", onOpenSavings, Modifier.fillMaxWidth())
         }
     }
 }
@@ -179,18 +178,16 @@ private fun InvoiceSavingCard(
 @Composable
 private fun PaymentTargetCard(bill: BackendInvoice) {
     val paymentMode = bill.v3PaymentMode()
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(bill.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
-            when (paymentMode) {
-                V3InvoicePaymentMode.NO_VERIFIED_PAYMENT_TARGET -> {
-                    Text("אין יעד תשלום מאומת לחשבון הזה.")
-                    Text("כפתור תשלום יוצג רק לאחר שיתקבל יעד תשלום מאומת לחשבונית עצמה.", style = MaterialTheme.typography.bodySmall)
-                }
-                V3InvoicePaymentMode.DIRECT_INVOICE_PAYMENT,
-                V3InvoicePaymentMode.PROVIDER_PAYMENT_PORTAL -> {
-                    Text("מצב יעד תשלום קיים בחוזה, אך לא יוצג CTA ללא יעד חשבונית מאומת שניתן לפתוח בפועל.")
-                }
+    V3Panel {
+        Text(bill.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
+        when (paymentMode) {
+            V3InvoicePaymentMode.NO_VERIFIED_PAYMENT_TARGET -> {
+                Text("אין יעד תשלום מאומת לחשבון הזה.")
+                Text("כפתור תשלום יוצג רק לאחר שיתקבל יעד תשלום מאומת לחשבונית עצמה.", style = MaterialTheme.typography.bodySmall)
+            }
+            V3InvoicePaymentMode.DIRECT_INVOICE_PAYMENT,
+            V3InvoicePaymentMode.PROVIDER_PAYMENT_PORTAL -> {
+                Text("מצב יעד תשלום קיים בחוזה, אך לא יוצג כפתור פעולה ללא יעד חשבונית מאומת שניתן לפתוח בפועל.")
             }
         }
     }
@@ -198,9 +195,9 @@ private fun PaymentTargetCard(bill: BackendInvoice) {
 
 @Composable
 private fun BillsStateCard(message: String) {
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.AutoMirrored.Filled.ReceiptLong, null)
+    V3Panel {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.AutoMirrored.Filled.ReceiptLong, null, tint = TechBluePrimary)
             Spacer(Modifier.size(10.dp))
             Text(message)
         }
