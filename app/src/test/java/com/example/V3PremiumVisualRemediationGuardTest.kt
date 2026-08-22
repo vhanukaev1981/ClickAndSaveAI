@@ -103,6 +103,48 @@ class V3PremiumVisualRemediationGuardTest {
     }
 
     @Test
+    fun homeFollowsApprovedPremiumInformationHierarchy() {
+        val dashboard = source("ui/screens/DashboardScreen.kt")
+        val home = source("ui/components/V3HomeComponents.kt")
+        assertTrue(dashboard.contains("PRICE_INCREASE_DETECTED"))
+        assertTrue(dashboard.contains("\"פעילות אחרונה\""))
+        assertTrue(dashboard.contains("\"רק דברים שקרו באמת\""))
+        assertTrue(dashboard.contains("\"הסכומים מבוססים על מסמכים"))
+        assertTrue(home.contains("Icons.AutoMirrored.Filled.ArrowBack"))
+    }
+
+    @Test
+    fun savingsSeparatesPotentialProgressAndRealizedStates() {
+        val savings = source("ui/screens/ProvidersScreen.kt")
+        assertTrue(savings.contains("\"אפשר לחסוך\""))
+        assertTrue(savings.contains("\"בתהליך\""))
+        assertTrue(savings.contains("\"נחסך בפועל\""))
+        assertTrue(savings.contains("savingRealizationState"))
+        assertTrue(savings.contains("חיסכון פוטנציאלי אינו חיסכון ממומש"))
+    }
+
+    @Test
+    fun aiIsProactiveConsumerAssistantRatherThanTechnicalForm() {
+        val ai = source("ui/screens/AiAssistantScreen.kt")
+        assertTrue(ai.contains("\"מה שכדאי לבדוק עכשיו\""))
+        assertTrue(ai.contains("\"עוד דברים שכדאי לבדוק\""))
+        assertTrue(ai.contains("\"שיחה\""))
+        assertTrue(ai.contains("ai_message_input"))
+        assertTrue(ai.contains("ai_send"))
+        assertFalse(ai.contains("בדיקת חשבון או מסלול"))
+    }
+
+    @Test
+    fun billsIncludeSummaryTrustAndUnknownTruthNote() {
+        val bills = source("ui/screens/InvoicesScreen.kt")
+        assertTrue(bills.contains("\"מסמכים שזוהו\""))
+        assertTrue(bills.contains("\"התשלום עצמו מתבצע מול הספק\""))
+        assertTrue(bills.contains("״לא ידוע״ אינו אפס"))
+        assertTrue(bills.contains("FilterChip("))
+        assertTrue(bills.contains("מועד לתשלום: לא ידוע"))
+    }
+
+    @Test
     fun screenshotSuiteNamesAllPrimaryPremiumScreensAndCompactRtl() {
         val screenshots = File("src/test/java/com/example/V3PrimaryScreensScreenshotTest.kt").readText()
         listOf(
