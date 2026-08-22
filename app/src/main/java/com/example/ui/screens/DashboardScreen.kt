@@ -1,6 +1,5 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,8 +14,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -34,7 +31,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,18 +41,18 @@ import com.example.data.repository.GmailScanResult
 import com.example.data.repository.gmailConnectionOrNull
 import com.example.data.repository.latestScanOrNull
 import com.example.ui.MainViewModel
-import com.example.ui.components.FinancialSnapshot
-import com.example.ui.components.MonitoringStatus
 import com.example.ui.components.NextBestActionCard
 import com.example.ui.components.SavingsHero
+import com.example.ui.components.V3HomeActivityRow
+import com.example.ui.components.V3HomeIncreaseCard
+import com.example.ui.components.V3MonitoringLine
+import com.example.ui.components.V3Note
 import com.example.ui.components.V3Panel
 import com.example.ui.components.V3ScreenHeader
 import com.example.ui.components.V3SectionHeader
 import com.example.ui.components.V3SoftStatusCard
 import com.example.ui.theme.TechBluePrimary
-import com.example.ui.theme.V3Border
 import com.example.ui.theme.V3PrimarySoft
-import com.example.ui.theme.V3Surface
 import com.example.ui.v3.asV3Money
 import com.example.ui.v3.toV3SavingsSummary
 
@@ -77,6 +73,7 @@ fun DashboardScreen(
     val gmailSyncStep by viewModel.gmailSyncStep.collectAsState()
     val onboardingStep by viewModel.onboardingStep.collectAsState()
     var showGmailConsent by remember { mutableStateOf(false) }
+    val firstName = session.displayName.trim().substringBefore(" ").takeIf { it.isNotBlank() }
 
     if (showGmailConsent) {
         GmailConsentDialog(
@@ -95,9 +92,9 @@ fun DashboardScreen(
     ) {
         item {
             V3ScreenHeader(
-                eyebrow = "CLICK & SAVE",
-                title = "הכסף שלך, במבט אחד",
-                subtitle = "מה כבר חסכת, מה עוד אפשר לחסוך ומה כדאי לעשות עכשיו."
+                eyebrow = "CLICK & SAVE AI",
+                title = firstName?.let { "שלום, $it" } ?: "הכסף שלך, במבט אחד",
+                subtitle = "כבר בדקנו בשבילך מה כדאי לעשות עכשיו כדי לשלם פחות."
             )
         }
 
@@ -113,10 +110,9 @@ fun DashboardScreen(
             }
             FinancialSyncState.CheckingConnection -> {
                 item {
-                    MonitoringStatus(
-                        title = "מחברים את החשבון",
-                        subtitle = gmailSyncStep.takeIf(String::isNotBlank) ?: "אנחנו מעדכנים את התמונה שלך",
-                        active = true,
+                    V3MonitoringLine(
+                        label = gmailSyncStep.takeIf(String::isNotBlank) ?: "מחברים ומעדכנים את התמונה שלך",
+                        active = false,
                         modifier = Modifier.testTag("v3_monitoring_status")
                     )
                 }
@@ -124,10 +120,9 @@ fun DashboardScreen(
             }
             FinancialSyncState.Recovering -> {
                 item {
-                    MonitoringStatus(
-                        title = "מסדרים את התמונה שלך",
-                        subtitle = gmailSyncStep.takeIf(String::isNotBlank) ?: "אנחנו מעדכנים את התמונה שלך",
-                        active = true,
+                    V3MonitoringLine(
+                        label = gmailSyncStep.takeIf(String::isNotBlank) ?: "מסדרים ומעדכנים את התמונה שלך",
+                        active = false,
                         modifier = Modifier.testTag("v3_monitoring_status")
                     )
                 }
@@ -149,9 +144,8 @@ fun DashboardScreen(
                     authoritativeHomeItems(home, latestScan, state, isSyncing, gmailSyncStep, onNavigateToTab, onOpenInvoices)
                 } else {
                     item {
-                        MonitoringStatus(
-                            title = "חלק מהמידע עדיין מתעדכן",
-                            subtitle = gmailSyncStep.takeIf(String::isNotBlank),
+                        V3MonitoringLine(
+                            label = gmailSyncStep.takeIf(String::isNotBlank) ?: "חלק מהמידע עדיין מתעדכן",
                             active = state.gmailConnectionOrNull?.connected == true,
                             modifier = Modifier.testTag("v3_monitoring_status")
                         )
@@ -172,13 +166,6 @@ fun DashboardScreen(
                 authoritativeHomeItems(state.financialHome, state.latestScan, state, isSyncing, gmailSyncStep, onNavigateToTab, onOpenInvoices)
             }
         }
-
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                HomeShortcut("פעילות", Icons.Outlined.CloudSync, { onNavigateToTab(3) }, Modifier.weight(1f))
-                HomeShortcut("פרופיל", Icons.Default.Tune, { onNavigateToTab(4) }, Modifier.weight(1f))
-            }
-        }
     }
 
     @Suppress("UNUSED_VARIABLE")
@@ -196,6 +183,23 @@ private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItem
 ) {
     val summary = home.toV3SavingsSummary()
     val nextBest = summary.nextBestOpportunityId?.let { id -> home.opportunities.firstOrNull { it.id == id } }
+    val connection = syncState.gmailConnectionOrNull
+    val recentInvoices = latestScan?.invoices
+    val priceIncrease = home.insights.firstOrNull {
+        it.type == "PRICE_INCREASE_DETECTED" && (it.monthlyIncrease ?: 0.0) > 0.0
+    }
+
+    item {
+        V3MonitoringLine(
+            label = when {
+                isSyncing -> gmailSyncStep.takeIf(String::isNotBlank) ?: "בודקים חשבונות חדשים"
+                connection?.connected == true -> "קריאה בלבד · בודקים חשבונות חדשים ברקע"
+                else -> "מצב החיבור עדיין מתעדכן"
+            },
+            active = connection?.connected == true && !isSyncing,
+            modifier = Modifier.testTag("v3_monitoring_status")
+        )
+    }
 
     item {
         SavingsHero(
@@ -218,43 +222,31 @@ private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItem
                 modifier = Modifier.testTag("v3_next_best_action")
             )
         }
-    }
-
-    item {
-        val connection = syncState.gmailConnectionOrNull
-        MonitoringStatus(
-            title = when {
-                isSyncing -> "אנחנו בודקים את החשבונות שלך"
-                connection?.connected == true -> "הניטור פעיל"
-                else -> "מצב החיבור עדיין מתעדכן"
-            },
-            subtitle = gmailSyncStep.takeIf(String::isNotBlank)
-                ?: connection?.email?.takeIf(String::isNotBlank)?.let { "Gmail מחובר לקריאה בלבד" },
-            active = connection?.connected == true && !isSyncing,
-            modifier = Modifier.testTag("v3_monitoring_status")
-        )
-    }
-
-    item { V3SectionHeader(title = "התמונה שלך") }
-    item {
-        FinancialSnapshot(
-            recurringSpendText = home.context.observedRecurringMonthlySpend?.asV3Money() ?: "לא ידוע",
-            recurringServicesText = home.context.recurringServiceCount?.toString() ?: "לא ידוע",
-            invoicesText = latestScan?.invoices?.size?.toString() ?: "לא ידוע"
-        )
-    }
-
-    val recentInvoices = latestScan?.invoices
-    if (recentInvoices != null && recentInvoices.isNotEmpty()) {
+    } else {
         item {
-            V3SectionHeader(
-                title = "זוהה לאחרונה",
-                actionLabel = "כל החשבונות",
-                onAction = onOpenInvoices,
-                modifier = Modifier.testTag("v3_open_invoices")
+            V3SoftStatusCard(
+                "עדיין אוספים את הצעד הבא",
+                "נציג המלצה רק כשיש מספיק מידע מאומת כדי להצביע על פעולה אמיתית."
             )
         }
-        items(recentInvoices.take(3), key = { it.sourceMessageId }) { invoice ->
+    }
+
+    item {
+        V3SectionHeader(
+            title = "לתשלום",
+            actionLabel = "כל החשבונות",
+            onAction = onOpenInvoices,
+            modifier = Modifier.testTag("v3_open_invoices")
+        )
+    }
+    when {
+        recentInvoices == null -> item {
+            V3SoftStatusCard("החשבונות עדיין מתעדכנים", "שדה שעדיין לא ידוע לא יוצג כאפס או כרשימה ריקה.")
+        }
+        recentInvoices.isEmpty() -> item {
+            V3SoftStatusCard("עדיין לא זיהינו חשבוניות", "נמשיך לבדוק את המקורות המחוברים ונציג כאן רק חשבונות שנקלטו בפועל.")
+        }
+        else -> items(recentInvoices.take(3), key = { "home-bill:${it.sourceMessageId}" }) { invoice ->
             V3Panel {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Surface(shape = RoundedCornerShape(12.dp), color = V3PrimarySoft) {
@@ -267,51 +259,60 @@ private fun androidx.compose.foundation.lazy.LazyListScope.authoritativeHomeItem
                     }
                     Spacer(modifier = Modifier.size(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(invoice.providerName, fontWeight = FontWeight.Bold)
-                        Text(invoice.category, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(invoice.providerName.ifBlank { "ספק לא ידוע" }, fontWeight = FontWeight.Bold)
+                        Text(invoice.category.ifBlank { "קטגוריה לא ידועה" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(invoice.monthlyCost.asV3Money(), fontWeight = FontWeight.Bold)
                 }
-            }
-        }
-    } else if (recentInvoices != null) {
-        item {
-            V3SectionHeader(
-                title = "חשבונות",
-                actionLabel = "כל החשבונות",
-                onAction = onOpenInvoices,
-                modifier = Modifier.testTag("v3_open_invoices")
-            )
-        }
-        item { V3SoftStatusCard("עדיין לא זיהינו חשבוניות", "נמשיך לבדוק את המקורות המחוברים ונציג כאן רק חשבונות שנקלטו בפועל.") }
-    } else {
-        item {
-            TextButton(onClick = onOpenInvoices, modifier = Modifier.fillMaxWidth().testTag("v3_open_invoices")) {
-                Text("כל החשבונות")
+                Text("מועד לתשלום: לא ידוע", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
-}
 
-@Composable
-private fun HomeShortcut(
-    title: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(18.dp),
-        color = V3Surface,
-        border = BorderStroke(1.dp, V3Border),
-        shadowElevation = 1.dp
-    ) {
-        Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, tint = TechBluePrimary)
-            Text(title, modifier = Modifier.padding(horizontal = 8.dp), fontWeight = FontWeight.SemiBold)
+    if (priceIncrease != null) {
+        item { V3SectionHeader(title = "שינוי בחשבונות") }
+        item {
+            V3HomeIncreaseCard(
+                providerName = priceIncrease.providerName.ifBlank { "הספק" },
+                monthlyIncreaseText = priceIncrease.monthlyIncrease!!.asV3Money(),
+                percentIncreaseText = priceIncrease.percentIncrease?.let { "${String.format("%.1f", it)}%" },
+                onClick = { onNavigateToTab(1) }
+            )
         }
+    }
+
+    item {
+        V3SectionHeader(
+            title = "פעילות אחרונה",
+            actionLabel = "כל הפעילות",
+            onAction = { onNavigateToTab(3) }
+        )
+    }
+    if (recentInvoices.isNullOrEmpty()) {
+        item { V3SoftStatusCard("אין עדיין פעילות", "כל זיהוי וכל פעולה אמיתית יופיעו כאן.") }
+    } else {
+        items(recentInvoices.take(4), key = { "home-activity:${it.sourceMessageId}" }) { invoice ->
+            V3HomeActivityRow(
+                providerName = invoice.providerName.ifBlank { "ספק לא ידוע" },
+                category = invoice.category.ifBlank { "קטגוריה לא ידועה" },
+                amountText = invoice.monthlyCost.asV3Money(),
+                dateText = invoice.receivedDate,
+                onClick = { onNavigateToTab(3) }
+            )
+        }
+        item {
+            Text(
+                "רק דברים שקרו באמת",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+
+    item {
+        V3Note(
+            "הסכומים מבוססים על מסמכים שזוהו בתיבת המייל שלך, ולא על נתוני חיוב מהספק. חיסכון מוצג רק כשיש לו מקור מאומת. Click & Save לא גובה ממך תשלום ולא מבצע תשלומים."
+        )
     }
 }
 
