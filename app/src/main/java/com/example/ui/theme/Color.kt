@@ -21,6 +21,13 @@ val V3Aurora1 = Color(0xFF071638)
 val V3Aurora2 = Color(0xFF17419E)
 val V3Aurora3 = Color(0xFF0E7490)
 
+// Approved reference gradient family: royal blue -> indigo -> restrained violet.
+val V3GradientBlue = Color(0xFF1769F6)
+val V3GradientIndigo = Color(0xFF3C4CF4)
+val V3GradientViolet = Color(0xFF6D38E8)
+val V3GradientBlueSoft = Color(0xFFEAF2FF)
+val V3GradientVioletSoft = Color(0xFFF2ECFF)
+
 // Restrained AI accent: premium indigo, subordinate to the core blue identity.
 val V3AiViolet = Color(0xFF6366F1)
 val V3AiSoft = Color(0xFFF2F3FF)
