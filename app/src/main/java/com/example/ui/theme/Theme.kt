@@ -11,6 +11,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
+private val ColorDarkOutline = Color(0xFF334155)
+
 private val DarkColorScheme = darkColorScheme(
     primary = TechBlueLight,
     onPrimary = V3Surface,
@@ -51,8 +53,6 @@ private val LightColorScheme = lightColorScheme(
     error = V3Destructive,
     errorContainer = V3ErrorSoft
 )
-
-private val ColorDarkOutline = Color(0xFF334155)
 
 @Composable
 fun ClickAndSaveTheme(
