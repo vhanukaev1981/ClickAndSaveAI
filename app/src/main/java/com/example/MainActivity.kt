@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
@@ -221,6 +222,10 @@ fun MainAppStructure(
     }
     val closeSecondarySurface = { secondarySurfaceName = null }
     val openActivity = { secondarySurfaceName = V3SecondarySurface.ACTIVITY.name }
+
+    BackHandler(enabled = secondarySurface == V3SecondarySurface.ACTIVITY) {
+        closeSecondarySurface()
+    }
 
     LaunchedEffect(session.uid) {
         if (session.isAuthenticated) {
