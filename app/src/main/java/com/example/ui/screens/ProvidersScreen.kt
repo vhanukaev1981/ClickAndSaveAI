@@ -91,6 +91,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                     realizedAnnual = summary.realizedAnnual,
                     potentialMonthly = summary.potentialMonthly,
                     potentialAnnual = summary.potentialAnnual,
+                    realizedKnownZero = summary.realizedKnownZero,
                     modifier = Modifier.testTag("v3_savings_hero")
                 )
             }
