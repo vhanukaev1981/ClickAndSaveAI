@@ -91,7 +91,6 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                     realizedAnnual = summary.realizedAnnual,
                     potentialMonthly = summary.potentialMonthly,
                     potentialAnnual = summary.potentialAnnual,
-                    realizedKnownZero = summary.realizedKnownZero,
                     modifier = Modifier.testTag("v3_savings_hero")
                 )
             }
@@ -250,8 +249,7 @@ private fun OpportunityCard(opportunity: FinancialOpportunity, onAccept: () -> U
     val matched = opportunity.matchedOffer?.takeIf { opportunity.hasAuthoritativeV3Offer() }
     val monthlySaving = opportunity.potentialMonthlySaving
     val actionMode = opportunity.v3SavingsActionMode()
-    val actionAvailable = !opportunity.hasActionInProgress() &&
-        opportunity.hasVerifiedSavingsActionTarget() &&
+    val actionAvailable = opportunity.hasVerifiedSavingsActionTarget() &&
         matched != null && monthlySaving != null && monthlySaving > 0.0
 
     V3Panel {
@@ -306,15 +304,14 @@ private fun OpportunityCard(opportunity: FinancialOpportunity, onAccept: () -> U
     }
 }
 
-private fun FinancialOpportunity.hasActionInProgress(): Boolean {
-    if (savingRealizationState == "REALIZED" || completionState == "DEAL_REJECTED") return false
-    return requestState == "REQUEST_CREATED" ||
-        deliveryAttemptState == "ATTEMPTED" ||
-        submissionState == "SUBMITTED" ||
-        deliveryState == "DELIVERY_CONFIRMED" ||
-        providerContactState == "CONTACTED" ||
-        completionState == "DEAL_COMPLETED"
-}
+private fun FinancialOpportunity.hasActionInProgress(): Boolean =
+    savingRealizationState != "REALIZED" && (
+        consentState != "NOT_CONSENTED" ||
+            requestState != "NOT_CREATED" ||
+            deliveryAttemptState != "NOT_ATTEMPTED" ||
+            submissionState != "NOT_SUBMITTED" ||
+            completionState == "DEAL_COMPLETED"
+        )
 
 @Composable
 private fun SavingsProgressCard(opportunity: FinancialOpportunity) {

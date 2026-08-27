@@ -39,7 +39,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 
 @Composable
 fun ActivityScreen(viewModel: MainViewModel) {
@@ -172,11 +171,9 @@ private fun activityTone(event: FinancialActivityEvent): V3ActivityTone = when (
 }
 
 private fun activityGroupLabel(timestamp: String, now: Date = Date()): String {
-    val formatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
-        isLenient = false
-        timeZone = TimeZone.getTimeZone("UTC")
-    }
-    val eventDate = runCatching { formatter.parse(timestamp) }.getOrNull() ?: return "פעילות קודמת"
+    val datePrefix = timestamp.take(10)
+    val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
+    val eventDate = runCatching { formatter.parse(datePrefix) }.getOrNull() ?: return "פעילות קודמת"
 
     val todayCalendar = Calendar.getInstance().apply {
         time = now

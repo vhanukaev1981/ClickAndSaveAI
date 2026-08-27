@@ -201,7 +201,6 @@ fun V3SavingsDashboardHero(
     potentialMonthly: Double?,
     realizedAnnual: Double?,
     potentialAnnual: Double?,
-    realizedKnownZero: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -235,11 +234,7 @@ fun V3SavingsDashboardHero(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        when {
-                            realizedMonthly != null -> realizedMonthly.asV3Money()
-                            realizedKnownZero -> 0.0.asV3Money()
-                            else -> "לא ידוע"
-                        },
+                        realizedMonthly?.asV3Money() ?: "לא ידוע",
                         color = Color.White,
                         fontSize = 26.sp,
                         lineHeight = 30.sp,
