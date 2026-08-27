@@ -3,31 +3,43 @@ package com.example
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -35,11 +47,13 @@ import com.example.data.repository.FinancialRefreshReason
 import com.example.ui.MainViewModel
 import com.example.ui.components.BottomNavBar
 import com.example.ui.screens.ActivityScreen
+import com.example.ui.screens.AiAssistantScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.InvoicesScreen
 import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.ProvidersScreen
 import com.example.ui.theme.ClickAndSaveTheme
+import com.example.ui.v3.V3SecondarySurface
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
@@ -65,15 +79,12 @@ class MainActivity : ComponentActivity() {
             viewModel.reportGmailAuthorizationError("הרשאת Gmail בוטלה ולא נשמר מידע.")
             return@registerForActivityResult
         }
-
         runCatching {
             authorizationClient.getAuthorizationResultFromIntent(result.data!!)
         }.onSuccess(::handleGmailAuthorizationResult)
             .onFailure { error ->
                 Log.e("MainActivity", "Gmail authorization result failed", error)
-                viewModel.reportGmailAuthorizationError(
-                    "לא הצלחנו להשלים את חיבור Gmail. נסו שוב בעוד רגע."
-                )
+                viewModel.reportGmailAuthorizationError("לא הצלחנו להשלים את חיבור Gmail. נסו שוב בעוד רגע.")
             }
     }
 
@@ -81,8 +92,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         configureFirebaseAndAppCheck()
         requestNotificationPermissionIfNeeded()
-        enableEdgeToEdge()
-
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(
+                Color.TRANSPARENT,
+                Color.TRANSPARENT
+            )
+        )
         setContent {
             ClickAndSaveTheme {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -91,9 +106,7 @@ class MainActivity : ComponentActivity() {
                         onGoogleSignIn = {
                             val clientId = getString(R.string.google_web_client_id).trim()
                             if (clientId.isBlank()) {
-                                viewModel.reportGmailAuthorizationError(
-                                    "לא הצלחנו להתחיל את ההתחברות כרגע. נסו שוב בעוד רגע."
-                                )
+                                viewModel.reportGmailAuthorizationError("לא הצלחנו להתחיל את ההתחברות כרגע. נסו שוב בעוד רגע.")
                             } else {
                                 viewModel.signInWithGoogle(this, clientId)
                             }
@@ -103,7 +116,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-
         maybeTriggerDebugTestPush(intent)
     }
 
@@ -124,12 +136,8 @@ class MainActivity : ComponentActivity() {
         FirebaseFunctions.getInstance("europe-west1")
             .getHttpsCallable("sendTestPush")
             .call()
-            .addOnSuccessListener { result ->
-                Log.i("TestPush", "sendTestPush succeeded: ${result.data}")
-            }
-            .addOnFailureListener { error ->
-                Log.e("TestPush", "sendTestPush failed", error)
-            }
+            .addOnSuccessListener { result -> Log.i("TestPush", "sendTestPush succeeded: ${result.data}") }
+            .addOnFailureListener { error -> Log.e("TestPush", "sendTestPush failed", error) }
     }
 
     private fun configureFirebaseAndAppCheck() {
@@ -152,18 +160,14 @@ class MainActivity : ComponentActivity() {
     private fun requestGmailAuthorization() {
         val clientId = getString(R.string.google_web_client_id).trim()
         if (clientId.isBlank()) {
-            viewModel.reportGmailAuthorizationError(
-                "לא הצלחנו להתחיל את חיבור Gmail כרגע. נסו שוב בעוד רגע."
-            )
+            viewModel.reportGmailAuthorizationError("לא הצלחנו להתחיל את חיבור Gmail כרגע. נסו שוב בעוד רגע.")
             return
         }
-
         val request = AuthorizationRequest.builder()
             .setRequestedScopes(listOf(Scope(GMAIL_READONLY_SCOPE)))
             .requestOfflineAccess(clientId)
             .setPrompt(AuthorizationRequest.Prompt.CONSENT)
             .build()
-
         authorizationClient.authorize(request)
             .addOnSuccessListener { authorizationResult ->
                 if (authorizationResult.hasResolution()) {
@@ -172,18 +176,14 @@ class MainActivity : ComponentActivity() {
                         viewModel.reportGmailAuthorizationError("לא הצלחנו לפתוח את מסך ההרשאה של Google. נסו שוב.")
                         return@addOnSuccessListener
                     }
-                    gmailAuthorizationLauncher.launch(
-                        IntentSenderRequest.Builder(pendingIntent.intentSender).build()
-                    )
+                    gmailAuthorizationLauncher.launch(IntentSenderRequest.Builder(pendingIntent.intentSender).build())
                 } else {
                     handleGmailAuthorizationResult(authorizationResult)
                 }
             }
             .addOnFailureListener { error ->
                 Log.e("MainActivity", "Gmail authorization failed", error)
-                viewModel.reportGmailAuthorizationError(
-                    "לא הצלחנו להתחיל את חיבור Gmail. נסו שוב בעוד רגע."
-                )
+                viewModel.reportGmailAuthorizationError("לא הצלחנו להתחיל את חיבור Gmail. נסו שוב בעוד רגע.")
             }
     }
 
@@ -194,9 +194,7 @@ class MainActivity : ComponentActivity() {
         }
         val serverAuthCode = result.serverAuthCode?.takeIf { it.isNotBlank() }
         if (serverAuthCode == null) {
-            viewModel.reportGmailAuthorizationError(
-                "לא הצלחנו להשלים את חיבור Gmail. נסו לנתק ולחבר מחדש."
-            )
+            viewModel.reportGmailAuthorizationError("לא הצלחנו להשלים את חיבור Gmail. נסו לנתק ולחבר מחדש.")
             return
         }
         PushRegistration.registerCurrentToken()
@@ -217,6 +215,12 @@ fun MainAppStructure(
 ) {
     val selectedTab by viewModel.selectedTab.collectAsState()
     val session by viewModel.userSession.collectAsState()
+    var secondarySurfaceName by rememberSaveable { mutableStateOf<String?>(null) }
+    val secondarySurface = secondarySurfaceName?.let { savedName ->
+        V3SecondarySurface.entries.firstOrNull { it.name == savedName }
+    }
+    val closeSecondarySurface = { secondarySurfaceName = null }
+    val openActivity = { secondarySurfaceName = V3SecondarySurface.ACTIVITY.name }
 
     LaunchedEffect(session.uid) {
         if (session.isAuthenticated) {
@@ -228,55 +232,71 @@ fun MainAppStructure(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding(),
-                color = MaterialTheme.colorScheme.secondaryContainer
-            ) {
-                Text(
-                    text = "Click&SaveAI עובדת ברקע ומחפשת התייעלויות עבורך",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
+            if (secondarySurface == V3SecondarySurface.ACTIVITY) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().statusBarsPadding(),
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = closeSecondarySurface, modifier = Modifier.testTag("activity_back")) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "חזרה")
+                            Text("חזרה")
+                        }
+                        Text(
+                            text = "פעילות",
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         },
         bottomBar = {
-            BottomNavBar(
-                selectedTab = selectedTab.coerceIn(0, 4),
-                onTabSelected = viewModel::setTab
-            )
+            if (secondarySurface == null) {
+                BottomNavBar(
+                    selectedTab = selectedTab.coerceIn(0, 4),
+                    onTabSelected = { tab ->
+                        closeSecondarySurface()
+                        viewModel.setTab(tab)
+                    }
+                )
+            }
         }
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
-            when (selectedTab) {
-                0 -> DashboardScreen(
-                    viewModel = viewModel,
-                    onNavigateToTab = viewModel::setTab,
-                    onOpenReceiptScan = viewModel::reportReceiptScanUnavailable,
-                    onGoogleSignIn = onGoogleSignIn,
-                    onRequestGmailAuthorization = onRequestGmailAuthorization
-                )
-                1 -> InvoicesScreen(
-                    viewModel = viewModel,
-                    onOpenReceiptScan = viewModel::reportReceiptScanUnavailable
-                )
-                2 -> ProvidersScreen(viewModel)
-                3 -> ActivityScreen(viewModel)
-                4 -> ProfileScreen(
-                    viewModel = viewModel,
-                    onGoogleSignIn = onGoogleSignIn,
-                    onRequestGmailAuthorization = onRequestGmailAuthorization
-                )
-                else -> DashboardScreen(
-                    viewModel = viewModel,
-                    onNavigateToTab = viewModel::setTab,
-                    onOpenReceiptScan = viewModel::reportReceiptScanUnavailable,
-                    onGoogleSignIn = onGoogleSignIn,
-                    onRequestGmailAuthorization = onRequestGmailAuthorization
-                )
+            if (secondarySurface == V3SecondarySurface.ACTIVITY) {
+                ActivityScreen(viewModel)
+            } else {
+                when (selectedTab) {
+                    0 -> DashboardScreen(
+                        viewModel = viewModel,
+                        onNavigateToTab = { tab ->
+                            if (tab == 3) openActivity() else viewModel.setTab(tab)
+                        },
+                        onOpenInvoices = { viewModel.setTab(3) },
+                        onOpenReceiptScan = viewModel::reportReceiptScanUnavailable,
+                        onGoogleSignIn = onGoogleSignIn,
+                        onRequestGmailAuthorization = onRequestGmailAuthorization
+                    )
+                    1 -> ProvidersScreen(viewModel)
+                    2 -> AiAssistantScreen(viewModel)
+                    3 -> InvoicesScreen(
+                        viewModel = viewModel,
+                        onOpenReceiptScan = viewModel::reportReceiptScanUnavailable,
+                        onOpenSavings = { viewModel.setTab(1) }
+                    )
+                    4 -> ProfileScreen(
+                        viewModel = viewModel,
+                        onGoogleSignIn = onGoogleSignIn,
+                        onRequestGmailAuthorization = onRequestGmailAuthorization,
+                        onOpenActivity = openActivity
+                    )
+                    else -> viewModel.setTab(0)
+                }
             }
         }
     }
