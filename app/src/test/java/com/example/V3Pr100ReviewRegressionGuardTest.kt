@@ -17,8 +17,8 @@ class V3Pr100ReviewRegressionGuardTest {
     @Test
     fun activityGroupingUsesLocalCalendarDateForIsoInstants() {
         val activity = File("src/main/java/com/example/ui/screens/ActivityScreen.kt").readText()
-        assertTrue(activity.contains("Instant.parse(timestamp)"))
-        assertTrue(activity.contains("ZoneId.systemDefault()"))
+        assertTrue(activity.contains("SimpleDateFormat(\"yyyy-MM-dd'T'HH:mm:ss.SSS'Z'\", Locale.US)"))
+        assertTrue(activity.contains("timeZone = TimeZone.getTimeZone(\"UTC\")"))
         assertFalse(activity.contains("timestamp.take(10)"))
     }
 
