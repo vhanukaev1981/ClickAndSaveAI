@@ -753,7 +753,8 @@ jobs:
           umask 077
           printf 'GOOGLE_OAUTH_CLIENT_ID=%s\n' "$PRODUCTION_GOOGLE_WEB_CLIENT_ID" > "$RUNTIME_PARAMS_FILE"
           trap 'rm -f "$RUNTIME_PARAMS_FILE"' EXIT
-          for attempt in 1 2 3; do
+          max_attempts=3
+          for attempt in $(seq 1 "$max_attempts"); do
             if firebase deploy \
               --project "$PRODUCTION_FIREBASE_PROJECT_ID" \
               --only firestore:rules,firestore:indexes,functions \
@@ -761,8 +762,8 @@ jobs:
               --force; then
               break
             fi
-            if [[ "$attempt" -eq 3 ]]; then
-              echo "Firebase deploy failed after ${attempt} attempts." >&2
+            if [[ "$attempt" -eq "$max_attempts" ]]; then
+              echo "Firebase deploy failed after ${max_attempts} attempts." >&2
               exit 1
             fi
             echo "Firebase deploy attempt ${attempt} failed; retrying after IAM/artifact policy propagation delay."
