@@ -44,5 +44,5 @@ test("canonical authorized 3F IAM CLI chains the bootstrap capability probe", ()
   assert.match(canonicalProbe, /production-bootstrap-capability-probe\.mjs/);
   assert.match(canonicalProbe, /probeProductionBootstrapCapabilities/);
   assert.match(canonicalProbe, /BLOCK3F_IAM_TEST_ACCESS_TOKEN/);
-  assert.match(canonicalProbe, /Math\.max\(firebaseResult\.exitCode, bootstrapResult\.exitCode\)/);
+  assert.match(canonicalProbe, /Math\.max\(result\.exitCode, bootstrapResult\.exitCode\)/);
 });
