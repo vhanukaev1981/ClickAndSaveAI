@@ -154,9 +154,11 @@ class AuthRepository(private val applicationContext: Context) {
         try {
             // Sign-out is intentionally distinct from Gmail disconnect and account deletion.
             // Revoke this device's push registration while Auth is still valid.
-            // Failure is non-critical: a stale token will be rejected by FCM on the next delivery.
-            PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut()
-                .onFailure { Log.w("AuthRepository", "FCM token revocation failed during sign-out; continuing", it) }
+            // PushTokenLifecycle already bounds each operation with withTimeout(5_000L) so this
+            // call cannot block indefinitely. Failure is a hard gate: do not proceed to Firebase
+            // Auth sign-out if push revocation fails, so the backend retains a valid token to
+            // clean up the registration on behalf of the signed-in user.
+            PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut().getOrThrow()
 
             // Account-derived invoice data must be gone before the local authenticated session ends.
             // Failure is a hard gate so another account cannot inherit stale financial data.
@@ -166,13 +168,14 @@ class AuthRepository(private val applicationContext: Context) {
             _userSession.value = UserSession()
             _authState.value = AuthState.Idle
         } catch (e: CancellationException) {
-            // Coroutine was cancelled — restore the previous state without treating it as an error,
-            // and propagate cancellation so structured concurrency is not broken.
+            // Coroutine was cancelled — propagate cancellation so structured concurrency is not
+            // broken. Reset to Idle so the UI does not show a permanent Loading spinner.
             _authState.value = AuthState.Idle
             throw e
         } catch (e: Exception) {
-            // Surface the error so the caller/UI can retry rather than leaving the session
-            // in an indeterminate state or silently completing a partial sign-out.
+            // Surface the error so the caller/UI can present a retry prompt. The session remains
+            // authenticated: neither the financial data purge nor the Firebase Auth sign-out
+            // completed, so the state is consistent.
             _authState.value = AuthState.Error(e.localizedMessage ?: "Sign-out failed")
             throw e
         }
