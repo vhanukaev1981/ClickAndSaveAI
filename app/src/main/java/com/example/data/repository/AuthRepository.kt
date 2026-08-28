@@ -14,6 +14,7 @@ import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -129,6 +130,9 @@ class AuthRepository(private val applicationContext: Context) {
             val message = "Google Sign-In was cancelled or failed."
             _authState.value = AuthState.Error(message)
             Result.failure(e)
+        } catch (e: CancellationException) {
+            _authState.value = AuthState.Idle
+            throw e
         } catch (e: Exception) {
             Log.e("AuthRepository", "Authentication failed", e)
             val message = e.localizedMessage ?: "Authentication failed"
@@ -137,23 +141,44 @@ class AuthRepository(private val applicationContext: Context) {
         }
     }
 
+    fun setAuthError(message: String) {
+        _authState.value = AuthState.Error(message)
+    }
+
     suspend fun purgeImportedFinancialDataLocally() {
         AppDatabase.getDatabase(applicationContext).invoiceDao().deleteAllInvoices()
     }
 
     suspend fun signOut() {
-        // Sign-out is intentionally distinct from Gmail disconnect and account deletion.
-        // Revoke this device's push registration while Auth is still valid.
-        PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut().getOrThrow()
+        _authState.value = AuthState.Loading
+        try {
+            // Sign-out is intentionally distinct from Gmail disconnect and account deletion.
+            // Revoke this device's push registration while Auth is still valid.
+            // PushTokenLifecycle already bounds each operation with withTimeout(5_000L) so this
+            // call cannot block indefinitely. Failure is a hard gate: do not proceed to Firebase
+            // Auth sign-out if push revocation fails, so the backend retains a valid token to
+            // clean up the registration on behalf of the signed-in user.
+            PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut().getOrThrow()
 
-        // Account-derived invoice data must be gone before the local authenticated session ends.
-        // Failure is a hard gate so another account cannot inherit stale financial data.
-        purgeImportedFinancialDataLocally()
+            // Account-derived invoice data must be gone before the local authenticated session ends.
+            // Failure is a hard gate so another account cannot inherit stale financial data.
+            purgeImportedFinancialDataLocally()
 
-        getFirebaseAuthSafe()?.signOut()
-
-        _userSession.value = UserSession()
-        _authState.value = AuthState.Idle
+            getFirebaseAuthSafe()?.signOut()
+            _userSession.value = UserSession()
+            _authState.value = AuthState.Idle
+        } catch (e: CancellationException) {
+            // Coroutine was cancelled — propagate cancellation so structured concurrency is not
+            // broken. Reset to Idle so the UI does not show a permanent Loading spinner.
+            _authState.value = AuthState.Idle
+            throw e
+        } catch (e: Exception) {
+            // Surface the error so the caller/UI can present a retry prompt. The session remains
+            // authenticated: neither the financial data purge nor the Firebase Auth sign-out
+            // completed, so the state is consistent.
+            _authState.value = AuthState.Error(e.localizedMessage ?: "Sign-out failed")
+            throw e
+        }
     }
 
     suspend fun completeAccountDeletionLocalCleanup() {

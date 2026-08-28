@@ -1,7 +1,9 @@
 package com.example.data.repository
 
 import com.google.firebase.functions.FirebaseFunctions
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 
 data class BackendInvoice(
     val sourceMessageId: String,
@@ -173,11 +175,13 @@ class BackendRepository(
     private val functions: FirebaseFunctions by lazy(functionsProvider)
 
     suspend fun getGmailConnectionStatus(): GmailConnectionResult {
-        val response = functions.getHttpsCallable("getGmailConnectionStatus")
-            .call()
-            .await()
-            .data
-            .asStringMap()
+        val response = withTimeout(FUNCTIONS_TIMEOUT_MS) {
+            functions.getHttpsCallable("getGmailConnectionStatus")
+                .call()
+                .await()
+                .data
+                .asStringMap()
+        }
         return GmailConnectionResult(
             connected = response["connected"] as? Boolean ?: false,
             email = response["email"] as? String ?: "",
@@ -186,11 +190,13 @@ class BackendRepository(
     }
 
     suspend fun getGmailSyncStatus(): GmailSyncStatusResult {
-        val response = functions.getHttpsCallable("getGmailSyncStatus")
-            .call()
-            .await()
-            .data
-            .asStringMap()
+        val response = withTimeout(FUNCTIONS_TIMEOUT_MS) {
+            functions.getHttpsCallable("getGmailSyncStatus")
+                .call()
+                .await()
+                .data
+                .asStringMap()
+        }
         return GmailSyncStatusResult(
             connected = response["connected"] as? Boolean ?: false,
             storedParserVersion = (response["storedParserVersion"] as? Number)?.toInt() ?: 0,
@@ -209,7 +215,9 @@ class BackendRepository(
             "consentAccepted" to true,
             "consentVersion" to consentVersion
         )
-        val response = functions.getHttpsCallable("connectGmail").call(data).await().data.asStringMap()
+        val response = withTimeout(FUNCTIONS_TIMEOUT_MS) {
+            functions.getHttpsCallable("connectGmail").call(data).await().data.asStringMap()
+        }
         return GmailConnectionResult(
             connected = response["connected"] as? Boolean ?: false,
             email = response["email"] as? String ?: "",
@@ -218,7 +226,9 @@ class BackendRepository(
     }
 
     suspend fun startGmailWatch(): GmailWatchResult {
-        val response = functions.getHttpsCallable("startGmailWatch").call().await().data.asStringMap()
+        val response = withTimeout(FUNCTIONS_TIMEOUT_MS) {
+            functions.getHttpsCallable("startGmailWatch").call().await().data.asStringMap()
+        }
         return GmailWatchResult(
             watching = response["watching"] as? Boolean ?: false,
             historyId = response["historyId"]?.toString() ?: "",
@@ -227,12 +237,16 @@ class BackendRepository(
     }
 
     suspend fun stopGmailWatch(): GmailWatchResult {
-        val response = functions.getHttpsCallable("stopGmailWatch").call().await().data.asStringMap()
+        val response = withTimeout(FUNCTIONS_TIMEOUT_MS) {
+            functions.getHttpsCallable("stopGmailWatch").call().await().data.asStringMap()
+        }
         return GmailWatchResult(watching = response["watching"] as? Boolean ?: false)
     }
 
     suspend fun scanGmailInvoices(): GmailScanResult {
-        val response = functions.getHttpsCallable("scanGmailInvoices").call().await().data.asStringMap()
+        val response = withTimeout(FUNCTIONS_TIMEOUT_MS) {
+            functions.getHttpsCallable("scanGmailInvoices").call().await().data.asStringMap()
+        }
         val invoices = (response["invoices"] as? List<*>)
             .orEmpty()
             .mapNotNull { item ->
@@ -264,7 +278,11 @@ class BackendRepository(
 
     suspend fun getFinancialHome(): FinancialHomeResult {
         val response = try {
-            functions.getHttpsCallable("getFinancialHome").call().await().data.asStringMap()
+            withTimeout(FUNCTIONS_TIMEOUT_MS) {
+                functions.getHttpsCallable("getFinancialHome").call().await().data.asStringMap()
+            }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             throw FinancialHomeUnavailableException(error)
         }
@@ -383,7 +401,9 @@ class BackendRepository(
     }
 
     suspend fun disconnectGmail() {
-        functions.getHttpsCallable("disconnectGmail").call().await()
+        withTimeout(FUNCTIONS_TIMEOUT_MS) {
+            functions.getHttpsCallable("disconnectGmail").call().await()
+        }
     }
 
     suspend fun createProviderLead(request: ProviderLeadRequest): ProviderLeadResult {
@@ -400,7 +420,9 @@ class BackendRepository(
             "consentAccepted" to true,
             "notes" to request.notes
         )
-        val response = functions.getHttpsCallable("createProviderLead").call(payload).await().data.asStringMap()
+        val response = withTimeout(FUNCTIONS_TIMEOUT_MS) {
+            functions.getHttpsCallable("createProviderLead").call(payload).await().data.asStringMap()
+        }
         return ProviderLeadResult(
             leadId = response["leadId"] as? String ?: error("Backend did not return a lead ID"),
             status = response["status"] as? String ?: "NEW",
@@ -409,11 +431,13 @@ class BackendRepository(
     }
 
     suspend fun analyzeDeal(query: String): BackendDealAnalysis {
-        val response = functions.getHttpsCallable("analyzeDeal")
-            .call(mapOf("query" to query))
-            .await()
-            .data
-            .asStringMap()
+        val response = withTimeout(FUNCTIONS_TIMEOUT_MS) {
+            functions.getHttpsCallable("analyzeDeal")
+                .call(mapOf("query" to query))
+                .await()
+                .data
+                .asStringMap()
+        }
         return BackendDealAnalysis(
             summary = response["summary"] as? String ?: "לא הופק סיכום.",
             risks = (response["risks"] as? List<*>)?.mapNotNull { it as? String }.orEmpty(),
@@ -429,5 +453,10 @@ class BackendRepository(
     private fun Any?.asStringMapOrNull(): Map<String, Any?>? {
         val raw = this as? Map<*, *> ?: return null
         return raw.entries.associate { (key, value) -> key.toString() to value }
+    }
+
+    companion object {
+        /** Maximum time to wait for a Firebase Functions response before cancelling. */
+        private const val FUNCTIONS_TIMEOUT_MS = 30_000L
     }
 }
