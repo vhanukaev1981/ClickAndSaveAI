@@ -21,6 +21,11 @@ on:
         required: true
         default: NO_WIF_PROOF
         type: string
+      authorize_production_bootstrap:
+        description: Type BOOTSTRAP_PRODUCTION_IAM_ONCE only when a separately authorized one-time Production deploy-IAM bootstrap is intended
+        required: true
+        default: NO_BOOTSTRAP
+        type: string
       authorize_3f_metadata_probe:
         description: Type PROBE_3F_METADATA_ONLY only when a separately authorized Block 3F metadata-only probe is intended
         required: true
@@ -48,7 +53,7 @@ concurrency:
 
 jobs:
   production-candidate:
-    if: ${{ inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_3f_external_authority_probe != 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_3f_service_state_probe != 'PROBE_3F_FIREBASE_SERVICE_STATE_READ_ONLY' && inputs.authorize_3f_firebase_iam_permission_probe != 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' }}
+    if: ${{ inputs.authorize_production_bootstrap != 'BOOTSTRAP_PRODUCTION_IAM_ONCE' && inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_3f_external_authority_probe != 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_3f_service_state_probe != 'PROBE_3F_FIREBASE_SERVICE_STATE_READ_ONLY' && inputs.authorize_3f_firebase_iam_permission_probe != 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
@@ -243,7 +248,7 @@ jobs:
           rm -f app/src/release/google-services.json "$PRODUCTION_GOOGLE_SERVICES_JSON_PATH" "$PRODUCTION_UPLOAD_KEYSTORE_PATH"
 
   production-wif-auth-proof:
-    if: ${{ inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_3f_external_authority_probe != 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_3f_service_state_probe != 'PROBE_3F_FIREBASE_SERVICE_STATE_READ_ONLY' && inputs.authorize_3f_firebase_iam_permission_probe != 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' && inputs.authorize_wif_auth_proof == 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
+    if: ${{ inputs.authorize_production_bootstrap != 'BOOTSTRAP_PRODUCTION_IAM_ONCE' && inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_3f_external_authority_probe != 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_3f_service_state_probe != 'PROBE_3F_FIREBASE_SERVICE_STATE_READ_ONLY' && inputs.authorize_3f_firebase_iam_permission_probe != 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' && inputs.authorize_wif_auth_proof == 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
@@ -340,8 +345,144 @@ jobs:
             "service_account=$EXPECTED_DEPLOY_SA" \
             'credential_type=external_account'
 
+  production-bootstrap-deploy-iam:
+    if: ${{ inputs.authorize_production_bootstrap == 'BOOTSTRAP_PRODUCTION_IAM_ONCE' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.authorize_wif_auth_proof == 'NO_WIF_PROOF' && inputs.authorize_3f_metadata_probe == 'NO_3F_PROBE' && inputs.authorize_3f_external_authority_probe == 'NO_3F_EXTERNAL_PROBE' && inputs.authorize_3f_service_state_probe == 'NO_3F_SERVICE_STATE_PROBE' && inputs.authorize_3f_firebase_iam_permission_probe == 'NO_3F_FIREBASE_IAM_PERMISSION_PROBE' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      EXPECTED_REPOSITORY: vhanukaev1981/ClickAndSaveAI
+      EXPECTED_REPOSITORY_ID: '1314210715'
+      EXPECTED_REPOSITORY_OWNER_ID: '64756523'
+      EXPECTED_ENVIRONMENT: production
+      EXPECTED_REF: refs/heads/main
+      EXPECTED_WORKFLOW_REF: vhanukaev1981/ClickAndSaveAI/.github/workflows/production-release.yml@refs/heads/main
+      EXPECTED_PROJECT_ID: click-save-ai-production
+      EXPECTED_PROJECT_NUMBER: '991489557172'
+      EXPECTED_WIF_PROVIDER: projects/991489557172/locations/global/workloadIdentityPools/github-actions/providers/clickandsaveai-production
+      EXPECTED_BOOTSTRAP_SA: clickandsaveai-github-bootstrap@click-save-ai-production.iam.gserviceaccount.com
+      EXPECTED_DEPLOY_SA: clickandsaveai-github-deployer@click-save-ai-production.iam.gserviceaccount.com
+      EXPECTED_MAPPING: google.subject=assertion.sub,attribute.repository_id=assertion.repository_id,attribute.repository_owner_id=assertion.repository_owner_id,attribute.environment=assertion.environment,attribute.ref=assertion.ref,attribute.workflow_ref=assertion.workflow_ref
+      EXPECTED_CONDITION: attribute.repository_id=='1314210715' && attribute.repository_owner_id=='64756523' && attribute.environment=='production' && attribute.ref=='refs/heads/main' && attribute.workflow_ref=='vhanukaev1981/ClickAndSaveAI/.github/workflows/production-release.yml@refs/heads/main'
+
+    steps:
+      - name: Guard exact one-time bootstrap authorization boundary
+        env:
+          INPUT_AUTHORIZE_PRODUCTION_BOOTSTRAP: ${{ inputs.authorize_production_bootstrap }}
+          INPUT_CONFIRM_ENVIRONMENT: ${{ inputs.confirm_environment }}
+          INPUT_AUTHORIZE_FIREBASE_DEPLOY: ${{ inputs.authorize_firebase_deploy }}
+          INPUT_AUTHORIZE_WIF_AUTH_PROOF: ${{ inputs.authorize_wif_auth_proof }}
+          INPUT_AUTHORIZE_3F_METADATA_PROBE: ${{ inputs.authorize_3f_metadata_probe }}
+          INPUT_AUTHORIZE_3F_EXTERNAL_AUTHORITY_PROBE: ${{ inputs.authorize_3f_external_authority_probe }}
+          INPUT_AUTHORIZE_3F_SERVICE_STATE_PROBE: ${{ inputs.authorize_3f_service_state_probe }}
+          INPUT_AUTHORIZE_3F_FIREBASE_IAM_PERMISSION_PROBE: ${{ inputs.authorize_3f_firebase_iam_permission_probe }}
+          ACTUAL_GITHUB_SHA: ${{ github.sha }}
+          ACTUAL_GITHUB_REPOSITORY: ${{ github.repository }}
+          ACTUAL_GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          ACTUAL_GITHUB_REPOSITORY_OWNER_ID: ${{ github.repository_owner_id }}
+          ACTUAL_GITHUB_REF: ${{ github.ref }}
+          ACTUAL_GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$INPUT_AUTHORIZE_PRODUCTION_BOOTSTRAP" == 'BOOTSTRAP_PRODUCTION_IAM_ONCE' ]] || { echo 'Production bootstrap authorization phrase mismatch.' >&2; exit 1; }
+          [[ "$INPUT_CONFIRM_ENVIRONMENT" == 'CLICKANDSAVEAI_PRODUCTION' ]] || { echo 'Production confirmation phrase mismatch.' >&2; exit 1; }
+          [[ "$INPUT_AUTHORIZE_FIREBASE_DEPLOY" == 'NO_DEPLOY' ]] || { echo 'Bootstrap mode requires authorize_firebase_deploy=NO_DEPLOY.' >&2; exit 1; }
+          [[ "$INPUT_AUTHORIZE_WIF_AUTH_PROOF" == 'NO_WIF_PROOF' ]] || { echo 'Bootstrap mode requires authorize_wif_auth_proof=NO_WIF_PROOF.' >&2; exit 1; }
+          [[ "$INPUT_AUTHORIZE_3F_METADATA_PROBE" == 'NO_3F_PROBE' ]] || { echo 'Bootstrap mode requires authorize_3f_metadata_probe=NO_3F_PROBE.' >&2; exit 1; }
+          [[ "$INPUT_AUTHORIZE_3F_EXTERNAL_AUTHORITY_PROBE" == 'NO_3F_EXTERNAL_PROBE' ]] || { echo 'Bootstrap mode requires authorize_3f_external_authority_probe=NO_3F_EXTERNAL_PROBE.' >&2; exit 1; }
+          [[ "$INPUT_AUTHORIZE_3F_SERVICE_STATE_PROBE" == 'NO_3F_SERVICE_STATE_PROBE' ]] || { echo 'Bootstrap mode requires authorize_3f_service_state_probe=NO_3F_SERVICE_STATE_PROBE.' >&2; exit 1; }
+          [[ "$INPUT_AUTHORIZE_3F_FIREBASE_IAM_PERMISSION_PROBE" == 'NO_3F_FIREBASE_IAM_PERMISSION_PROBE' ]] || { echo 'Bootstrap mode requires authorize_3f_firebase_iam_permission_probe=NO_3F_FIREBASE_IAM_PERMISSION_PROBE.' >&2; exit 1; }
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'source_sha must be an exact lowercase 40-character commit SHA.' >&2; exit 1; }
+          [[ "$ACTUAL_GITHUB_SHA" == "$SOURCE_SHA" ]] || { echo 'Bootstrap source must equal the workflow main HEAD.' >&2; exit 1; }
+          [[ "$ACTUAL_GITHUB_REPOSITORY" == "$EXPECTED_REPOSITORY" ]] || { echo 'Repository identity mismatch.' >&2; exit 1; }
+          [[ "$ACTUAL_GITHUB_REPOSITORY_ID" == "$EXPECTED_REPOSITORY_ID" ]] || { echo 'Repository ID mismatch.' >&2; exit 1; }
+          [[ "$ACTUAL_GITHUB_REPOSITORY_OWNER_ID" == "$EXPECTED_REPOSITORY_OWNER_ID" ]] || { echo 'Repository owner ID mismatch.' >&2; exit 1; }
+          [[ "$ACTUAL_GITHUB_REF" == "$EXPECTED_REF" ]] || { echo 'Git ref mismatch.' >&2; exit 1; }
+          [[ "$ACTUAL_GITHUB_WORKFLOW_REF" == "$EXPECTED_WORKFLOW_REF" ]] || { echo 'Workflow ref mismatch.' >&2; exit 1; }
+          [[ "$GCP_WORKLOAD_IDENTITY_PROVIDER" == "$EXPECTED_WIF_PROVIDER" ]] || { echo 'WIF provider identity mismatch.' >&2; exit 1; }
+
+      - name: Check out exact bootstrap source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Authenticate bootstrap identity with GitHub OIDC
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          create_credentials_file: 'true'
+          cleanup_credentials: 'true'
+          export_environment_variables: 'false'
+          project_id: ${{ env.EXPECTED_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: clickandsaveai-github-bootstrap@click-save-ai-production.iam.gserviceaccount.com
+
+      - name: Pre-mutation fail-closed identity and trust-boundary verification
+        env:
+          AUTH_PROJECT_ID: ${{ steps.auth.outputs.project_id }}
+          CREDENTIALS_FILE: ${{ steps.auth.outputs.credentials_file_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v gcloud >/dev/null 2>&1 || { echo 'gcloud is required.' >&2; exit 1; }
+          command -v python3 >/dev/null 2>&1 || { echo 'python3 is required.' >&2; exit 1; }
+          command -v jq >/dev/null 2>&1 || { echo 'jq is required.' >&2; exit 1; }
+          [[ "$AUTH_PROJECT_ID" == "$EXPECTED_PROJECT_ID" ]] || { echo 'Authenticated project mismatch.' >&2; exit 1; }
+          [[ -n "$CREDENTIALS_FILE" && -f "$CREDENTIALS_FILE" ]] || { echo 'External-account credentials file missing.' >&2; exit 1; }
+          [[ "$(jq -r '.type // empty' "$CREDENTIALS_FILE")" == 'external_account' ]] || { echo 'Credential type must be external_account.' >&2; exit 1; }
+          if jq -e '.type == "service_account" or has("private_key") or has("private_key_id")' "$CREDENTIALS_FILE" >/dev/null; then
+            echo 'Long-lived service-account key material is forbidden.' >&2
+            exit 1
+          fi
+          AUDIENCE="$(jq -r '.audience // empty' "$CREDENTIALS_FILE")"
+          IMPERSONATION_URL="$(jq -r '.service_account_impersonation_url // empty' "$CREDENTIALS_FILE")"
+          [[ "$AUDIENCE" == "//iam.googleapis.com/$EXPECTED_WIF_PROVIDER" ]] || { echo 'Credential audience mismatch.' >&2; exit 1; }
+          EXPECTED_BOOTSTRAP_SA_ENCODED="${EXPECTED_BOOTSTRAP_SA//@/%40}"
+          [[ "$IMPERSONATION_URL" == *"/serviceAccounts/$EXPECTED_BOOTSTRAP_SA:generateAccessToken" || "$IMPERSONATION_URL" == *"/serviceAccounts/$EXPECTED_BOOTSTRAP_SA_ENCODED:generateAccessToken" ]] || { echo 'Credential impersonation service account mismatch.' >&2; exit 1; }
+          [[ "$(gcloud projects describe "$EXPECTED_PROJECT_ID" --format='value(projectId)')" == "$EXPECTED_PROJECT_ID" ]] || { echo 'Project ID mismatch.' >&2; exit 1; }
+          [[ "$(gcloud projects describe "$EXPECTED_PROJECT_ID" --format='value(projectNumber)')" == "$EXPECTED_PROJECT_NUMBER" ]] || { echo 'Project number mismatch.' >&2; exit 1; }
+          [[ "$(gcloud iam service-accounts describe "$EXPECTED_BOOTSTRAP_SA" --project="$EXPECTED_PROJECT_ID" --format='value(email)')" == "$EXPECTED_BOOTSTRAP_SA" ]] || { echo 'Bootstrap service-account missing or mismatched.' >&2; exit 1; }
+          [[ "$(gcloud iam service-accounts describe "$EXPECTED_DEPLOY_SA" --project="$EXPECTED_PROJECT_ID" --format='value(email)')" == "$EXPECTED_DEPLOY_SA" ]] || { echo 'Deploy service-account missing or mismatched.' >&2; exit 1; }
+          BOOTSTRAP_USER_KEY_COUNT="$(gcloud iam service-accounts keys list --iam-account="$EXPECTED_BOOTSTRAP_SA" --managed-by=user --format='value(name)' | sed '/^[[:space:]]*$/d' | wc -l | tr -d '[:space:]')"
+          [[ "$BOOTSTRAP_USER_KEY_COUNT" == '0' ]] || { echo 'Bootstrap service account has user-managed keys.' >&2; exit 1; }
+          PROVIDER_JSON="$(gcloud iam workload-identity-pools providers describe clickandsaveai-production --project="$EXPECTED_PROJECT_ID" --location=global --workload-identity-pool=github-actions --format=json)"
+          PROVIDER_JSON_INPUT="$PROVIDER_JSON" python3 - "$EXPECTED_WIF_PROVIDER" "$EXPECTED_MAPPING" "$EXPECTED_CONDITION" <<'PY'
+import json, os, sys
+expected_name, mapping_csv, expected_condition = sys.argv[1:]
+provider = json.loads(os.environ["PROVIDER_JSON_INPUT"])
+mapping = dict(item.split("=", 1) for item in mapping_csv.split(","))
+assert provider.get("name") == expected_name
+assert str(provider.get("disabled", False)).lower() == "false"
+assert provider.get("oidc", {}).get("issuerUri") == "https://token.actions.githubusercontent.com"
+assert provider.get("attributeMapping", {}) == mapping
+assert provider.get("attributeCondition", "") == expected_condition
+PY
+
+      - name: Install Firebase CLI for bootstrap script requirements
+        run: npm install --global firebase-tools@15.24.0
+
+      - name: Run canonical Production deploy-IAM bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/bootstrap-production-deploy-iam.sh
+
+      - name: Run canonical Production deploy-IAM verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/verify-production-deploy-iam.sh
+
   production-3f-metadata-probe:
-    if: ${{ inputs.authorize_3f_metadata_probe == 'PROBE_3F_METADATA_ONLY' && inputs.authorize_3f_external_authority_probe != 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_3f_service_state_probe != 'PROBE_3F_FIREBASE_SERVICE_STATE_READ_ONLY' && inputs.authorize_3f_firebase_iam_permission_probe != 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.authorize_wif_auth_proof == 'NO_WIF_PROOF' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
+    if: ${{ inputs.authorize_production_bootstrap != 'BOOTSTRAP_PRODUCTION_IAM_ONCE' && inputs.authorize_3f_metadata_probe == 'PROBE_3F_METADATA_ONLY' && inputs.authorize_3f_external_authority_probe != 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_3f_service_state_probe != 'PROBE_3F_FIREBASE_SERVICE_STATE_READ_ONLY' && inputs.authorize_3f_firebase_iam_permission_probe != 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.authorize_wif_auth_proof == 'NO_WIF_PROOF' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
@@ -447,7 +588,7 @@ jobs:
           rm -f "$BLOCK3F_GOOGLE_CONFIG_PATH" "$BLOCK3F_UPLOAD_KEYSTORE_PATH"
 
   production-3f-firebase-authority-probe:
-    if: ${{ inputs.authorize_3f_external_authority_probe == 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_3f_service_state_probe != 'PROBE_3F_FIREBASE_SERVICE_STATE_READ_ONLY' && inputs.authorize_3f_firebase_iam_permission_probe != 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.authorize_wif_auth_proof == 'NO_WIF_PROOF' && inputs.authorize_3f_metadata_probe == 'NO_3F_PROBE' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
+    if: ${{ inputs.authorize_production_bootstrap != 'BOOTSTRAP_PRODUCTION_IAM_ONCE' && inputs.authorize_3f_external_authority_probe == 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_3f_service_state_probe != 'PROBE_3F_FIREBASE_SERVICE_STATE_READ_ONLY' && inputs.authorize_3f_firebase_iam_permission_probe != 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.authorize_wif_auth_proof == 'NO_WIF_PROOF' && inputs.authorize_3f_metadata_probe == 'NO_3F_PROBE' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
@@ -529,7 +670,7 @@ jobs:
         run: node scripts/production-3f-firebase-authority-probe.mjs
 
   production-3f-firebase-service-state-probe:
-    if: ${{ inputs.authorize_3f_service_state_probe == 'PROBE_3F_FIREBASE_SERVICE_STATE_READ_ONLY' && inputs.authorize_3f_firebase_iam_permission_probe != 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.authorize_wif_auth_proof == 'NO_WIF_PROOF' && inputs.authorize_3f_metadata_probe == 'NO_3F_PROBE' && inputs.authorize_3f_external_authority_probe == 'NO_3F_EXTERNAL_PROBE' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
+    if: ${{ inputs.authorize_production_bootstrap != 'BOOTSTRAP_PRODUCTION_IAM_ONCE' && inputs.authorize_3f_service_state_probe == 'PROBE_3F_FIREBASE_SERVICE_STATE_READ_ONLY' && inputs.authorize_3f_firebase_iam_permission_probe != 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.authorize_wif_auth_proof == 'NO_WIF_PROOF' && inputs.authorize_3f_metadata_probe == 'NO_3F_PROBE' && inputs.authorize_3f_external_authority_probe == 'NO_3F_EXTERNAL_PROBE' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
@@ -609,7 +750,7 @@ jobs:
         run: node scripts/production-3f-firebase-service-state-probe.mjs
 
   production-3f-firebase-iam-permission-probe:
-    if: ${{ inputs.authorize_3f_firebase_iam_permission_probe == 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.authorize_wif_auth_proof == 'NO_WIF_PROOF' && inputs.authorize_3f_metadata_probe == 'NO_3F_PROBE' && inputs.authorize_3f_external_authority_probe == 'NO_3F_EXTERNAL_PROBE' && inputs.authorize_3f_service_state_probe == 'NO_3F_SERVICE_STATE_PROBE' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
+    if: ${{ inputs.authorize_production_bootstrap != 'BOOTSTRAP_PRODUCTION_IAM_ONCE' && inputs.authorize_3f_firebase_iam_permission_probe == 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.authorize_wif_auth_proof == 'NO_WIF_PROOF' && inputs.authorize_3f_metadata_probe == 'NO_3F_PROBE' && inputs.authorize_3f_external_authority_probe == 'NO_3F_EXTERNAL_PROBE' && inputs.authorize_3f_service_state_probe == 'NO_3F_SERVICE_STATE_PROBE' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
@@ -691,7 +832,7 @@ jobs:
 
   deploy-firebase-production:
     needs: production-candidate
-    if: ${{ inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_3f_external_authority_probe != 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_3f_service_state_probe != 'PROBE_3F_FIREBASE_SERVICE_STATE_READ_ONLY' && inputs.authorize_3f_firebase_iam_permission_probe != 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' && inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_firebase_deploy == 'DEPLOY_FIREBASE_PRODUCTION' }}
+    if: ${{ inputs.authorize_production_bootstrap != 'BOOTSTRAP_PRODUCTION_IAM_ONCE' && inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_3f_external_authority_probe != 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_3f_service_state_probe != 'PROBE_3F_FIREBASE_SERVICE_STATE_READ_ONLY' && inputs.authorize_3f_firebase_iam_permission_probe != 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' && inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_firebase_deploy == 'DEPLOY_FIREBASE_PRODUCTION' }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 30
