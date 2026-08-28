@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">Click &amp; Save AI</string>
     <!-- Release audit builds remain empty; production candidates override this from protected CI input. -->
-    <string name="google_web_client_id" translatable="false"></string>
+    <string name="google_web_client_id" translatable="false">991489557172-1rfk19a05jra7slucslve0fcmgqra59g.apps.googleusercontent.com</string>
 </resources>
