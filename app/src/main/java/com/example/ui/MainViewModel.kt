@@ -490,7 +490,17 @@ class MainViewModel(
     }
 
     fun signInWithGoogle(activity: Activity, webClientId: String) {
-        viewModelScope.launch { authRepository.signInWithGoogle(activity, webClientId) }
+        viewModelScope.launch {
+            try {
+                authRepository.signInWithGoogle(activity, webClientId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Ensure the UI never stays stuck in AuthState.Loading if an unexpected
+                // exception escapes the repository (e.g. Firebase initialisation race).
+                authRepository.setAuthError(e.localizedMessage ?: "Authentication failed")
+            }
+        }
     }
 
     fun signOut() {

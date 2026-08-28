@@ -14,6 +14,7 @@ import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -129,6 +130,9 @@ class AuthRepository(private val applicationContext: Context) {
             val message = "Google Sign-In was cancelled or failed."
             _authState.value = AuthState.Error(message)
             Result.failure(e)
+        } catch (e: CancellationException) {
+            _authState.value = AuthState.Idle
+            throw e
         } catch (e: Exception) {
             Log.e("AuthRepository", "Authentication failed", e)
             val message = e.localizedMessage ?: "Authentication failed"
@@ -137,23 +141,41 @@ class AuthRepository(private val applicationContext: Context) {
         }
     }
 
+    fun setAuthError(message: String) {
+        _authState.value = AuthState.Error(message)
+    }
+
     suspend fun purgeImportedFinancialDataLocally() {
         AppDatabase.getDatabase(applicationContext).invoiceDao().deleteAllInvoices()
     }
 
     suspend fun signOut() {
-        // Sign-out is intentionally distinct from Gmail disconnect and account deletion.
-        // Revoke this device's push registration while Auth is still valid.
-        PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut().getOrThrow()
+        _authState.value = AuthState.Loading
+        try {
+            // Sign-out is intentionally distinct from Gmail disconnect and account deletion.
+            // Revoke this device's push registration while Auth is still valid.
+            // Failure is non-critical: a stale token will be rejected by FCM on the next delivery.
+            PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut()
+                .onFailure { Log.w("AuthRepository", "FCM token revocation failed during sign-out; continuing", it) }
 
-        // Account-derived invoice data must be gone before the local authenticated session ends.
-        // Failure is a hard gate so another account cannot inherit stale financial data.
-        purgeImportedFinancialDataLocally()
+            // Account-derived invoice data must be gone before the local authenticated session ends.
+            // Failure is a hard gate so another account cannot inherit stale financial data.
+            purgeImportedFinancialDataLocally()
 
-        getFirebaseAuthSafe()?.signOut()
-
-        _userSession.value = UserSession()
-        _authState.value = AuthState.Idle
+            getFirebaseAuthSafe()?.signOut()
+            _userSession.value = UserSession()
+            _authState.value = AuthState.Idle
+        } catch (e: CancellationException) {
+            // Coroutine was cancelled — restore the previous state without treating it as an error,
+            // and propagate cancellation so structured concurrency is not broken.
+            _authState.value = AuthState.Idle
+            throw e
+        } catch (e: Exception) {
+            // Surface the error so the caller/UI can retry rather than leaving the session
+            // in an indeterminate state or silently completing a partial sign-out.
+            _authState.value = AuthState.Error(e.localizedMessage ?: "Sign-out failed")
+            throw e
+        }
     }
 
     suspend fun completeAccountDeletionLocalCleanup() {
