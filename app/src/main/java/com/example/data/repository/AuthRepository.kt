@@ -154,9 +154,10 @@ class AuthRepository(private val applicationContext: Context) {
         try {
             // Sign-out is intentionally distinct from Gmail disconnect and account deletion.
             // Revoke this device's push registration while Auth is still valid.
-            // Failure is non-critical: a stale token will be rejected by FCM on the next delivery.
+            // Failure is a hard gate: the result must be consumed before Firebase Auth sign-out
+            // so that a revocation failure aborts the flow rather than leaving a live token behind.
             PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut()
-                .onFailure { Log.w("AuthRepository", "FCM token revocation failed during sign-out; continuing", it) }
+                .getOrThrow()
 
             // Account-derived invoice data must be gone before the local authenticated session ends.
             // Failure is a hard gate so another account cannot inherit stale financial data.
