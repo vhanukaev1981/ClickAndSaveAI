@@ -157,12 +157,12 @@ async function runCli() {
   const expectedProjectId = process.env.EXPECTED_PROJECT_ID ?? "";
   const expectedProjectNumber = process.env.EXPECTED_PROJECT_NUMBER ?? "";
 
-  const firebaseResult = await probeFirebaseIamPermissions({
+  const result = await probeFirebaseIamPermissions({
     accessToken,
     expectedProjectId,
     expectedProjectNumber,
   });
-  for (const line of firebaseResult.lines) console.log(line);
+  for (const line of result.lines) console.log(line);
 
   const bootstrapResult = await probeProductionBootstrapCapabilities({
     accessToken,
@@ -171,7 +171,7 @@ async function runCli() {
   });
   for (const line of bootstrapResult.lines) console.log(line);
 
-  process.exitCode = Math.max(firebaseResult.exitCode, bootstrapResult.exitCode);
+  process.exitCode = Math.max(result.exitCode, bootstrapResult.exitCode);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
