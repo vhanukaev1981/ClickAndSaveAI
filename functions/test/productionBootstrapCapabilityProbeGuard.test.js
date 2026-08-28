@@ -5,8 +5,10 @@ const path = require("node:path");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const probePath = path.resolve(__dirname, "../../scripts/production-3f-firebase-iam-permission-probe.mjs");
-const probe = fs.readFileSync(probePath, "utf8");
+const bootstrapProbePath = path.resolve(__dirname, "../../scripts/production-bootstrap-capability-probe.mjs");
+const canonicalProbePath = path.resolve(__dirname, "../../scripts/production-3f-firebase-iam-permission-probe.mjs");
+const probe = fs.readFileSync(bootstrapProbePath, "utf8");
+const canonicalProbe = fs.readFileSync(canonicalProbePath, "utf8");
 
 const REQUIRED_BOOTSTRAP_PERMISSIONS = [
   "iam.roles.create",
@@ -18,16 +20,29 @@ const REQUIRED_BOOTSTRAP_PERMISSIONS = [
   "run.services.setIamPolicy",
 ];
 
-test("Production IAM probe exposes every permission required for GitHub-only bootstrap", () => {
+test("Production bootstrap capability probe exposes every required permission", () => {
   for (const permission of REQUIRED_BOOTSTRAP_PERMISSIONS) {
     assert.match(probe, new RegExp(permission.replaceAll(".", "\\.")));
   }
+  assert.match(probe, /financialagentsweep/);
+  assert.match(probe, /gmailincrementalreconciliation/);
+  assert.match(probe, /renewgmailwatches/);
+  assert.match(probe, /europe-west1/);
+  assert.match(probe, /us-central1/);
+  assert.match(probe, /gcf-artifacts/);
 });
 
-test("bootstrap capability probe remains read-only and sanitized", () => {
+test("bootstrap capability probe remains testIamPermissions-only and sanitized", () => {
   assert.match(probe, /:testIamPermissions/);
-  assert.doesNotMatch(probe, /add-iam-policy-binding/);
-  assert.doesNotMatch(probe, /setIamPolicy[^"'`\n]*\(/);
-  assert.doesNotMatch(probe, /functions:artifacts:setpolicy/);
   assert.match(probe, /bootstrap_permission_/);
+  assert.doesNotMatch(probe, /add-iam-policy-binding|remove-iam-policy-binding/);
+  assert.doesNotMatch(probe, /functions:artifacts:setpolicy/);
+  assert.doesNotMatch(probe, /method:\s*["'](?:PUT|PATCH|DELETE)["']/i);
+});
+
+test("canonical authorized 3F IAM CLI chains the bootstrap capability probe", () => {
+  assert.match(canonicalProbe, /production-bootstrap-capability-probe\.mjs/);
+  assert.match(canonicalProbe, /probeProductionBootstrapCapabilities/);
+  assert.match(canonicalProbe, /BLOCK3F_IAM_TEST_ACCESS_TOKEN/);
+  assert.match(canonicalProbe, /Math\.max\(firebaseResult\.exitCode, bootstrapResult\.exitCode\)/);
 });
