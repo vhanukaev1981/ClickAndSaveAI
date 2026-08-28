@@ -753,8 +753,18 @@ jobs:
           umask 077
           printf 'GOOGLE_OAUTH_CLIENT_ID=%s\n' "$PRODUCTION_GOOGLE_WEB_CLIENT_ID" > "$RUNTIME_PARAMS_FILE"
           trap 'rm -f "$RUNTIME_PARAMS_FILE"' EXIT
-          firebase deploy \
-            --project "$PRODUCTION_FIREBASE_PROJECT_ID" \
-            --only firestore:rules,firestore:indexes,functions \
-            --non-interactive \
-            --force
+          for attempt in 1 2 3; do
+            if firebase deploy \
+              --project "$PRODUCTION_FIREBASE_PROJECT_ID" \
+              --only firestore:rules,firestore:indexes,functions \
+              --non-interactive \
+              --force; then
+              break
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              echo "Firebase deploy failed after ${attempt} attempts." >&2
+              exit 1
+            fi
+            echo "Firebase deploy attempt ${attempt} failed; retrying after IAM/artifact policy propagation delay."
+            sleep $((attempt * 20))
+          done
