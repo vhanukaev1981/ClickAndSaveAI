@@ -17,13 +17,17 @@ EXPECTED_MAPPING="google.subject=assertion.sub,attribute.repository_id=assertion
 EXPECTED_CONDITION="attribute.repository_id=='${GITHUB_REPOSITORY_ID}' && attribute.repository_owner_id=='${GITHUB_REPOSITORY_OWNER_ID}' && attribute.environment=='${GITHUB_ENVIRONMENT}' && attribute.ref=='${GITHUB_REF}' && attribute.workflow_ref=='${GITHUB_WORKFLOW_REF}'"
 EXPECTED_WIF_MEMBER="principalSet://iam.googleapis.com/projects/${EXPECTED_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${EXPECTED_POOL_ID}/attribute.repository_id/${GITHUB_REPOSITORY_ID}"
 GITHUB_REPOSITORY="vhanukaev1981/ClickAndSaveAI"
+CUSTOM_DEPLOY_ROLE_ID="clickandsaveaiFirebaseDeployIamPolicy"
+CUSTOM_DEPLOY_ROLE_PERMISSION="run.services.setIamPolicy"
 PROJECT_ID="${PROJECT_ID:-$EXPECTED_PROJECT_ID}"
+CUSTOM_DEPLOY_ROLE_NAME="projects/${EXPECTED_PROJECT_ID}/roles/${CUSTOM_DEPLOY_ROLE_ID}"
 
 INTENDED_ROLES=(
   roles/cloudfunctions.developer
   roles/firebaserules.admin
   roles/datastore.indexAdmin
   roles/serviceusage.serviceUsageConsumer
+  "$CUSTOM_DEPLOY_ROLE_NAME"
 )
 FORBIDDEN_ROLES=(
   roles/owner
@@ -102,14 +106,29 @@ mapfile -t WIF_MEMBERS < <(gcloud iam service-accounts get-iam-policy "$EXPECTED
   | sed '/^[[:space:]]*$/d' | sort -u)
 [[ "${#WIF_MEMBERS[@]}" -eq 1 && "${WIF_MEMBERS[0]}" == "$EXPECTED_WIF_MEMBER" ]] && pass "Production WIF impersonation boundary exact" || fail "Production WIF impersonation boundary mismatch"
 
+CUSTOM_ROLE_JSON="$(gcloud iam roles describe "$CUSTOM_DEPLOY_ROLE_ID" --project="$PROJECT_ID" --format=json 2>/dev/null || true)"
+if [[ -n "$CUSTOM_ROLE_JSON" ]] && CUSTOM_ROLE_JSON_INPUT="$CUSTOM_ROLE_JSON" python3 - "$CUSTOM_DEPLOY_ROLE_NAME" "$CUSTOM_DEPLOY_ROLE_PERMISSION" <<'PY'
+import json, os, sys
+expected_name, expected_permission = sys.argv[1:]
+role = json.loads(os.environ['CUSTOM_ROLE_JSON_INPUT'])
+assert role.get('name') == expected_name
+assert role.get('deleted', False) is not True
+assert sorted(role.get('includedPermissions', [])) == [expected_permission]
+PY
+then
+  pass "custom deploy role contains exactly run.services.setIamPolicy"
+else
+  fail "custom deploy role missing or broader than run.services.setIamPolicy"
+fi
+
 mapfile -t PROJECT_ROLES < <(gcloud projects get-iam-policy "$PROJECT_ID" \
   --flatten='bindings[].members' --filter="bindings.members=serviceAccount:${EXPECTED_DEPLOY_SA}" \
   --format='value(bindings.role)' 2>/dev/null | sed '/^[[:space:]]*$/d' | sort -u)
 mapfile -t EXPECTED_SORTED < <(printf '%s\n' "${INTENDED_ROLES[@]}" | sort -u)
 if [[ "$(printf '%s\n' "${PROJECT_ROLES[@]}")" == "$(printf '%s\n' "${EXPECTED_SORTED[@]}")" ]]; then
-  pass "deploy-SA project roles exactly match Block 3B.2B"
+  pass "deploy-SA project roles exactly match least-privilege Production set"
 else
-  fail "deploy-SA project roles do not exactly match Block 3B.2B"
+  fail "deploy-SA project roles do not exactly match least-privilege Production set"
 fi
 
 for role in "${FORBIDDEN_ROLES[@]}"; do
@@ -145,4 +164,5 @@ fi
 printf '\nProduction deploy IAM verification PASSED.\n'
 printf 'productionDeployIamConfigured=true\n'
 printf 'productionDeployEndToEndReady=false\n'
+printf 'customDeployRolePermission=%s\n' "$CUSTOM_DEPLOY_ROLE_PERMISSION"
 printf 'Block 3B.3 runtime/build service-account actAs relationships remain intentionally NOT configured.\n'
