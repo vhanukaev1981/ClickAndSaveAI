@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import { probeProductionBootstrapCapabilities } from "./production-bootstrap-capability-probe.mjs";
 
 const CANONICAL_PROJECT_ID = "click-save-ai-production";
 const CANONICAL_PROJECT_NUMBER = "991489557172";
@@ -152,13 +153,25 @@ export async function probeFirebaseIamPermissions({
 }
 
 async function runCli() {
+  const accessToken = process.env.BLOCK3F_IAM_TEST_ACCESS_TOKEN ?? "";
+  const expectedProjectId = process.env.EXPECTED_PROJECT_ID ?? "";
+  const expectedProjectNumber = process.env.EXPECTED_PROJECT_NUMBER ?? "";
+
   const result = await probeFirebaseIamPermissions({
-    accessToken: process.env.BLOCK3F_IAM_TEST_ACCESS_TOKEN ?? "",
-    expectedProjectId: process.env.EXPECTED_PROJECT_ID ?? "",
-    expectedProjectNumber: process.env.EXPECTED_PROJECT_NUMBER ?? "",
+    accessToken,
+    expectedProjectId,
+    expectedProjectNumber,
   });
   for (const line of result.lines) console.log(line);
-  process.exitCode = result.exitCode;
+
+  const bootstrapResult = await probeProductionBootstrapCapabilities({
+    accessToken,
+    expectedProjectId,
+    expectedProjectNumber,
+  });
+  for (const line of bootstrapResult.lines) console.log(line);
+
+  process.exitCode = Math.max(result.exitCode, bootstrapResult.exitCode);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
