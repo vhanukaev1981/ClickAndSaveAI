@@ -766,6 +766,6 @@ jobs:
               echo "Firebase deploy failed after ${max_attempts} attempts." >&2
               exit 1
             fi
-            echo "Firebase deploy attempt ${attempt} failed; retrying after IAM/artifact policy propagation delay."
+            echo "Firebase deploy attempt ${attempt} failed; retrying after IAM/artifact policy propagation delay." >&2
             sleep $((attempt * 20))
           done
