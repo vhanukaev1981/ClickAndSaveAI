@@ -33,19 +33,24 @@ for (const location of LOCATIONS) {
   });
 
   test(`bootstrap logs cleanup-policy configuration for ${location} before executing it`, () => {
-    const logIdx = bootstrap.indexOf(`Configuring Firebase Functions Artifact Registry cleanup policy in ${location}`);
-    const cmdIdx = bootstrap.indexOf(`--location=${location}`);
+    const logMsg = `Configuring Firebase Functions Artifact Registry cleanup policy in ${location}`;
+    const cmdPattern = new RegExp(`functions:artifacts:setpolicy[^\\n]*--location=${location}`);
+    const logIdx = bootstrap.indexOf(logMsg);
+    const cmdMatch = cmdPattern.exec(bootstrap);
     assert.ok(logIdx !== -1, `log message for ${location} must be present`);
-    assert.ok(cmdIdx !== -1, `setpolicy command for ${location} must be present`);
-    assert.ok(logIdx < cmdIdx, `log message for ${location} must precede its setpolicy command`);
+    assert.ok(cmdMatch !== null, `setpolicy command for ${location} must be present`);
+    assert.ok(logIdx < cmdMatch.index, `log message for ${location} must precede its setpolicy command`);
   });
 }
 
 test("setpolicy commands do not use --force flag", () => {
-  const setpolicyBlock = bootstrap.slice(bootstrap.indexOf("functions:artifacts:setpolicy"));
-  const firstBlankLineAfter = setpolicyBlock.search(/\n\n/);
-  const block = firstBlankLineAfter === -1 ? setpolicyBlock : setpolicyBlock.slice(0, firstBlankLineAfter);
-  assert.doesNotMatch(block, /--force/);
+  const allSetpolicyLines = bootstrap
+    .split("\n")
+    .filter((line) => line.includes("functions:artifacts:setpolicy"));
+  assert.ok(allSetpolicyLines.length >= 2, "at least two setpolicy invocations must be present");
+  for (const line of allSetpolicyLines) {
+    assert.doesNotMatch(line, /--force/, `setpolicy command must not use --force: ${line}`);
+  }
 });
 
 test("bootstrap configures cleanup policy after IAM role grants, not before", () => {
