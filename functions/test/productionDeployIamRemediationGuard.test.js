@@ -10,6 +10,12 @@ const verifyPath = path.resolve(__dirname, "../../scripts/verify-production-depl
 const bootstrap = fs.readFileSync(bootstrapPath, "utf8");
 const verify = fs.readFileSync(verifyPath, "utf8");
 
+function intendedRolesBlock(source) {
+  const match = source.match(/INTENDED_ROLES=\(([\s\S]*?)\)\nFORBIDDEN_ROLES=/);
+  assert.ok(match, "INTENDED_ROLES block must be present");
+  return match[1];
+}
+
 test("production deploy IAM uses a one-permission custom role for Cloud Run IAM policy updates", () => {
   assert.match(bootstrap, /CUSTOM_DEPLOY_ROLE_ID="clickandsaveaiFirebaseDeployIamPolicy"/);
   assert.match(bootstrap, /run\.services\.setIamPolicy/);
@@ -17,9 +23,10 @@ test("production deploy IAM uses a one-permission custom role for Cloud Run IAM 
   assert.match(verify, /CUSTOM_DEPLOY_ROLE_ID="clickandsaveaiFirebaseDeployIamPolicy"/);
   assert.match(verify, /run\.services\.setIamPolicy/);
 
-  assert.doesNotMatch(bootstrap, /INTENDED_ROLES=\([\s\S]*roles\/run\.admin/);
-  assert.doesNotMatch(bootstrap, /INTENDED_ROLES=\([\s\S]*roles\/cloudfunctions\.admin/);
-  assert.doesNotMatch(bootstrap, /INTENDED_ROLES=\([\s\S]*roles\/artifactregistry\.admin/);
+  const intended = intendedRolesBlock(bootstrap);
+  assert.doesNotMatch(intended, /roles\/run\.admin/);
+  assert.doesNotMatch(intended, /roles\/cloudfunctions\.admin/);
+  assert.doesNotMatch(intended, /roles\/artifactregistry\.admin/);
 });
 
 test("production IAM bootstrap preconfigures Firebase artifact cleanup in both deployment regions", () => {
