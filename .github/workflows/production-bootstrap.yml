@@ -1,0 +1,19 @@
+name: Production Bootstrap
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  bootstrap-production:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+      - name: Stop before mutation
+        run: |
+          echo 'Scaffold only: authentication and exact least-privilege administrator identity must be verified before enabling mutation.'
+          exit 1
