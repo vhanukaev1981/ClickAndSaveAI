@@ -455,16 +455,16 @@ jobs:
           [[ "$BOOTSTRAP_USER_KEY_COUNT" == '0' ]] || { echo 'Bootstrap service account has user-managed keys.' >&2; exit 1; }
           PROVIDER_JSON="$(gcloud iam workload-identity-pools providers describe clickandsaveai-production --project="$EXPECTED_PROJECT_ID" --location=global --workload-identity-pool=github-actions --format=json)"
           PROVIDER_JSON_INPUT="$PROVIDER_JSON" python3 - "$EXPECTED_WIF_PROVIDER" "$EXPECTED_MAPPING" "$EXPECTED_CONDITION" <<'PY'
-import json, os, sys
-expected_name, mapping_csv, expected_condition = sys.argv[1:]
-provider = json.loads(os.environ["PROVIDER_JSON_INPUT"])
-mapping = dict(item.split("=", 1) for item in mapping_csv.split(","))
-assert provider.get("name") == expected_name
-assert str(provider.get("disabled", False)).lower() == "false"
-assert provider.get("oidc", {}).get("issuerUri") == "https://token.actions.githubusercontent.com"
-assert provider.get("attributeMapping", {}) == mapping
-assert provider.get("attributeCondition", "") == expected_condition
-PY
+          import json, os, sys
+          expected_name, mapping_csv, expected_condition = sys.argv[1:]
+          provider = json.loads(os.environ["PROVIDER_JSON_INPUT"])
+          mapping = dict(item.split("=", 1) for item in mapping_csv.split(","))
+          assert provider.get("name") == expected_name
+          assert str(provider.get("disabled", False)).lower() == "false"
+          assert provider.get("oidc", {}).get("issuerUri") == "https://token.actions.githubusercontent.com"
+          assert provider.get("attributeMapping", {}) == mapping
+          assert provider.get("attributeCondition", "") == expected_condition
+          PY
 
       - name: Install Firebase CLI for bootstrap script requirements
         run: npm install --global firebase-tools@15.24.0
