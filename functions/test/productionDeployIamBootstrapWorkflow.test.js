@@ -9,6 +9,7 @@ const root = path.resolve(process.cwd(), "..");
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 
 const workflow = read(".github/workflows/production-release.yml");
+const bootstrapScript = read("scripts/bootstrap-production-deploy-iam.sh");
 
 function jobBlock(name) {
   const marker = `  ${name}:\n`;
@@ -92,13 +93,18 @@ test("bootstrap job uses WIF with bootstrap SA only and runs canonical scripts",
   assert.match(bootstrap, /bash scripts\/verify-production-deploy-iam\.sh/);
 });
 
-test("bootstrap exports WIF ADC credentials for non-interactive Firebase CLI authentication", () => {
+test("bootstrap exposes validated WIF ADC credentials to Firebase CLI without interactive login or tokens", () => {
   const bootstrap = jobBlock("production-bootstrap-deploy-iam");
+  assert.match(bootstrap, /Authenticate bootstrap identity with GitHub OIDC[\s\S]*create_credentials_file: 'true'/);
+  assert.match(bootstrapScript, /GOOGLE_APPLICATION_CREDENTIALS/);
+  assert.match(bootstrapScript, /gha-creds-\*\.json/);
+  assert.match(bootstrapScript, /external_account/);
+  assert.match(bootstrapScript, /service_account_impersonation_url/);
   assert.match(
-    bootstrap,
-    /Authenticate bootstrap identity with GitHub OIDC[\s\S]*create_credentials_file: 'true'[\s\S]*export_environment_variables: 'true'/
+    bootstrapScript,
+    /clickandsaveai-github-bootstra@click-save-ai-production\.iam\.gserviceaccount\.com/
   );
-  assert.doesNotMatch(bootstrap, /firebase\s+login|FIREBASE_TOKEN|--token/);
+  assert.doesNotMatch(`${bootstrap}\n${bootstrapScript}`, /firebase\s+login|FIREBASE_TOKEN|--token/);
 });
 
 test("bootstrap path includes key-material rejection guards and excludes deploy actions or broad admin grants", () => {
