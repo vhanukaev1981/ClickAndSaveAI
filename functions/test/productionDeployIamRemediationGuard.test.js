@@ -11,7 +11,7 @@ const bootstrap = fs.readFileSync(bootstrapPath, "utf8");
 const verify = fs.readFileSync(verifyPath, "utf8");
 
 function intendedRolesBlock(source) {
-  const match = source.match(/INTENDED_ROLES=\(([\s\S]*?)\)\nFORBIDDEN_ROLES=/);
+  const match = source.match(/INTENDED_ROLES=\(([\s\S]*?)\)\n(?:APPROVED_PREEXISTING_ROLES|FORBIDDEN_ROLES)=/);
   assert.ok(match, "INTENDED_ROLES block must be present");
   return match[1];
 }
@@ -35,7 +35,7 @@ test("production deploy IAM uses a one-permission custom role for Cloud Run IAM 
   assert.doesNotMatch(intended, /roles\/artifactregistry\.admin/);
 });
 
-test("production IAM bootstra preserves only the exact approved Firebase Metadata Reader role when pre-existing", () => {
+test("production IAM bootstrap preserves only the exact approved Firebase Metadata Reader role when pre-existing", () => {
   const metadataReaderRole = "projects/click-save-ai-production/roles/clickandsaveaiFirebaseMetadataReader";
   const bootstrapApproved = approvedPreexistingRolesBlock(bootstrap);
   const verifyApproved = approvedPreexistingRolesBlock(verify);
