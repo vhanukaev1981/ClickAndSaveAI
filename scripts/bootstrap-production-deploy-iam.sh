@@ -21,6 +21,8 @@ CUSTOM_DEPLOY_ROLE_ID="clickandsaveaiFirebaseDeployIamPolicy"
 CUSTOM_DEPLOY_ROLE_TITLE="ClickAndSaveAI Firebase Deploy IAM Policy"
 CUSTOM_DEPLOY_ROLE_PERMISSION="run.services.setIamPolicy"
 EXPECTED_ARTIFACT_CLEANUP_DAYS="7"
+ARTIFACT_REPOSITORY_ID="gcf-artifacts"
+ARTIFACT_CLEANUP_POLICY_ID="firebase-functions-cleanup"
 PROJECT_ID="${PROJECT_ID:-$EXPECTED_PROJECT_ID}"
 CUSTOM_DEPLOY_ROLE_NAME="projects/${EXPECTED_PROJECT_ID}/roles/${CUSTOM_DEPLOY_ROLE_ID}"
 
@@ -89,6 +91,43 @@ assert cred.get('audience') == f'//iam.googleapis.com/{expected_provider}'
 url = cred.get('service_account_impersonation_url', '')
 encoded_sa = expected_sa.replace('@', '%40')
 assert f'/serviceAccounts/{expected_sa}:generateAccessToken' in url or f'/serviceAccounts/{encoded_sa}:generateAccessToken' in url
+PY
+}
+configure_artifact_cleanup() {
+  local location="$1"
+  local repo_json policy_json
+
+  repo_json="$(gcloud artifacts repositories describe "$ARTIFACT_REPOSITORY_ID" \
+    --project="$PROJECT_ID" --location="$location" --format=json 2>/dev/null || true)"
+  if [[ -z "$repo_json" ]]; then
+    printf 'Artifact Registry repository %s is not present in %s; cleanup policy not required there yet.\n' \
+      "$ARTIFACT_REPOSITORY_ID" "$location"
+    return 0
+  fi
+
+  printf 'Configuring Artifact Registry cleanup policy in %s (%s days).\n' \
+    "$location" "$EXPECTED_ARTIFACT_CLEANUP_DAYS"
+  gcloud artifacts repositories set-cleanup-policies "$ARTIFACT_REPOSITORY_ID" \
+    --project="$PROJECT_ID" \
+    --location="$location" \
+    --policy="$ARTIFACT_CLEANUP_POLICY_FILE" \
+    --no-dry-run \
+    --quiet >/dev/null
+
+  policy_json="$(gcloud artifacts repositories describe "$ARTIFACT_REPOSITORY_ID" \
+    --project="$PROJECT_ID" --location="$location" --format=json)"
+  ARTIFACT_POLICY_JSON_INPUT="$policy_json" python3 - "$ARTIFACT_CLEANUP_POLICY_ID" <<'PY' || fail "Artifact cleanup policy verification failed in $location."
+import json, os, sys
+policy_id = sys.argv[1]
+repo = json.loads(os.environ['ARTIFACT_POLICY_JSON_INPUT'])
+policy = (repo.get('cleanupPolicies') or {}).get(policy_id)
+assert policy is not None
+assert policy.get('id') == policy_id
+assert policy.get('action') == 'DELETE'
+condition = policy.get('condition') or {}
+assert condition.get('tagState') == 'ANY'
+assert condition.get('olderThan') == '604800s'
+assert repo.get('cleanupPolicyDryRun', False) is False
 PY
 }
 
@@ -195,12 +234,25 @@ mapfile -t EXPECTED_SORTED < <(printf '%s\n' "${INTENDED_ROLES[@]}" "${PRESERVED
 [[ "$(printf '%s\n' "${FINAL_PROJECT_ROLES[@]}")" == "$(printf '%s\n' "${EXPECTED_SORTED[@]}")" ]] || fail "Final deploy-SA project role set is not exactly the intended set plus approved pre-existing roles."
 
 configure_firebase_adc
-printf 'Configuring Firebase Functions Artifact Registry cleanup policy in europe-west1 (%s days).\n' "$EXPECTED_ARTIFACT_CLEANUP_DAYS"
-firebase functions:artifacts:setpolicy --project="$PROJECT_ID" --location=europe-west1 --days=7
-printf 'Configuring Firebase Functions Artifact Registry cleanup policy in us-central1 (%s days).\n' "$EXPECTED_ARTIFACT_CLEANUP_DAYS"
-firebase functions:artifacts:setpolicy --project="$PROJECT_ID" --location=us-central1 --days=7
+ARTIFACT_CLEANUP_POLICY_FILE="$(mktemp)"
+trap 'rm -f "$ARTIFACT_CLEANUP_POLICY_FILE"' EXIT
+cat > "$ARTIFACT_CLEANUP_POLICY_FILE" <<'JSON'
+[
+  {
+    "name": "firebase-functions-cleanup",
+    "action": {"type": "Delete"},
+    "condition": {
+      "tagState": "any",
+      "olderThan": "7d"
+    }
+  }
+]
+JSON
+
+configure_artifact_cleanup europe-west1
+configure_artifact_cleanup us-central1
 
 printf 'Production deploy IAM foundation configured for %s.\n' "$EXPECTED_DEPLOY_SA"
 printf 'Custom deploy role permission exact: %s.\n' "$CUSTOM_DEPLOY_ROLE_PERMISSION"
-printf 'Artifact cleanup retention configured: %s days in europe-west1 and us-central1.\n' "$EXPECTED_ARTIFACT_CLEANUP_DAYS"
+printf 'Artifact cleanup retention configured: %s days where gcf-artifacts exists in europe-west1 and us-central1.\n' "$EXPECTED_ARTIFACT_CLEANUP_DAYS"
 printf 'Block 3B.3 runtime/build service-account actAs relationships remain intentionally NOT configured.\n'

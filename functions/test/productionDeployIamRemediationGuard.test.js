@@ -50,14 +50,18 @@ test("production IAM bootstra preserves only the exact actual Firebase Metadata 
   assert.match(verify, /approved pre-existing deploy-SA role/);
 });
 
-test("production IAM bootstrap preconfigures Firebase artifact cleanup in both deployment regions", () => {
-  assert.match(
-    bootstrap,
-    /functions:artifacts:setpolicy[\s\S]*--location=europe-west1[\s\S]*--days=7/
-  );
-  assert.match(
-    bootstrap,
-    /functions:artifacts:setpolicy[\s\S]*--location=us-central1[\s\S]*--days=7/
-  );
+test("production IAM bootstrap configures Firebase Functions artifact cleanup directly through Artifact Registry", () => {
+  assert.match(bootstrap, /ARTIFACT_REPOSITORY_ID="gcf-artifacts"/);
+  assert.match(bootstrap, /ARTIFACT_CLEANUP_POLICY_ID="firebase-functions-cleanup"/);
   assert.match(bootstrap, /EXPECTED_ARTIFACT_CLEANUP_DAYS="7"/);
+  assert.match(bootstrap, /"name": "firebase-functions-cleanup"/);
+  assert.match(bootstrap, /"action": \{"type": "Delete"\}/);
+  assert.match(bootstrap, /"tagState": "any"/);
+  assert.match(bootstrap, /"olderThan": "7d"/);
+  assert.match(bootstrap, /gcloud artifacts repositories set-cleanup-policies/);
+  assert.match(bootstrap, /--policy="\$ARTIFACT_CLEANUP_POLICY_FILE"/);
+  assert.match(bootstrap, /--no-dry-run/);
+  assert.match(bootstrap, /europe-west1/);
+  assert.match(bootstrap, /us-central1/);
+  assert.doesNotMatch(bootstrap, /functions:artifacts:setpolicy/);
 });
