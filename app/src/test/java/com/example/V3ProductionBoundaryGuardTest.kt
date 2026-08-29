@@ -21,8 +21,16 @@ class V3ProductionBoundaryGuardTest {
     fun releaseIdentityRemainsUnchanged() {
         val gradle = File("build.gradle.kts").readText()
         assertTrue(gradle.contains("applicationId = \"com.aistudio.clickandsaveai.app\""))
-        assertTrue(gradle.contains("versionCode = 3"))
+        assertTrue(gradle.contains("versionCode = 4"))
         assertTrue(gradle.contains("versionName = \"1.0\""))
+    }
+
+    @Test
+    fun googleSignInFailureSurfacesCredentialExceptionTypeForInternalDiagnosis() {
+        val auth = File("src/main/java/com/example/data/repository/AuthRepository.kt").readText()
+        assertTrue(auth.contains("e::class.java.simpleName"))
+        assertTrue(auth.contains("Google Sign-In failed ["))
+        assertFalse(auth.contains("Google Sign-In was cancelled or failed."))
     }
 
     @Test
