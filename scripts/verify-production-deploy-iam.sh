@@ -17,7 +17,7 @@ EXPECTED_MAPPING="google.subject=assertion.sub,attribute.repository_id=assertion
 EXPECTED_CONDITION="attribute.repository_id=='${GITHUB_REPOSITORY_ID}' && attribute.repository_owner_id=='${GITHUB_REPOSITORY_OWNER_ID}' && attribute.environment=='${GITHUB_ENVIRONMENT}' && attribute.ref=='${GITHUB_REF}' && attribute.workflow_ref=='${GITHUB_WORKFLOW_REF}'"
 EXPECTED_WIF_MEMBER="principalSet://iam.googleapis.com/projects/${EXPECTED_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${EXPECTED_POOL_ID}/attribute.repository_id/${GITHUB_REPOSITORY_ID}"
 CUSTOM_DEPLOY_ROLE_ID="clickandsaveaiFirebaseDeployIamPolicy"
-CUSTOM_DEPLOY_ROLE_PERMISSION="run.services.setIamPolicy"
+CUSTOM_DEPLOY_ROLE_PERMISSIONS="run.services.setIamPolicy,cloudscheduler.jobs.update"
 PROJECT_ID="${PROJECT_ID:-$EXPECTED_PROJECT_ID}"
 CUSTOM_DEPLOY_ROLE_NAME="projects/${EXPECTED_PROJECT_ID}/roles/${CUSTOM_DEPLOY_ROLE_ID}"
 
@@ -44,6 +44,7 @@ FORBIDDEN_ROLES=(
   roles/secretmanager.admin
   roles/storage.admin
   roles/artifactregistry.admin
+  roles/cloudscheduler.admin
   roles/iam.serviceAccountUser
 )
 
@@ -121,18 +122,19 @@ mapfile -t WIF_MEMBERS < <(gcloud iam service-accounts get-iam-policy "$EXPECTED
 [[ "${#WIF_MEMBERS[@]}" -eq 1 && "${WIF_MEMBERS[0]}" == "$EXPECTED_WIF_MEMBER" ]] && pass "Production WIF impersonation boundary exact" || fail "Production WIF impersonation boundary mismatch"
 
 CUSTOM_ROLE_JSON="$(gcloud iam roles describe "$CUSTOM_DEPLOY_ROLE_ID" --project="$PROJECT_ID" --format=json 2>/dev/null || true)"
-if [[ -n "$CUSTOM_ROLE_JSON" ]] && CUSTOM_ROLE_JSON_INPUT="$CUSTOM_ROLE_JSON" python3 - "$CUSTOM_DEPLOY_ROLE_NAME" "$CUSTOM_DEPLOY_ROLE_PERMISSION" <<'PY'
+if [[ -n "$CUSTOM_ROLE_JSON" ]] && CUSTOM_ROLE_JSON_INPUT="$CUSTOM_ROLE_JSON" python3 - "$CUSTOM_DEPLOY_ROLE_NAME" "$CUSTOM_DEPLOY_ROLE_PERMISSIONS" <<'PY'
 import json, os, sys
-expected_name, expected_permission = sys.argv[1:]
+expected_name, expected_permissions_csv = sys.argv[1:]
+expected_permissions = sorted(expected_permissions_csv.split(','))
 role = json.loads(os.environ['CUSTOM_ROLE_JSON_INPUT'])
 assert role.get('name') == expected_name
 assert role.get('deleted', False) is not True
-assert sorted(role.get('includedPermissions', [])) == [expected_permission]
+assert sorted(role.get('includedPermissions', [])) == expected_permissions
 PY
 then
-  pass "custom deploy role contains exactly run.services.setIamPolicy"
+  pass "custom deploy role contains exactly run.services.setIamPolicy and cloudscheduler.jobs.update"
 else
-  fail "custom deploy role missing or broader than run.services.setIamPolicy"
+  fail "custom deploy role missing or not exact least privilege for Cloud Run IAM and Scheduler updates"
 fi
 
 mapfile -t PROJECT_ROLES < <(gcloud projects get-iam-policy "$PROJECT_ID" \
@@ -190,5 +192,5 @@ fi
 printf '\nProduction deploy IAM verification PASSED.\n'
 printf 'productionDeployIamConfigured=true\n'
 printf 'productionDeployEndToEndReady=false\n'
-printf 'customDeployRolePermission=%s\n' "$CUSTOM_DEPLOY_ROLE_PERMISSION"
+printf 'customDeployRolePermissions=%s\n' "$CUSTOM_DEPLOY_ROLE_PERMISSIONS"
 printf 'Block 3B.3 runtime/build service-account actAs relationships remain intentionally NOT configured.\n'

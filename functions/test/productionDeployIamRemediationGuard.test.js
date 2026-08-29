@@ -22,17 +22,19 @@ function approvedPreexistingRolesBlock(source) {
   return match[1];
 }
 
-test("production deploy IAM uses a one-permission custom role for Cloud Run IAM policy updates", () => {
+test("production deploy IAM custom role is exact least privilege for Cloud Run IAM and existing Scheduler updates", () => {
   assert.match(bootstrap, /CUSTOM_DEPLOY_ROLE_ID="clickandsaveaiFirebaseDeployIamPolicy"/);
-  assert.match(bootstrap, /run\.services\.setIamPolicy/);
-  assert.match(bootstrap, /--permissions="run\.services\.setIamPolicy"/);
+  assert.match(bootstrap, /CUSTOM_DEPLOY_ROLE_PERMISSIONS="run\.services\.setIamPolicy,cloudscheduler\.jobs\.update"/);
+  assert.match(bootstrap, /--permissions="\$CUSTOM_DEPLOY_ROLE_PERMISSIONS"/);
   assert.match(verify, /CUSTOM_DEPLOY_ROLE_ID="clickandsaveaiFirebaseDeployIamPolicy"/);
-  assert.match(verify, /run\.services\.setIamPolicy/);
+  assert.match(verify, /CUSTOM_DEPLOY_ROLE_PERMISSIONS="run\.services\.setIamPolicy,cloudscheduler\.jobs\.update"/);
+  assert.match(verify, /cloudscheduler\.jobs\.update/);
 
   const intended = intendedRolesBlock(bootstrap);
   assert.doesNotMatch(intended, /roles\/run\.admin/);
   assert.doesNotMatch(intended, /roles\/cloudfunctions\.admin/);
   assert.doesNotMatch(intended, /roles\/artifactregistry\.admin/);
+  assert.doesNotMatch(intended, /roles\/cloudscheduler\.admin/);
 });
 
 test("production IAM bootstra preserves only the exact actual Firebase Metadata Reader role when pre-existing", () => {

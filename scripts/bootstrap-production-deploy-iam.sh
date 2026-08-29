@@ -19,7 +19,7 @@ EXPECTED_CONDITION="attribute.repository_id=='${GITHUB_REPOSITORY_ID}' && attrib
 EXPECTED_WIF_MEMBER="principalSet://iam.googleapis.com/projects/${EXPECTED_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${EXPECTED_POOL_ID}/attribute.repository_id/${GITHUB_REPOSITORY_ID}"
 CUSTOM_DEPLOY_ROLE_ID="clickandsaveaiFirebaseDeployIamPolicy"
 CUSTOM_DEPLOY_ROLE_TITLE="ClickAndSaveAI Firebase Deploy IAM Policy"
-CUSTOM_DEPLOY_ROLE_PERMISSION="run.services.setIamPolicy"
+CUSTOM_DEPLOY_ROLE_PERMISSIONS="run.services.setIamPolicy,cloudscheduler.jobs.update"
 EXPECTED_ARTIFACT_CLEANUP_DAYS="7"
 ARTIFACT_REPOSITORY_ID="gcf-artifacts"
 ARTIFACT_CLEANUP_POLICY_ID="firebase-functions-cleanup"
@@ -49,6 +49,7 @@ FORBIDDEN_ROLES=(
   roles/secretmanager.admin
   roles/storage.admin
   roles/artifactregistry.admin
+  roles/cloudscheduler.admin
   roles/iam.serviceAccountUser
 )
 
@@ -61,13 +62,14 @@ contains() {
 }
 verify_custom_deploy_role() {
   local role_json="$1"
-  CUSTOM_ROLE_JSON_INPUT="$role_json" python3 - "$CUSTOM_DEPLOY_ROLE_NAME" "$CUSTOM_DEPLOY_ROLE_PERMISSION" <<'PY'
+  CUSTOM_ROLE_JSON_INPUT="$role_json" python3 - "$CUSTOM_DEPLOY_ROLE_NAME" "$CUSTOM_DEPLOY_ROLE_PERMISSIONS" <<'PY'
 import json, os, sys
-expected_name, expected_permission = sys.argv[1:]
+expected_name, expected_permissions_csv = sys.argv[1:]
+expected_permissions = sorted(expected_permissions_csv.split(','))
 role = json.loads(os.environ['CUSTOM_ROLE_JSON_INPUT'])
 assert role.get('name') == expected_name
 assert role.get('deleted', False) is not True
-assert sorted(role.get('includedPermissions', [])) == [expected_permission]
+assert sorted(role.get('includedPermissions', [])) == expected_permissions
 PY
 }
 configure_firebase_adc() {
@@ -185,12 +187,22 @@ if [[ -z "$CUSTOM_ROLE_JSON" ]]; then
   gcloud iam roles create "$CUSTOM_DEPLOY_ROLE_ID" \
     --project="$PROJECT_ID" \
     --title="$CUSTOM_DEPLOY_ROLE_TITLE" \
-    --description="ClickAndSaveAI Production Firebase deployer: Cloud Run IAM policy update only." \
-    --permissions="run.services.setIamPolicy" \
+    --description="ClickAndSaveAI Production Firebase deployer: Cloud Run IAM policy and existing Cloud Scheduler job updates only." \
+    --permissions="$CUSTOM_DEPLOY_ROLE_PERMISSIONS" \
     --stage=GA \
     --quiet >/dev/null
-  CUSTOM_ROLE_JSON="$(gcloud iam roles describe "$CUSTOM_DEPLOY_ROLE_ID" --project="$PROJECT_ID" --format=json 2>/dev/null || true)"
+else
+  if ! verify_custom_deploy_role "$CUSTOM_ROLE_JSON"; then
+    gcloud iam roles update "$CUSTOM_DEPLOY_ROLE_ID" \
+      --project="$PROJECT_ID" \
+      --title="$CUSTOM_DEPLOY_ROLE_TITLE" \
+      --description="ClickAndSaveAI Production Firebase deployer: Cloud Run IAM policy and existing Cloud Scheduler job updates only." \
+      --permissions="$CUSTOM_DEPLOY_ROLE_PERMISSIONS" \
+      --stage=GA \
+      --quiet >/dev/null
+  fi
 fi
+CUSTOM_ROLE_JSON="$(gcloud iam roles describe "$CUSTOM_DEPLOY_ROLE_ID" --project="$PROJECT_ID" --format=json 2>/dev/null || true)"
 [[ -n "$CUSTOM_ROLE_JSON" ]] || fail "Custom Production deploy role is missing after bootstrap."
 verify_custom_deploy_role "$CUSTOM_ROLE_JSON" || fail "Custom Production deploy role is not exactly least-privilege; refusing IAM mutation."
 
@@ -253,6 +265,6 @@ configure_artifact_cleanup europe-west1
 configure_artifact_cleanup us-central1
 
 printf 'Production deploy IAM foundation configured for %s.\n' "$EXPECTED_DEPLOY_SA"
-printf 'Custom deploy role permission exact: %s.\n' "$CUSTOM_DEPLOY_ROLE_PERMISSION"
+printf 'Custom deploy role permissions exact: %s.\n' "$CUSTOM_DEPLOY_ROLE_PERMISSIONS"
 printf 'Artifact cleanup retention configured: %s days where gcf-artifacts exists in europe-west1 and us-central1.\n' "$EXPECTED_ARTIFACT_CLEANUP_DAYS"
 printf 'Block 3B.3 runtime/build service-account actAs relationships remain intentionally NOT configured.\n'
