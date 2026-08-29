@@ -447,6 +447,7 @@ jobs:
           [[ "$AUDIENCE" == "//iam.googleapis.com/$EXPECTED_WIF_PROVIDER" ]] || { echo 'Credential audience mismatch.' >&2; exit 1; }
           EXPECTED_BOOTSTRAP_SA_ENCODED="${EXPECTED_BOOTSTRAP_SA//@/%40}"
           [[ "$IMPERSONATION_URL" == *"/serviceAccounts/$EXPECTED_BOOTSTRAP_SA:generateAccessToken" || "$IMPERSONATION_URL" == *"/serviceAccounts/$EXPECTED_BOOTSTRAP_SA_ENCODED:generateAccessToken" ]] || { echo 'Credential impersonation service account mismatch.' >&2; exit 1; }
+          gcloud auth login --cred-file="$CREDENTIALS_FILE" --brief >/dev/null
           [[ "$(gcloud projects describe "$EXPECTED_PROJECT_ID" --format='value(projectId)')" == "$EXPECTED_PROJECT_ID" ]] || { echo 'Project ID mismatch.' >&2; exit 1; }
           [[ "$(gcloud projects describe "$EXPECTED_PROJECT_ID" --format='value(projectNumber)')" == "$EXPECTED_PROJECT_NUMBER" ]] || { echo 'Project number mismatch.' >&2; exit 1; }
           [[ "$(gcloud iam service-accounts describe "$EXPECTED_BOOTSTRAP_SA" --project="$EXPECTED_PROJECT_ID" --format='value(email)')" == "$EXPECTED_BOOTSTRAP_SA" ]] || { echo 'Bootstrap service-account missing or mismatched.' >&2; exit 1; }
