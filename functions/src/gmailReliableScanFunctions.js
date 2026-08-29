@@ -84,6 +84,7 @@ exports.scanGmailInvoices = onCall(
   },
   async (request) => {
     const uid = requireAuth(request);
+    let stage = "LOAD_CONNECTION";
     try {
       const connectionRef = db.collection("gmailConnections").doc(uid);
       const beforeSnapshot = await connectionRef.get();
@@ -97,10 +98,14 @@ exports.scanGmailInvoices = onCall(
           "Gmail ingestion is disabled while provider disconnect cleanup is pending."
         );
       }
+
+      stage = "RESOLVE_SYNC_MODE";
       const mode = syncMode(before, ACTIVE_GMAIL_PARSER_VERSION);
 
       if (mode === "INCREMENTAL") {
+        stage = "LOAD_AUTHORITATIVE_SNAPSHOT";
         const snapshot = await authoritativeInvoiceSnapshot(uid, mode, before);
+        stage = "EMIT_INCREMENTAL_TELEMETRY";
         emitOperationalEvent({
           event: "gmail.reconciliation.scan",
           subsystem: "gmail",
@@ -121,12 +126,16 @@ exports.scanGmailInvoices = onCall(
 
       let baseline = normalizeHistoryId(before.watchHistoryId);
       if (mode === "INITIAL_BACKFILL") {
+        stage = "ESTABLISH_INITIAL_BASELINE";
         baseline = await establishInitialBaseline(request, connectionRef, before);
       } else if (mode === "RECOVERY_REQUIRED") {
+        stage = "ESTABLISH_RECOVERY_BASELINE";
         baseline = await establishRecoveryBaseline(request, connectionRef, before);
       }
 
+      stage = "RUN_STABLE_SCAN";
       const result = await handlerRunner(stableScanHandler, "Stable Gmail scan")(request);
+      stage = "RELOAD_CONNECTION";
       const afterSnapshot = await connectionRef.get();
       const after = afterSnapshot.data() || before;
       const update = {
@@ -135,6 +144,7 @@ exports.scanGmailInvoices = onCall(
         updatedAt: FieldValue.serverTimestamp(),
       };
 
+      stage = "BUILD_RECONCILIATION_UPDATE";
       if (mode === "INITIAL_BACKFILL") {
         update.initialBackfillCompleted = true;
         update.initialBackfillCompletedAt = FieldValue.serverTimestamp();
@@ -165,9 +175,11 @@ exports.scanGmailInvoices = onCall(
         }
       }
 
+      stage = "PERSIST_RECONCILIATION_UPDATE";
       await connectionRef.set(update, { merge: true });
 
       const historyRecoveryRequired = update.historyRecoveryRequired === true;
+      stage = "EMIT_COMPLETION_TELEMETRY";
       emitOperationalEvent({
         event: "gmail.reconciliation.scan",
         subsystem: "gmail",
@@ -191,19 +203,25 @@ exports.scanGmailInvoices = onCall(
         syncMode: mode,
       };
     } catch (error) {
-      emitOperationalEvent({
-        event: "gmail.reconciliation.scan",
-        subsystem: "gmail",
-        outcome: "failure",
-        severity: "ERROR",
-        code: "GMAIL_RECONCILIATION_FAILED",
-        uid,
-        details: {
-          errorName: error instanceof Error ? error.name : typeof error,
-          errorCode: error?.code || "UNKNOWN",
-        },
-      });
-      throw error;
+      try {
+        emitOperationalEvent({
+          event: "gmail.reconciliation.scan",
+          subsystem: "gmail",
+          outcome: "failure",
+          severity: "ERROR",
+          code: "GMAIL_RECONCILIATION_FAILED",
+          uid,
+          details: {
+            stage,
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorCode: error?.code || "UNKNOWN",
+          },
+        });
+      } catch {
+        // Diagnostic telemetry must never replace the original reconciliation failure.
+      }
+      if (error instanceof HttpsError) throw error;
+      throw new HttpsError("internal", `GMAIL_RECONCILIATION_INTERNAL_${stage}`);
     }
   }
 );

@@ -54,6 +54,7 @@ const providerDispatchFunctions = require("./providerDispatchFunctions");
 const commerceFunnelFunctions = require("./commerceFunnelFunctions");
 const gmailScanV5Functions = require("./gmailScanV5Functions");
 const gmailSyncStatusFunctions = require("./gmailSyncStatusFunctions");
+const gmailConnectionStatusFunctions = require("./gmailConnectionStatusFunctions");
 const gmailIncrementalReconciliation = require("./gmailIncrementalReconciliation");
 const gmailReliableScanFunctions = require("./gmailReliableScanFunctions");
 const gmailReliabilityGuard = require("./gmailReliabilityGuard");
@@ -84,6 +85,9 @@ module.exports = {
   ...providerDispatchFunctions,
   ...commerceFunnelFunctions,
   ...gmailSyncStatusFunctions,
+  // Production-authorized read-only connection status. Staging recovery/debug callables are
+  // intentionally not imported or exported from this production integration surface.
+  ...gmailConnectionStatusFunctions,
   ...gmailScanV5Functions,
   ...gmailIncrementalReconciliation,
   // Public scan is reliability-aware: initial/recovery backfills are bounded and subsequent

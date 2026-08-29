@@ -1,6 +1,7 @@
 "use strict";
 
 const { extractServiceType, normalizeServiceType } = require("./serviceProfile");
+const { hasPdfClassificationResult } = require("./gmailPdfAnalysisState");
 
 // Prefer amounts next to billing labels before falling back to any currency-looking amount.
 // This reduces false positives from promotional prices that may appear elsewhere in the email.
@@ -8,6 +9,33 @@ const AMOUNT_PATTERNS = [
   /(?:סה["״]?כ\s*(?:לתשלום|חיוב)?|סכום\s*(?:לתשלום|החיוב)?|לתשלום|total\s*(?:due|amount)?|amount\s*due|balance\s*due)\s*[:\-]?\s*(?:₪|ש["״]?ח|ILS)?\s*([\d,]+(?:\.\d{1,2})?)/i,
   /(?:₪|ש["״]?ח|ILS)\s*([\d,]+(?:\.\d{1,2})?)/i,
   /([\d,]+(?:\.\d{1,2})?)\s*(?:₪|ש["״]?ח|ILS)/i,
+];
+
+const CURRENT_OBLIGATION_PATTERNS = [
+  /(?:amount\s+due|total\s+due|balance\s+due|current\s+amount\s+(?:charged|due)|current\s+premium\s+due)\s*[:\-]?\s*(?:₪|ILS|NIS|ש["״]?ח)?\s*([\d,]+(?:\.\d{1,2})?)/i,
+  /(?:סכום\s+לתשלום|סה["״]?כ\s+לתשלום|סך\s+הכל\s+לתשלום|לתשלום|חיוב\s+שבוצע\s+בפועל)\s*[:\-]?\s*(?:₪|ILS|NIS|ש["״]?ח)?\s*([\d,]+(?:\.\d{1,2})?)/i,
+];
+
+const STRONG_RECURRING_PATTERNS = [
+  /\b(?:your\s+)?(?:current|monthly)\s+(?:bill|invoice)\b/i,
+  /\b(?:bill|invoice)\s+for\s+(?:the\s+)?(?:billing|service|usage|coverage)?\s*(?:period|month|year)\b/i,
+  /\b(?:your\s+)?(?:bill|invoice)\s+for\s+[^.;]{0,72}(?:20\d{2}|january|february|march|april|may|june|july|august|september|october|november|december)\b/i,
+  /\b(?:billing|service|usage|coverage)\s+period\b/i,
+  /\bcurrent\s+recurring\s+charge\b/i,
+  /\bannual\s+(?:insurance\s+)?(?:renewal|coverage|bill|invoice|premium)\b/i,
+  /(?:החשבון\s+החודשי\s+שלך|החשבון\s+שלך\s+עבור|החשבונית\s+החודשית\s+שלך|תקופת\s+(?:חיוב|שירות|צריכה)|חשבונית\s+עבור\s+תקופת\s+שירות|חשבון\s+לתקופה|חיוב\s+חודשי\s+נוכחי)/i,
+];
+
+const PROMOTIONAL_PATTERNS = [
+  /\b(?:offer|promotion|promotional|upgrade|trial|quote|proposal|marketing|advertisement|special\s+price)\b/i,
+  /(?:מבצע|הצעה|שדרוג|ניסיון|הצעת\s+מחיר|פרסומת|מחיר\s+מיוחד)/i,
+];
+
+const NON_RECURRING_CLASS_PATTERNS = [
+  ["REFUND", /\b(?:refund|reimbursement|refunded)\b|(?:החזר|זיכוי)/i],
+  ["RECEIPT_ONLY", /\b(?:payment\s+)?receipt\b|(?:קבלה)/i],
+  ["CONTRACT", /\b(?:contract|agreement)\b|(?:חוזה|הסכם)/i],
+  ["ONE_OFF", /\b(?:one[-\s]?(?:time|off)|single\s+purchase)\b|(?:חד[\-\s]?פעמי|רכישה\s+חד[\-\s]?פעמית)/i],
 ];
 
 const SUPPORTED_CATEGORIES = new Map([
@@ -155,13 +183,106 @@ function parseAmount(text) {
   return null;
 }
 
+function parseCurrentObligation(text) {
+  const normalized = String(text || "").replace(/\u00a0/g, " ");
+  for (const pattern of CURRENT_OBLIGATION_PATTERNS) {
+    const match = pattern.exec(normalized);
+    if (!match) continue;
+    const value = Number(match[1].replace(/,/g, ""));
+    if (Number.isFinite(value) && value > 0 && value < 1_000_000) {
+      return { amount: value, index: match.index };
+    }
+  }
+  return null;
+}
+
+function firstPatternIndex(text, patterns) {
+  let first = -1;
+  for (const pattern of patterns) {
+    const match = pattern.exec(text);
+    if (match && (first < 0 || match.index < first)) first = match.index;
+  }
+  return first;
+}
+
+function cueNearCompleteBill(cueIndex, recurringIndex, obligationIndex, maxDistance = 360) {
+  if (cueIndex < 0) return false;
+  return Math.min(
+    Math.abs(cueIndex - recurringIndex),
+    Math.abs(cueIndex - obligationIndex)
+  ) <= maxDistance;
+}
+
+function classifyBodyDocument(text, category) {
+  const normalized = String(text || "").replace(/\u00a0/g, " ");
+  const recurringIndex = firstPatternIndex(normalized, STRONG_RECURRING_PATTERNS);
+  const obligation = parseCurrentObligation(normalized);
+  const completeRecurring = recurringIndex >= 0 && Boolean(obligation);
+
+  for (const [documentClass, pattern] of NON_RECURRING_CLASS_PATTERNS) {
+    const match = pattern.exec(normalized);
+    if (!match) continue;
+    if (!completeRecurring || cueNearCompleteBill(match.index, recurringIndex, obligation.index)) {
+      return {
+        documentClass,
+        recurrenceEvidence: "NONE",
+        recurrenceType: "UNKNOWN",
+        currentObligationAmount: obligation?.amount ?? null,
+      };
+    }
+  }
+
+  if (!completeRecurring) {
+    return {
+      documentClass: "UNKNOWN",
+      recurrenceEvidence: "NONE",
+      recurrenceType: "UNKNOWN",
+      currentObligationAmount: obligation?.amount ?? null,
+    };
+  }
+
+  const promotionalIndex = firstPatternIndex(normalized, PROMOTIONAL_PATTERNS);
+  if (cueNearCompleteBill(promotionalIndex, recurringIndex, obligation.index)) {
+    return {
+      documentClass: "UNKNOWN",
+      recurrenceEvidence: "NONE",
+      recurrenceType: "UNKNOWN",
+      currentObligationAmount: obligation.amount,
+    };
+  }
+
+  const explicitPeriod = /\b(?:billing|service|usage|coverage)\s+period\b|(?:תקופת\s+(?:חיוב|שירות|צריכה)|חשבונית\s+עבור\s+תקופת\s+שירות|חשבון\s+לתקופה)/i.test(normalized);
+  const annual = /\b(?:annual|yearly)\b|(?:שנתי|שנתית)/i.test(normalized);
+  const usage = /\b(?:usage|consumption|metered)\b|(?:צריכה|מונה)/i.test(normalized);
+  const subscription = /\bsubscription\b|(?:מנוי)/i.test(normalized);
+  const telecom = ["אינטרנט", "סלולר", "טלוויזיה", "תקשורת"].includes(category);
+
+  let recurrenceEvidence = "RECURRING_SERVICE";
+  if (explicitPeriod) recurrenceEvidence = "EXPLICIT_BILLING_PERIOD";
+  else if (subscription) recurrenceEvidence = "SUBSCRIPTION";
+  else if (category === "חשמל") recurrenceEvidence = "UTILITY_SERVICE";
+  else if (telecom) recurrenceEvidence = "TELECOM_SERVICE";
+
+  let recurrenceType = "PERIODIC_VARIABLE";
+  if (annual) recurrenceType = "UNKNOWN";
+  else if (usage) recurrenceType = "USAGE_RECURRING";
+  else if (/\bfixed\s+monthly\b|(?:תשלום\s+חודשי\s+קבוע)/i.test(normalized)) recurrenceType = "FIXED_MONTHLY";
+
+  return {
+    documentClass: "RECURRING_BILL",
+    recurrenceEvidence,
+    recurrenceType,
+    currentObligationAmount: obligation.amount,
+  };
+}
+
 function identifyCategory(text) {
   const normalized = String(text || "").toLowerCase();
   if (/(חשמל|electric|iec|power)/i.test(normalized)) return "חשמל";
   if (/(ביטוח|insurance|פוליסה)/i.test(normalized)) return "ביטוח";
   // Prefer explicit service signals over provider names so multi-service providers
   // such as Cellcom/Partner/HOT are not incorrectly forced into mobile or TV.
-  if (/(אינטרנט|סיבים|fiber|broadband|bezeq|בזק|נתב|ראוטר)/i.test(normalized)) return "אינטרנט";
+  if (/(אינטרנט|internet|סיבים|fiber|broadband|bezeq|בזק|נתב|ראוטר)/i.test(normalized)) return "אינטרנט";
   if (/(סלולר|mobile|cellular|פלאפון|pelephone|wecom|019|קו נייד|חבילת גלישה)/i.test(normalized)) return "סלולר";
   if (/(טלוויזיה|streaming|netflix|(^|\W)yes(\W|$)|freetv)/i.test(normalized)) return "טלוויזיה";
   return null;
@@ -289,6 +410,11 @@ function normalizePdfInvoiceCandidate(candidate, message, sourceDocumentId = "")
 }
 
 function parseGmailMessage(message) {
+  // A successfully analyzed PDF has authoritative semantic precedence. The PDF
+  // analyzer records this only transiently on the in-memory Gmail message; no raw
+  // content or classification side-channel is persisted by the parser.
+  if (hasPdfClassificationResult(message)) return null;
+
   const payload = message?.payload || {};
   const headers = payload.headers || [];
   const subject = firstHeader(headers, "Subject");
@@ -297,9 +423,10 @@ function parseGmailMessage(message) {
   const snippet = String(message?.snippet || "").slice(0, 2000);
   const bodyText = collectMessageText(payload);
   const searchableText = `${subject} ${from} ${snippet} ${bodyText}`.slice(0, 30_000);
-  const amount = parseAmount(searchableText);
   const providerName = identifyProvider(from, subject, searchableText);
   const category = identifyCategory(searchableText) || fallbackCategoryForProvider(providerName);
+  const classification = classifyBodyDocument(searchableText, category);
+  const amount = classification.currentObligationAmount ?? parseAmount(searchableText);
 
   if (!message?.id || amount == null || category == null) return null;
 
@@ -314,6 +441,9 @@ function parseGmailMessage(message) {
     monthlyCost: amount,
     receivedDate: date.slice(0, 120),
     verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
+    documentClass: classification.documentClass,
+    recurrenceEvidence: classification.recurrenceEvidence,
+    recurrenceType: classification.recurrenceType,
   }, serviceType);
 }
 
@@ -323,6 +453,8 @@ module.exports = {
   collectMessageText,
   collectPdfAttachments,
   parseAmount,
+  parseCurrentObligation,
+  classifyBodyDocument,
   identifyCategory,
   identifyProvider,
   fallbackCategoryForProvider,
