@@ -31,7 +31,7 @@ INTENDED_ROLES=(
   "$CUSTOM_DEPLOY_ROLE_NAME"
 )
 APPROVED_PREEXISTING_ROLES=(
-  "projects/${EXPECTED_PROJECT_ID}/roles/clickandsaveaiFirebaseMetadataReader"
+  "projects/click-save-ai-production/roles/clickandsaveaiFirebaseMetadataReader"
 )
 FORBIDDEN_ROLES=(
   roles/owner
