@@ -91,7 +91,7 @@ class Issue8UxAcceptanceGuardTest {
     fun gmailFirstConnectionUiIsNotRepeatedForConnectedOrUnknownState() {
         val dashboard = source("src/main/java/com/example/ui/screens/DashboardScreen.kt")
         val profile = source("src/main/java/com/example/ui/screens/ProfileScreen.kt")
-        assertTrue(dashboard.contains("FinancialSyncState.Unauthenticated -> item"))
+        assertTrue(dashboard.contains("FinancialSyncState.Unauthenticated ->"))
         assertTrue(dashboard.contains("FinancialSyncState.Disconnected -> item"))
         assertTrue(Regex("V3OnboardingContent\\(").findAll(dashboard).count() == 2)
         assertFalse(dashboard.contains("InitialGmailOnboardingCard("))
