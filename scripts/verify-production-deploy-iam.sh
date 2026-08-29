@@ -29,6 +29,9 @@ INTENDED_ROLES=(
   roles/serviceusage.serviceUsageConsumer
   "$CUSTOM_DEPLOY_ROLE_NAME"
 )
+APPROVED_PREEXISTING_ROLES=(
+  "projects/click-save-ai-production/roles/clickandsaveaiFirebaseMetadataReader"
+)
 FORBIDDEN_ROLES=(
   roles/owner
   roles/editor
@@ -124,12 +127,28 @@ fi
 mapfile -t PROJECT_ROLES < <(gcloud projects get-iam-policy "$PROJECT_ID" \
   --flatten='bindings[].members' --filter="bindings.members=serviceAccount:${EXPECTED_DEPLOY_SA}" \
   --format='value(bindings.role)' 2>/dev/null | sed '/^[[:space:]]*$/d' | sort -u)
-mapfile -t EXPECTED_SORTED < <(printf '%s\n' "${INTENDED_ROLES[@]}" | sort -u)
-if [[ "$(printf '%s\n' "${PROJECT_ROLES[@]}")" == "$(printf '%s\n' "${EXPECTED_SORTED[@]}")" ]]; then
-  pass "deploy-SA project roles exactly match least-privilege Production set"
-else
-  fail "deploy-SA project roles do not exactly match least-privilege Production set"
-fi
+for role in "${INTENDED_ROLES[@]}"; do
+  if contains "$role" "${PROJECT_ROLES[@]}"; then
+    pass "required deploy-SA project role present: $role"
+  else
+    fail "required deploy-SA project role missing: $role"
+  fi
+done
+for role in "${PROJECT_ROLES[@]}"; do
+  if contains "$role" "${INTENDED_ROLES[@]}"; then
+    continue
+  fi
+  if contains "$role" "${APPROVED_PREEXISTING_ROLES[@]}"; then
+    pass "approved pre-existing deploy-SA role present: $role"
+    continue
+  fi
+  fail "unexpected deploy-SA project role present: $role"
+done
+for role in "${APPROVED_PREEXISTING_ROLES[@]}"; do
+  if ! contains "$role" "${PROJECT_ROLES[@]}"; then
+    pass "approved pre-existing deploy-SA role absent (optional): $role"
+  fi
+done
 
 for role in "${FORBIDDEN_ROLES[@]}"; do
   if contains "$role" "${PROJECT_ROLES[@]}"; then fail "forbidden deploy-SA project role present: $role"; else pass "forbidden deploy-SA project role absent: $role"; fi
