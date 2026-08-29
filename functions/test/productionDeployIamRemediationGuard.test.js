@@ -35,15 +35,17 @@ test("production deploy IAM uses a one-permission custom role for Cloud Run IAM 
   assert.doesNotMatch(intended, /roles\/artifactregistry\.admin/);
 });
 
-test("production IAM bootstrap preserves only the exact approved Firebase Metadata Reader role when pre-existing", () => {
-  const metadataReaderRole = "projects/click-save-ai-production/roles/clickandsaveaiFirebaseMetadataReader";
+test("production IAM bootstra preserves only the exact actual Firebase Metadata Reader role when pre-existing", () => {
+  const metadataReaderRole = "projects/click-save-ai-production/roles/clickandsaveFirebaseMetadataReader";
   const bootstrapApproved = approvedPreexistingRolesBlock(bootstrap);
   const verifyApproved = approvedPreexistingRolesBlock(verify);
 
   assert.match(bootstrapApproved, new RegExp(metadataReaderRole.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(verifyApproved, new RegExp(metadataReaderRole.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  assert.doesNotMatch(intendedRolesBlock(bootstrap), /clickandsaveaiFirebaseMetadataReader/);
-  assert.doesNotMatch(intendedRolesBlock(verify), /clickandsaveaiFirebaseMetadataReader/);
+  assert.doesNotMatch(intendedRolesBlock(bootstrap), /clickandsaveFirebaseMetadataReader/);
+  assert.doesNotMatch(intendedRolesBlock(verify), /clickandsaveFirebaseMetadataReader/);
+  assert.doesNotMatch(bootstrapApproved, /clickandsaveaiFirebaseMetadataReader/);
+  assert.doesNotMatch(verifyApproved, /clickandsaveaiFirebaseMetadataReader/);
   assert.match(bootstrap, /PRESERVED_PREEXISTING_ROLES/);
   assert.match(verify, /approved pre-existing deploy-SA role/);
 });
