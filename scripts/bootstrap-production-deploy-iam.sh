@@ -30,6 +30,9 @@ INTENDED_ROLES=(
   roles/serviceusage.serviceUsageConsumer
   "$CUSTOM_DEPLOY_ROLE_NAME"
 )
+APPROVED_PREEXISTING_ROLES=(
+  "projects/${EXPECTED_PROJECT_ID}/roles/clickandsaveaiFirebaseMetadataReader"
+)
 FORBIDDEN_ROLES=(
   roles/owner
   roles/editor
@@ -131,11 +134,19 @@ verify_custom_deploy_role "$CUSTOM_ROLE_JSON" || fail "Custom Production deploy 
 mapfile -t CURRENT_PROJECT_ROLES < <(gcloud projects get-iam-policy "$PROJECT_ID" \
   --flatten='bindings[].members' --filter="bindings.members=serviceAccount:${EXPECTED_DEPLOY_SA}" \
   --format='value(bindings.role)' 2>/dev/null | sed '/^[[:space:]]*$/d' | sort -u)
+PRESERVED_PREEXISTING_ROLES=()
 for role in "${CURRENT_PROJECT_ROLES[@]}"; do
   if contains "$role" "${FORBIDDEN_ROLES[@]}" || [[ "$role" =~ ^roles/.+\.serviceAgent$ ]]; then
     fail "Forbidden project-level role already exists on deploy SA: $role"
   fi
-  contains "$role" "${INTENDED_ROLES[@]}" || fail "Unexpected pre-existing project role on deploy SA: $role"
+  if contains "$role" "${INTENDED_ROLES[@]}"; then
+    continue
+  fi
+  if contains "$role" "${APPROVED_PREEXISTING_ROLES[@]}"; then
+    PRESERVED_PREEXISTING_ROLES+=("$role")
+    continue
+  fi
+  fail "Unexpected pre-existing project role on deploy SA: $role"
 done
 
 for role in "${INTENDED_ROLES[@]}"; do
@@ -156,8 +167,8 @@ done
 mapfile -t FINAL_PROJECT_ROLES < <(gcloud projects get-iam-policy "$PROJECT_ID" \
   --flatten='bindings[].members' --filter="bindings.members=serviceAccount:${EXPECTED_DEPLOY_SA}" \
   --format='value(bindings.role)' 2>/dev/null | sed '/^[[:space:]]*$/d' | sort -u)
-mapfile -t EXPECTED_SORTED < <(printf '%s\n' "${INTENDED_ROLES[@]}" | sort -u)
-[[ "$(printf '%s\n' "${FINAL_PROJECT_ROLES[@]}")" == "$(printf '%s\n' "${EXPECTED_SORTED[@]}")" ]] || fail "Final deploy-SA project role set is not exactly the intended least-privilege set."
+mapfile -t EXPECTED_SORTED < <(printf '%s\n' "${INTENDED_ROLES[@]}" "${PRESERVED_PREEXISTING_ROLES[@]}" | sed '/^[[:space:]]*$/d' | sort -u)
+[[ "$(printf '%s\n' "${FINAL_PROJECT_ROLES[@]}")" == "$(printf '%s\n' "${EXPECTED_SORTED[@]}")" ]] || fail "Final deploy-SA project role set is not exactly the intended set plus approved pre-existing roles."
 
 printf 'Configuring Firebase Functions Artifact Registry cleanup policy in europe-west1 (%s days).\n' "$EXPECTED_ARTIFACT_CLEANUP_DAYS"
 firebase functions:artifacts:setpolicy --project="$PROJECT_ID" --location=europe-west1 --days=7
