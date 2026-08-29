@@ -92,6 +92,15 @@ test("bootstrap job uses WIF with bootstrap SA only and runs canonical scripts",
   assert.match(bootstrap, /bash scripts\/verify-production-deploy-iam\.sh/);
 });
 
+test("bootstrap exports WIF ADC credentials for non-interactive Firebase CLI authentication", () => {
+  const bootstrap = jobBlock("production-bootstrap-deploy-iam");
+  assert.match(
+    bootstrap,
+    /Authenticate bootstrap identity with GitHub OIDC[\s\S]*create_credentials_file: 'true'[\s\S]*export_environment_variables: 'true'/
+  );
+  assert.doesNotMatch(bootstrap, /firebase\s+login|FIREBASE_TOKEN|--token/);
+});
+
 test("bootstrap path includes key-material rejection guards and excludes deploy actions or broad admin grants", () => {
   const bootstrap = jobBlock("production-bootstrap-deploy-iam");
   assert.match(bootstrap, /external_account/);
