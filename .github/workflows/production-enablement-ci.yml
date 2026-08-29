@@ -104,11 +104,21 @@ jobs:
         shell: bash
         run: find . -path "*/schemas/*.json" -empty -delete 2>/dev/null || true
 
-      - name: Android regression, lint, debug and unsigned release audit builds
+      - name: Android regression, lint and debug audit build
         shell: bash
         run: |
           set -euo pipefail
-          gradle --no-daemon testDebugUnitTest lintDebug assembleDebug assembleRelease bundleRelease --stacktrace
+          gradle --no-daemon testDebugUnitTest lintDebug assembleDebug --stacktrace
+
+      - name: Clean up Room schema files before release audit
+        shell: bash
+        run: find . -path "*/schemas/*.json" -empty -delete 2>/dev/null || true
+
+      - name: Android unsigned release audit builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon assembleRelease bundleRelease --stacktrace
 
       - name: Confirm normal CI release audit is not a signed production candidate
         shell: bash
