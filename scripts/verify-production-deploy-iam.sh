@@ -16,7 +16,6 @@ GITHUB_OIDC_ISSUER="https://token.actions.githubusercontent.com"
 EXPECTED_MAPPING="google.subject=assertion.sub,attribute.repository_id=assertion.repository_id,attribute.repository_owner_id=assertion.repository_owner_id,attribute.environment=assertion.environment,attribute.ref=assertion.ref,attribute.workflow_ref=assertion.workflow_ref"
 EXPECTED_CONDITION="attribute.repository_id=='${GITHUB_REPOSITORY_ID}' && attribute.repository_owner_id=='${GITHUB_REPOSITORY_OWNER_ID}' && attribute.environment=='${GITHUB_ENVIRONMENT}' && attribute.ref=='${GITHUB_REF}' && attribute.workflow_ref=='${GITHUB_WORKFLOW_REF}'"
 EXPECTED_WIF_MEMBER="principalSet://iam.googleapis.com/projects/${EXPECTED_PROJECT_NUMBER}/locations/global/workloadIdentityPools/${EXPECTED_POOL_ID}/attribute.repository_id/${GITHUB_REPOSITORY_ID}"
-GITHUB_REPOSITORY="vhanukaev1981/ClickAndSaveAI"
 CUSTOM_DEPLOY_ROLE_ID="clickandsaveaiFirebaseDeployIamPolicy"
 CUSTOM_DEPLOY_ROLE_PERMISSION="run.services.setIamPolicy"
 PROJECT_ID="${PROJECT_ID:-$EXPECTED_PROJECT_ID}"
@@ -57,6 +56,19 @@ contains() {
   for item in "$@"; do [[ "$item" == "$needle" ]] && return 0; done
   return 1
 }
+resolve_firebase_deploy_authorization() {
+  local authorization="${AUTHORIZE_FIREBASE_DEPLOY:-}"
+  if [[ -z "$authorization" && -n "${GITHUB_EVENT_PATH:-}" && -f "$GITHUB_EVENT_PATH" ]]; then
+    authorization="$(python3 - "$GITHUB_EVENT_PATH" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding='utf-8') as handle:
+    event = json.load(handle)
+print((event.get('inputs') or {}).get('authorize_firebase_deploy', ''))
+PY
+)"
+  fi
+  printf '%s' "$authorization"
+}
 
 case "$PROJECT_ID" in
   clickandsaveai|clickandsaveai-staging) printf 'FAIL  forbidden non-Production project: %s\n' "$PROJECT_ID" >&2; exit 1 ;;
@@ -64,7 +76,6 @@ esac
 [[ "$PROJECT_ID" == "$EXPECTED_PROJECT_ID" ]] || { printf 'FAIL  PROJECT_ID must be exactly %s\n' "$EXPECTED_PROJECT_ID" >&2; exit 1; }
 command -v gcloud >/dev/null 2>&1 || { echo 'FAIL  gcloud is required' >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo 'FAIL  python3 is required' >&2; exit 1; }
-command -v curl >/dev/null 2>&1 || { echo 'FAIL  curl is required' >&2; exit 1; }
 ACTIVE_ACCOUNT="$(gcloud auth list --filter='status:ACTIVE' --format='value(account)' 2>/dev/null | head -n 1)"
 [[ -n "$ACTIVE_ACCOUNT" ]] || { echo 'FAIL  no active gcloud account' >&2; exit 1; }
 
@@ -165,15 +176,11 @@ else
   pass "legacy/staging deploy principal references absent from project IAM policy"
 fi
 
-DEPLOYMENTS_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/deployments?environment=production&per_page=1"
-CURL_HEADERS=(-H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28')
-if [[ -n "${GH_TOKEN:-}" ]]; then CURL_HEADERS+=( -H "Authorization: Bearer ${GH_TOKEN}" );
-elif [[ -n "${GITHUB_TOKEN:-}" ]]; then CURL_HEADERS+=( -H "Authorization: Bearer ${GITHUB_TOKEN}" ); fi
-DEPLOYMENTS_JSON="$(curl -fsSL "${CURL_HEADERS[@]}" "$DEPLOYMENTS_URL" 2>/dev/null || true)"
-if [[ -n "$DEPLOYMENTS_JSON" ]] && printf '%s' "$DEPLOYMENTS_JSON" | python3 -c 'import json,sys; x=json.load(sys.stdin); sys.exit(0 if isinstance(x,list) and len(x)==0 else 1)'; then
-  pass "Production deployments = 0"
+FIREBASE_DEPLOY_AUTHORIZATION="$(resolve_firebase_deploy_authorization)"
+if [[ "$FIREBASE_DEPLOY_AUTHORIZATION" == "NO_DEPLOY" ]]; then
+  pass "Firebase Production deploy authorization remains closed (NO_DEPLOY)"
 else
-  fail "unable to verify Production deployments = 0"
+  fail "Firebase Production deploy authorization must be exactly NO_DEPLOY during deploy-IAM bootstrap verification"
 fi
 
 if (( FAILED != 0 )); then
