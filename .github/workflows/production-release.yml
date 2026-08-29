@@ -186,6 +186,7 @@ jobs:
       - name: Verify signing identities and record exact-SHA traceability
         shell: bash
         run: |
+          set -euo pipefail
           APK="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
           AAB="$(find app/build/outputs/bundle/release -maxdepth 1 -name '*.aab' -print -quit)"
           [[ -n "$APK" && -n "$AAB" ]] || { echo 'Signed release APK/AAB not found.' >&2; exit 1; }
