@@ -65,3 +65,12 @@ test("production IAM bootstrap configures Firebase Functions artifact cleanup di
   assert.match(bootstrap, /us-central1/);
   assert.doesNotMatch(bootstrap, /functions:artifacts:setpolicy/);
 });
+
+test("production IAM verifier checks the current workflow deploy authorization rather than historical GitHub deployment records", () => {
+  assert.match(verify, /GITHUB_EVENT_PATH/);
+  assert.match(verify, /authorize_firebase_deploy/);
+  assert.match(verify, /NO_DEPLOY/);
+  assert.match(verify, /Firebase Production deploy authorization remains closed/);
+  assert.doesNotMatch(verify, /api\.github\.com\/repos\/.*\/deployments/);
+  assert.doesNotMatch(verify, /Production deployments = 0/);
+});
