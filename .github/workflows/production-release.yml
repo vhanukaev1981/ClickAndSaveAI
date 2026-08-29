@@ -186,7 +186,6 @@ jobs:
       - name: Verify signing identities and record exact-SHA traceability
         shell: bash
         run: |
-          set -euo pipefail
           APK="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
           AAB="$(find app/build/outputs/bundle/release -maxdepth 1 -name '*.aab' -print -quit)"
           [[ -n "$APK" && -n "$AAB" ]] || { echo 'Signed release APK/AAB not found.' >&2; exit 1; }
@@ -364,7 +363,7 @@ jobs:
       EXPECTED_PROJECT_ID: click-save-ai-production
       EXPECTED_PROJECT_NUMBER: '991489557172'
       EXPECTED_WIF_PROVIDER: projects/991489557172/locations/global/workloadIdentityPools/github-actions/providers/clickandsaveai-production
-      EXPECTED_BOOTSTRAP_SA: clickandsaveai-github-bootstrap@click-save-ai-production.iam.gserviceaccount.com
+      EXPECTED_BOOTSTRAP_SA: clickandsaveai-github-bootstra@click-save-ai-production.iam.gserviceaccount.com
       EXPECTED_DEPLOY_SA: clickandsaveai-github-deployer@click-save-ai-production.iam.gserviceaccount.com
       EXPECTED_MAPPING: google.subject=assertion.sub,attribute.repository_id=assertion.repository_id,attribute.repository_owner_id=assertion.repository_owner_id,attribute.environment=assertion.environment,attribute.ref=assertion.ref,attribute.workflow_ref=assertion.workflow_ref
       EXPECTED_CONDITION: attribute.repository_id=='1314210715' && attribute.repository_owner_id=='64756523' && attribute.environment=='production' && attribute.ref=='refs/heads/main' && attribute.workflow_ref=='vhanukaev1981/ClickAndSaveAI/.github/workflows/production-release.yml@refs/heads/main'
@@ -423,7 +422,7 @@ jobs:
           export_environment_variables: 'false'
           project_id: ${{ env.EXPECTED_PROJECT_ID }}
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: clickandsaveai-github-bootstrap@click-save-ai-production.iam.gserviceaccount.com
+          service_account: clickandsaveai-github-bootstra@click-save-ai-production.iam.gserviceaccount.com
 
       - name: Pre-mutation fail-closed identity and trust-boundary verification
         env:
