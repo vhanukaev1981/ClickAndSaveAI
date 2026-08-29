@@ -100,6 +100,10 @@ jobs:
           }
           echo 'Production signing configuration fails closed when secure signing material is absent.'
 
+      - name: Clean up stale empty Room schema files
+        shell: bash
+        run: find . -path "*/schemas/*.json" -empty -delete 2>/dev/null || true
+
       - name: Android regression, lint, debug and unsigned release audit builds
         shell: bash
         run: |
