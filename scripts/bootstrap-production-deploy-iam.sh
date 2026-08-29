@@ -3,6 +3,7 @@ set -euo pipefail
 
 EXPECTED_PROJECT_ID="click-save-ai-production"
 EXPECTED_PROJECT_NUMBER="991489557172"
+EXPECTED_BOOTSTRAP_SA="clickandsaveai-github-bootstra@click-save-ai-production.iam.gserviceaccount.com"
 EXPECTED_DEPLOY_SA="clickandsaveai-github-deployer@click-save-ai-production.iam.gserviceaccount.com"
 EXPECTED_POOL_ID="github-actions"
 EXPECTED_PROVIDER_ID="clickandsaveai-production"
@@ -65,6 +66,29 @@ role = json.loads(os.environ['CUSTOM_ROLE_JSON_INPUT'])
 assert role.get('name') == expected_name
 assert role.get('deleted', False) is not True
 assert sorted(role.get('includedPermissions', [])) == [expected_permission]
+PY
+}
+configure_firebase_adc() {
+  if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]]; then
+    [[ -f "$GOOGLE_APPLICATION_CREDENTIALS" ]] || fail "GOOGLE_APPLICATION_CREDENTIALS points to a missing file."
+  else
+    local workspace="${GITHUB_WORKSPACE:-$PWD}"
+    local adc_files=()
+    mapfile -t adc_files < <(find "$workspace" -maxdepth 1 -type f -name 'gha-creds-*.json' -print | sort)
+    [[ "${#adc_files[@]}" -eq 1 ]] || fail "Expected exactly one GitHub Actions WIF credentials file for Firebase ADC; found ${#adc_files[@]}."
+    export GOOGLE_APPLICATION_CREDENTIALS="${adc_files[0]}"
+  fi
+
+  ADC_JSON_INPUT="$(cat "$GOOGLE_APPLICATION_CREDENTIALS")" python3 - "$EXPECTED_WIF_PROVIDER" "$EXPECTED_BOOTSTRAP_SA" <<'PY' || fail "Firebase ADC credential boundary mismatch."
+import json, os, sys
+expected_provider, expected_sa = sys.argv[1:]
+cred = json.loads(os.environ['ADC_JSON_INPUT'])
+assert cred.get('type') == 'external_account'
+assert 'private_key' not in cred and 'private_key_id' not in cred
+assert cred.get('audience') == f'//iam.googleapis.com/{expected_provider}'
+url = cred.get('service_account_impersonation_url', '')
+encoded_sa = expected_sa.replace('@', '%40')
+assert f'/serviceAccounts/{expected_sa}:generateAccessToken' in url or f'/serviceAccounts/{encoded_sa}:generateAccessToken' in url
 PY
 }
 
@@ -170,6 +194,7 @@ mapfile -t FINAL_PROJECT_ROLES < <(gcloud projects get-iam-policy "$PROJECT_ID" 
 mapfile -t EXPECTED_SORTED < <(printf '%s\n' "${INTENDED_ROLES[@]}" "${PRESERVED_PREEXISTING_ROLES[@]}" | sed '/^[[:space:]]*$/d' | sort -u)
 [[ "$(printf '%s\n' "${FINAL_PROJECT_ROLES[@]}")" == "$(printf '%s\n' "${EXPECTED_SORTED[@]}")" ]] || fail "Final deploy-SA project role set is not exactly the intended set plus approved pre-existing roles."
 
+configure_firebase_adc
 printf 'Configuring Firebase Functions Artifact Registry cleanup policy in europe-west1 (%s days).\n' "$EXPECTED_ARTIFACT_CLEANUP_DAYS"
 firebase functions:artifacts:setpolicy --project="$PROJECT_ID" --location=europe-west1 --days=7
 printf 'Configuring Firebase Functions Artifact Registry cleanup policy in us-central1 (%s days).\n' "$EXPECTED_ARTIFACT_CLEANUP_DAYS"
