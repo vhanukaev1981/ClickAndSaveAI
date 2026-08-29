@@ -42,11 +42,15 @@ function buildGmailSyncStatus(connection) {
     data.scopes.includes(GMAIL_READONLY_SCOPE) &&
     Boolean(data.encryptedRefreshToken);
   const storedParserVersion = Math.max(0, Number(data.parserVersion || 0));
+  const initialBackfillCompleted = data.initialBackfillCompleted === true ||
+    Boolean(data.initialBackfillCompletedAt);
   return {
     connected,
     storedParserVersion,
     activeParserVersion: ACTIVE_GMAIL_PARSER_VERSION,
-    upgradeRequired: connected && storedParserVersion < ACTIVE_GMAIL_PARSER_VERSION,
+    // Parser-version revisions never reopen the six-month mailbox window.
+    // This backwards-compatible flag now means the one-time initial baseline is missing.
+    upgradeRequired: connected && !initialBackfillCompleted,
     lookback: INITIAL_GMAIL_LOOKBACK,
   };
 }
