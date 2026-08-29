@@ -62,7 +62,7 @@ test("bootstrap job enforces canonical identity boundary and source SHA", () => 
     "EXPECTED_WORKFLOW_REF: vhanukaev1981/ClickAndSaveAI/.github/workflows/production-release.yml@refs/heads/main",
     "EXPECTED_PROJECT_ID: click-save-ai-production",
     "EXPECTED_PROJECT_NUMBER: '991489557172'",
-    "EXPECTED_BOOTSTRAP_SA: clickandsaveai-github-bootstrap@click-save-ai-production.iam.gserviceaccount.com",
+    "EXPECTED_BOOTSTRAP_SA: clickandsaveai-github-bootstra@click-save-ai-production.iam.gserviceaccount.com",
     "EXPECTED_DEPLOY_SA: clickandsaveai-github-deployer@click-save-ai-production.iam.gserviceaccount.com",
     "ACTUAL_GITHUB_REPOSITORY",
     "ACTUAL_GITHUB_REPOSITORY_ID",
@@ -84,7 +84,7 @@ test("bootstrap job uses WIF with bootstrap SA only and runs canonical scripts",
   assert.match(bootstrap, /workload_identity_provider: \$\{\{ vars\.GCP_WORKLOAD_IDENTITY_PROVIDER \}\}/);
   assert.match(
     bootstrap,
-    /service_account: clickandsaveai-github-bootstrap@click-save-ai-production\.iam\.gserviceaccount\.com/
+    /service_account: clickandsaveai-github-bootstra@click-save-ai-production\.iam\.gserviceaccount\.com/
   );
   assert.doesNotMatch(bootstrap, /service_account: \$\{\{ vars\.GCP_DEPLOY_SERVICE_ACCOUNT \}\}/);
 
