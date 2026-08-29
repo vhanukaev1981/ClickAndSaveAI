@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.data.repository.AuthState
 import com.example.data.repository.FinancialHomeResult
 import com.example.data.repository.FinancialRefreshReason
 import com.example.data.repository.FinancialSyncState
@@ -74,6 +75,7 @@ fun DashboardScreen(
     val financialHome by viewModel.authoritativeFinancialHome.collectAsState()
     val latestScan = financialSyncState.latestScanOrNull
     val session by viewModel.userSession.collectAsState()
+    val authState by viewModel.authState.collectAsState()
     val isSyncing by viewModel.isSyncingGmail.collectAsState()
     val gmailSyncStep by viewModel.gmailSyncStep.collectAsState()
     val onboardingStep by viewModel.onboardingStep.collectAsState()
@@ -119,14 +121,25 @@ fun DashboardScreen(
         }
 
         when (val state = financialSyncState) {
-            FinancialSyncState.Unauthenticated -> item {
-                V3OnboardingContent(
-                    step = onboardingStep,
-                    authenticated = false,
-                    onNext = viewModel::nextOnboardingStep,
-                    onGoogleSignIn = onGoogleSignIn,
-                    onConnectGmail = { showGmailConsent = true }
-                )
+            FinancialSyncState.Unauthenticated -> {
+                item {
+                    V3OnboardingContent(
+                        step = onboardingStep,
+                        authenticated = false,
+                        onNext = viewModel::nextOnboardingStep,
+                        onGoogleSignIn = onGoogleSignIn,
+                        onConnectGmail = { showGmailConsent = true }
+                    )
+                }
+                if (authState is AuthState.Error) {
+                    item {
+                        V3SoftStatusCard(
+                            "לא הצלחנו להתחבר עם Google",
+                            (authState as AuthState.Error).message,
+                            modifier = Modifier.testTag("v3_google_signin_error")
+                        )
+                    }
+                }
             }
             FinancialSyncState.CheckingConnection -> {
                 item {
