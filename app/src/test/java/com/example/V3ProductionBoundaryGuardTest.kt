@@ -21,7 +21,7 @@ class V3ProductionBoundaryGuardTest {
     fun releaseIdentityRemainsUnchanged() {
         val gradle = File("build.gradle.kts").readText()
         assertTrue(gradle.contains("applicationId = \"com.aistudio.clickandsaveai.app\""))
-        assertTrue(gradle.contains("versionCode = 1"))
+        assertTrue(gradle.contains("versionCode = 2"))
         assertTrue(gradle.contains("versionName = \"1.0\""))
     }
 
