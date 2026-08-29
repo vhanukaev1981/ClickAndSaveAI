@@ -8,40 +8,56 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+
+private val ColorDarkOutline = Color(0xFF334155)
 
 private val DarkColorScheme = darkColorScheme(
     primary = TechBlueLight,
-    onPrimary = SurfaceLight,
-    secondary = EmeraldSavings,
-    onSecondary = SurfaceLight,
-    tertiary = AmberDeal,
-    background = BackgroundLight,
-    surface = SurfaceLight,
-    surfaceVariant = SurfaceVariantLight,
-    onBackground = TextPrimaryLight,
-    onSurface = TextPrimaryLight,
-    onSurfaceVariant = TextSecondaryLight
+    onPrimary = V3Surface,
+    secondary = V3Teal,
+    onSecondary = V3Surface,
+    tertiary = V3Success,
+    background = V3Navy,
+    surface = SurfaceDark,
+    surfaceVariant = SurfaceVariantDark,
+    onBackground = TextPrimaryDark,
+    onSurface = TextPrimaryDark,
+    onSurfaceVariant = TextSecondaryDark,
+    outline = ColorDarkOutline,
+    error = V3Destructive
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = TechBluePrimary,
-    onPrimary = SurfaceLight,
-    secondary = EmeraldSavings,
-    onSecondary = SurfaceLight,
-    tertiary = AmberDeal,
-    background = BackgroundLight,
-    surface = SurfaceLight,
-    surfaceVariant = SurfaceVariantLight,
-    onBackground = TextPrimaryLight,
-    onSurface = TextPrimaryLight,
-    onSurfaceVariant = TextSecondaryLight
+    primary = V3Primary,
+    onPrimary = V3Surface,
+    primaryContainer = V3PrimarySoft,
+    onPrimaryContainer = V3Navy,
+    secondary = V3Success,
+    onSecondary = V3Surface,
+    secondaryContainer = V3SuccessSoft,
+    onSecondaryContainer = V3Navy,
+    tertiary = V3Teal,
+    onTertiary = V3Surface,
+    tertiaryContainer = V3PrimarySoft,
+    onTertiaryContainer = V3Navy,
+    background = V3Background,
+    surface = V3Surface,
+    surfaceVariant = V3Muted,
+    onBackground = V3Navy,
+    onSurface = V3Navy,
+    onSurfaceVariant = V3MutedForeground,
+    outline = V3Border,
+    outlineVariant = V3Border,
+    error = V3Destructive,
+    errorContainer = V3ErrorSoft
 )
 
 @Composable
 fun ClickAndSaveTheme(
-    darkTheme: Boolean = false, // Strictly Light Theme per user requirement
-    dynamicColor: Boolean = false, // Use clean brand palette
+    darkTheme: Boolean = false,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -60,7 +76,6 @@ fun ClickAndSaveTheme(
     )
 }
 
-// Alias for compatibility
 @Composable
 fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -69,4 +84,3 @@ fun MyApplicationTheme(
 ) {
     ClickAndSaveTheme(darkTheme = darkTheme, dynamicColor = dynamicColor, content = content)
 }
-

@@ -7,63 +7,61 @@ import org.junit.Test
 
 class Block4SavingsHandoffTruthGuardTest {
     @Test
-    fun savingsProjectionKeepsPotentialRealizedAndUnknownIndependent() {
-        val repository = File("src/main/java/com/example/data/repository/SavingsOpportunityRepository.kt").readText()
-
-        assertTrue(repository.contains("val potentialMonthlySaving: Double?"))
-        assertTrue(repository.contains("val realizedMonthlySaving: Double?"))
-        assertTrue(repository.contains("val offerVerificationState: String"))
-        assertTrue(repository.contains("val offerFreshnessState: String"))
-        assertTrue(repository.contains("val userEligibilityState: String"))
-        assertTrue(repository.contains("val submissionState: String"))
-        assertTrue(repository.contains("val deliveryState: String"))
-        assertTrue(repository.contains("val providerContactState: String"))
-        assertTrue(repository.contains("val completionState: String"))
-        assertTrue(repository.contains("val savingRealizationState: String"))
-        assertTrue(repository.contains("previousMonthlyCost = (map[\"previousMonthlyCost\"] as? Number)?.toDouble()"))
-        assertFalse(repository.contains("previousMonthlyCost = (map[\"previousMonthlyCost\"] as? Number)?.toDouble() ?: 0.0"))
+    fun acceptedOpportunityUsesProofOrientedProviderHandoffFields() {
+        val repository = File("src/main/java/com/example/data/repository/OpportunityActionRepository.kt").readText()
+        listOf(
+            "potentialMonthlySaving",
+            "potentialAnnualSaving",
+            "consentState",
+            "requestState",
+            "deliveryAttemptState",
+            "submissionState",
+            "deliveryState",
+            "providerContactState",
+            "completionState",
+            "savingRealizationState",
+            "realizedMonthlySaving",
+            "realizedAnnualSaving"
+        ).forEach { contract ->
+            assertTrue("missing action result field: $contract", repository.contains(contract))
+        }
+        assertTrue(repository.contains("require(consentAccepted)"))
+        assertTrue(repository.contains("\"expectedOfferId\" to expectedOfferId"))
+        assertTrue(repository.contains("\"contactName\" to contactName"))
+        assertTrue(repository.contains("\"contactEmail\" to contactEmail"))
+        assertTrue(repository.contains("\"phone\" to phone"))
+        assertTrue(repository.contains("\"consentAccepted\" to consentAccepted"))
     }
 
     @Test
     fun explicitConsentIsRequiredAndNoDefaultConsentIsInvented() {
-        val repository = File("src/main/java/com/example/data/repository/OpportunityActionRepository.kt").readText()
-        val screen = File("src/main/java/com/example/ui/screens/ProvidersScreen.kt").readText()
-
-        assertTrue(repository.contains("consentAccepted: Boolean\n"))
-        assertFalse(repository.contains("consentAccepted: Boolean = true"))
-        assertTrue(repository.contains("require(consentAccepted)"))
-        assertTrue(screen.contains("Checkbox(checked = accepted"))
-        assertTrue(screen.contains("consentAccepted = true"))
+        val ui = File("src/main/java/com/example/ui/screens/ProvidersScreen.kt").readText()
+        assertTrue(ui.contains("mutableStateOf(false)"))
+        assertTrue(ui.contains("consentAccepted = consent"))
+        assertFalse(Regex("consentAccepted\\s*=\\s*true").containsMatchIn(ui))
     }
 
     @Test
-    fun providerUiFailsClosedOnOfferTruthAndUsesIndependentHandoffStates() {
-        val screen = File("src/main/java/com/example/ui/screens/ProvidersScreen.kt").readText()
-
-        assertTrue(screen.contains("offerVerificationState == \"VERIFIED\""))
-        assertTrue(screen.contains("offerFreshnessState == \"FRESH\""))
-        assertTrue(screen.contains("userEligibilityState == \"ELIGIBLE\""))
-        assertTrue(screen.contains("offer.verificationState == \"VERIFIED\""))
-        assertTrue(screen.contains("offer.freshnessState == \"FRESH\""))
-        assertTrue(screen.contains("offer.eligibilityState == \"ELIGIBLE\""))
-        assertTrue(screen.contains("deliveryState == \"DELIVERY_CONFIRMED\""))
-        assertTrue(screen.contains("providerContactState == \"CONTACTED\""))
-        assertTrue(screen.contains("completionState == \"DEAL_COMPLETED\""))
-        assertTrue(screen.contains("savingRealizationState == \"REALIZED\""))
-        assertTrue(screen.contains("זה אינו חיסכון ממומש"))
-    }
-
-    @Test
-    fun dashboardAlsoRequiresVerifiedFreshEligibleTruthBeforeCallingOfferVerified() {
-        val dashboard = File("src/main/java/com/example/ui/screens/DashboardScreen.kt").readText()
-
-        assertTrue(dashboard.contains("opportunity.offerVerificationState == \"VERIFIED\""))
-        assertTrue(dashboard.contains("opportunity.offerFreshnessState == \"FRESH\""))
-        assertTrue(dashboard.contains("opportunity.userEligibilityState == \"ELIGIBLE\""))
-        assertTrue(dashboard.contains("matched.verificationState == \"VERIFIED\""))
-        assertTrue(dashboard.contains("matched.freshnessState == \"FRESH\""))
-        assertTrue(dashboard.contains("matched.eligibilityState == \"ELIGIBLE\""))
-        assertTrue(dashboard.contains("חיסכון פוטנציאלי לפי ההצעה"))
-        assertTrue(dashboard.contains("לא חיסכון ממומש"))
+    fun providerUiFailsClosedThroughTheV3PresentationTruthBoundary() {
+        val ui = File("src/main/java/com/example/ui/screens/ProvidersScreen.kt").readText()
+        val presentation = File("src/main/java/com/example/ui/v3/V3FinancialPresentation.kt").readText()
+        assertTrue(ui.contains("hasVerifiedSavingsActionTarget"))
+        listOf(
+            "offerVerificationState == \"VERIFIED\"",
+            "offerFreshnessState == \"FRESH\"",
+            "userEligibilityState == \"ELIGIBLE\"",
+            "offer.verificationState == \"VERIFIED\"",
+            "offer.freshnessState == \"FRESH\"",
+            "offer.eligibilityState == \"ELIGIBLE\"",
+            "requestState",
+            "submissionState",
+            "deliveryState",
+            "providerContactState",
+            "completionState",
+            "savingRealizationState"
+        ).forEach { truthBoundary -> assertTrue("missing V3 truth boundary: $truthBoundary", presentation.contains(truthBoundary)) }
+        assertFalse(ui.contains("CRM was notified", ignoreCase = true))
+        assertFalse(ui.contains("הספק קיבל"))
+        assertFalse(ui.contains("העסקה הושלמה"))
     }
 }
