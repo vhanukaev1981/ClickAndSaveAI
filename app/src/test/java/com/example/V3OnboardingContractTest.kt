@@ -36,6 +36,14 @@ class V3OnboardingContractTest {
     }
 
     @Test
+    fun googleSignInFailureIsVisibleOnOnboardingInsteadOfFailingSilently() {
+        val dashboard = File("src/main/java/com/example/ui/screens/DashboardScreen.kt").readText()
+        assertTrue(dashboard.contains("viewModel.authState.collectAsState()"))
+        assertTrue(dashboard.contains("AuthState.Error"))
+        assertTrue(dashboard.contains("v3_google_signin_error"))
+    }
+
+    @Test
     fun firstSyncCopyStaysConservativeAndStateDriven() {
         val dashboard = File("src/main/java/com/example/ui/screens/DashboardScreen.kt").readText()
         assertTrue(dashboard.contains("FinancialSyncState.CheckingConnection"))
