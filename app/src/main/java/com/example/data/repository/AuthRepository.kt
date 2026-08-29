@@ -127,7 +127,17 @@ class AuthRepository(private val applicationContext: Context) {
             Result.success(session)
         } catch (e: GetCredentialException) {
             Log.e("AuthRepository", "Google Sign-In failed", e)
-            val message = "Google Sign-In was cancelled or failed."
+            val exceptionType = e::class.java.simpleName.ifBlank { "GetCredentialException" }
+            val exceptionDetail = e.localizedMessage?.trim().takeUnless { it.isNullOrBlank() }
+            val message = buildString {
+                append("Google Sign-In failed [")
+                append(exceptionType)
+                append("]")
+                if (exceptionDetail != null) {
+                    append(": ")
+                    append(exceptionDetail.take(240))
+                }
+            }
             _authState.value = AuthState.Error(message)
             Result.failure(e)
         } catch (e: CancellationException) {
