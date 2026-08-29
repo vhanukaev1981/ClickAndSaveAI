@@ -512,6 +512,16 @@ class MainViewModel(
     }
 
     val selectedTab: StateFlow<Int> = savedStateHandle.getStateFlow(SELECTED_TAB_KEY, 0)
+    val onboardingStep: StateFlow<Int> = savedStateHandle.getStateFlow(ONBOARDING_STEP_KEY, 0)
+
+    fun nextOnboardingStep() {
+        savedStateHandle[ONBOARDING_STEP_KEY] = (onboardingStep.value + 1).coerceAtMost(2)
+    }
+
+    fun resetOnboarding() {
+        savedStateHandle[ONBOARDING_STEP_KEY] = 0
+    }
+
     val searchQuery = MutableStateFlow("")
     val selectedCategory = MutableStateFlow("All")
 
@@ -777,5 +787,6 @@ class MainViewModel(
 
     companion object {
         private const val SELECTED_TAB_KEY = "selected_primary_tab"
+        private const val ONBOARDING_STEP_KEY = "v3_onboarding_step"
     }
 }
