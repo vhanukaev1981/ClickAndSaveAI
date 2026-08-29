@@ -16,6 +16,12 @@ function intendedRolesBlock(source) {
   return match[1];
 }
 
+function approvedPreexistingRolesBlock(source) {
+  const match = source.match(/APPROVED_PREEXISTING_ROLES=\(([\s\S]*?)\)\nFORBIDDEN_ROLES=/);
+  assert.ok(match, "APPROVED_PREEXISTING_ROLES block must be present");
+  return match[1];
+}
+
 test("production deploy IAM uses a one-permission custom role for Cloud Run IAM policy updates", () => {
   assert.match(bootstrap, /CUSTOM_DEPLOY_ROLE_ID="clickandsaveaiFirebaseDeployIamPolicy"/);
   assert.match(bootstrap, /run\.services\.setIamPolicy/);
@@ -27,6 +33,19 @@ test("production deploy IAM uses a one-permission custom role for Cloud Run IAM 
   assert.doesNotMatch(intended, /roles\/run\.admin/);
   assert.doesNotMatch(intended, /roles\/cloudfunctions\.admin/);
   assert.doesNotMatch(intended, /roles\/artifactregistry\.admin/);
+});
+
+test("production IAM bootstra preserves only the exact approved Firebase Metadata Reader role when pre-existing", () => {
+  const metadataReaderRole = "projects/click-save-ai-production/roles/clickandsaveaiFirebaseMetadataReader";
+  const bootstrapApproved = approvedPreexistingRolesBlock(bootstrap);
+  const verifyApproved = approvedPreexistingRolesBlock(verify);
+
+  assert.match(bootstrapApproved, new RegExp(metadataReaderRole.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(verifyApproved, new RegExp(metadataReaderRole.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.doesNotMatch(intendedRolesBlock(bootstrap), /clickandsaveaiFirebaseMetadataReader/);
+  assert.doesNotMatch(intendedRolesBlock(verify), /clickandsaveaiFirebaseMetadataReader/);
+  assert.match(bootstrap, /PRESERVED_PREEXISTING_ROLES/);
+  assert.match(verify, /approved pre-existing deploy-SA role/);
 });
 
 test("production IAM bootstrap preconfigures Firebase artifact cleanup in both deployment regions", () => {
