@@ -22,6 +22,9 @@ jobs:
           package-manager-cache: false
       - name: Patch Production Release Gate once
         run: python3 scripts/patch-google-play-workflow.py
+      - name: Install backend dependencies
+        working-directory: functions
+        run: npm install --ignore-scripts
       - name: Run focused Google Play contract test
         working-directory: functions
         run: node --test test/googlePlayInternalTestingWorkflow.test.js
