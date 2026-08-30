@@ -38,3 +38,4 @@ jobs:
           git add .github/workflows/production-release.yml .github/workflows/build-play-env-gate-patch.yml
           git commit -m 'fix: remove protected environment gate from Play internal path [env-gate-patch]'
           git push origin HEAD:fix/play-internal-no-env-gate
+# trigger
