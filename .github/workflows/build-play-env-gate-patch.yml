@@ -1,0 +1,40 @@
+name: Build Play env-gate patch commit
+
+on:
+  push:
+    branches:
+      - fix/play-internal-no-env-gate
+
+permissions:
+  contents: write
+
+jobs:
+  build-patch-commit:
+    if: ${{ !contains(github.event.head_commit.message, '[env-gate-patch]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/play-internal-no-env-gate
+          fetch-depth: 1
+      - name: Patch, verify, commit and upload object
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/production-release.yml'); s=p.read_text()
+          for job,next_job in [('production-candidate','production-wif-auth-proof'),('google-play-internal-testing','deploy-firebase-production')]:
+              start=s.index(f'  {job}:'); end=s.index(f'  {next_job}:',start); block=s[start:end]
+              target='    environment: production\n'
+              if block.count(target)!=1: raise SystemExit(f'unexpected environment line count in {job}')
+              s=s[:start]+block.replace(target,'',1)+s[end:]
+          p.write_text(s)
+          PY
+          node --test functions/test/googlePlayInternalTestingWorkflow.test.js
+          rm .github/workflows/build-play-env-gate-patch.yml
+          git config user.name clickandsaveai-release-bot
+          git config user.email 64756523+vhanukaev1981@users.noreply.github.com
+          git add .github/workflows/production-release.yml .github/workflows/build-play-env-gate-patch.yml
+          git commit -m 'fix: remove protected environment gate from Play internal path [env-gate-patch]'
+          git push origin HEAD:fix/play-internal-no-env-gate
