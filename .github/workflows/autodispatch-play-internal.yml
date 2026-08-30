@@ -1,0 +1,35 @@
+name: Auto-dispatch Play Internal release
+
+on:
+  push:
+    branches:
+      - ops/autodispatch-play-internal
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch Production Release Gate for current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: 152b4c44287c36a6f56d1d0ba8832ef618c3c562
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run production-release.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref main \
+            -f source_sha="${SOURCE_SHA}" \
+            -f confirm_environment=CLICKANDSAVEAI_PRODUCTION \
+            -f authorize_firebase_deploy=NO_DEPLOY \
+            -f authorize_google_play_internal_testing=PUBLISH_GOOGLE_PLAY_INTERNAL_TESTING \
+            -f authorize_wif_auth_proof=NO_WIF_PROOF \
+            -f authorize_production_bootstrap=NO_BOOTSTRAP \
+            -f authorize_3f_metadata_probe=NO_3F_PROBE \
+            -f authorize_3f_external_authority_probe=NO_3F_EXTERNAL_PROBE \
+            -f authorize_3f_service_state_probe=NO_3F_SERVICE_STATE_PROBE \
+            -f authorize_3f_firebase_iam_permission_probe=NO_3F_FIREBASE_IAM_PERMISSION_PROBE
