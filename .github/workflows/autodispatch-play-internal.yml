@@ -19,7 +19,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for run_id in 33330152482 33330442726; do
+          for run_id in 33330152482 33330442726 33330909718; do
             gh api --method POST -H "Accept: application/vnd.github+json" "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" || true
           done
 
@@ -31,7 +31,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          before="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           gh workflow run production-release.yml \
             --repo "${GITHUB_REPOSITORY}" \
             --ref main \
@@ -46,10 +45,10 @@ jobs:
             -f authorize_3f_service_state_probe=NO_3F_SERVICE_STATE_PROBE \
             -f authorize_3f_firebase_iam_permission_probe=NO_3F_FIREBASE_IAM_PERMISSION_PROBE
           sleep 8
-          run_id="$(gh run list --workflow production-release.yml --branch main --event workflow_dispatch --limit 10 --json databaseId,createdAt,headSha --jq '.[] | select(.headSha == "'"${SOURCE_SHA}"'") | .databaseId' | head -n1)"
+          run_id="$(gh run list --repo "${GITHUB_REPOSITORY}" --workflow production-release.yml --branch main --event workflow_dispatch --limit 10 --json databaseId,createdAt,headSha --jq '.[] | select(.headSha == "'"${SOURCE_SHA}"'") | .databaseId' | head -n1)"
           [[ -n "$run_id" ]] || { echo 'Unable to identify newly dispatched Production Release Gate.' >&2; exit 1; }
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          echo "Dispatched Production Release Gate run $run_id after $before"
+          echo "Dispatched Production Release Gate run $run_id"
 
       - name: Approve pending production environment for Play Internal Testing
         env:
