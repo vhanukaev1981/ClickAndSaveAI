@@ -21,8 +21,15 @@ class V3ProductionBoundaryGuardTest {
     fun releaseIdentityRemainsUnchanged() {
         val gradle = File("build.gradle.kts").readText()
         assertTrue(gradle.contains("applicationId = \"com.aistudio.clickandsaveai.app\""))
-        assertTrue(gradle.contains("versionCode = 4"))
+        assertTrue(gradle.contains("versionCode = 5"))
         assertTrue(gradle.contains("versionName = \"1.0\""))
+    }
+
+    @Test
+    fun googleSignInButtonUsesDedicatedGoogleButtonCredentialFlow() {
+        val auth = File("src/main/java/com/example/data/repository/AuthRepository.kt").readText()
+        assertTrue(auth.contains("GetSignInWithGoogleOption"))
+        assertFalse(auth.contains("GetGoogleIdOption.Builder()"))
     }
 
     @Test

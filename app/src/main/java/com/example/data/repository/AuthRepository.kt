@@ -10,7 +10,7 @@ import androidx.credentials.GetCredentialResponse
 import androidx.credentials.exceptions.GetCredentialException
 import com.example.PushTokenLifecycle
 import com.example.data.local.AppDatabase
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
@@ -86,14 +86,15 @@ class AuthRepository(private val applicationContext: Context) {
 
         _authState.value = AuthState.Loading
         return try {
-            val googleIdOption = GetGoogleIdOption.Builder()
-                .setFilterByAuthorizedAccounts(false)
-                .setServerClientId(webClientId)
-                .setAutoSelectEnabled(false)
+            // This method is invoked by an explicit "Sign in with Google" button.
+            // Google's Credential Manager guidance uses GetSignInWithGoogleOption for this flow;
+            // GetGoogleIdOption is intended for the bottom-sheet account discovery flow and can
+            // return NoCredentialException on explicit button sign-in even when Google accounts exist.
+            val signInWithGoogleOption = GetSignInWithGoogleOption.Builder(webClientId)
                 .build()
 
             val request = GetCredentialRequest.Builder()
-                .addCredentialOption(googleIdOption)
+                .addCredentialOption(signInWithGoogleOption)
                 .build()
 
             val result: GetCredentialResponse = CredentialManager.create(activity).getCredential(
@@ -162,38 +163,21 @@ class AuthRepository(private val applicationContext: Context) {
     suspend fun signOut() {
         _authState.value = AuthState.Loading
         try {
-            // Sign-out is intentionally distinct from Gmail disconnect and account deletion.
-            // Revoke this device's push registration while Auth is still valid.
-            // PushTokenLifecycle already bounds each operation with withTimeout(5_000L) so this
-            // call cannot block indefinitely. Failure is a hard gate: do not proceed to Firebase
-            // Auth sign-out if push revocation fails, so the backend retains a valid token to
-            // clean up the registration on behalf of the signed-in user.
             PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut().getOrThrow()
-
-            // Account-derived invoice data must be gone before the local authenticated session ends.
-            // Failure is a hard gate so another account cannot inherit stale financial data.
             purgeImportedFinancialDataLocally()
-
             getFirebaseAuthSafe()?.signOut()
             _userSession.value = UserSession()
             _authState.value = AuthState.Idle
         } catch (e: CancellationException) {
-            // Coroutine was cancelled — propagate cancellation so structured concurrency is not
-            // broken. Reset to Idle so the UI does not show a permanent Loading spinner.
             _authState.value = AuthState.Idle
             throw e
         } catch (e: Exception) {
-            // Surface the error so the caller/UI can present a retry prompt. The session remains
-            // authenticated: neither the financial data purge nor the Firebase Auth sign-out
-            // completed, so the state is consistent.
             _authState.value = AuthState.Error(e.localizedMessage ?: "Sign-out failed")
             throw e
         }
     }
 
     suspend fun completeAccountDeletionLocalCleanup() {
-        // The server already removed every push registration under the deleted account. Local FCM
-        // deletion is therefore secondary cleanup and must not resurrect or call the deleted user.
         PushTokenLifecycle.deleteLocalTokenAfterAccountDeletion()
             .onFailure { Log.w("AuthRepository", "Local FCM cleanup after account deletion failed", it) }
 
