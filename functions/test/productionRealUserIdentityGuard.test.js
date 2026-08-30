@@ -13,7 +13,7 @@ const APP_ID = "com.aistudio.clickandsaveai.app";
 const PROJECT_ID = "clickandsaveai-production";
 const WEB_CLIENT_ID = "123456789012-production-web.apps.googleusercontent.com";
 const ANDROID_CLIENT_ID = "123456789012-production-android.apps.googleusercontent.com";
-const PLAY_SHA1 = "11223344556677889900AABBCCDDEEFF00112233";
+const PLAY_SHA1 = "1D127D3BB3DB8E7319DDA55F437485F455B44D8D";
 
 function writeGoogleServices({ includeAndroidOAuth = true, includeWebOAuth = true, certificateHash = PLAY_SHA1 } = {}) {
   const dir = mkdtempSync(path.join(os.tmpdir(), "clickandsave-prod-identity-"));

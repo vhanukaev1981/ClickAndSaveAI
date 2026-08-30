@@ -123,3 +123,10 @@ test("production readiness guard rejects environment leakage", () => {
   assert.match(guard, /Production Firebase project must be explicit and distinct from staging/);
   assert.match(guard, /Staging OAuth client leaked into production google-services configuration/);
 });
+
+test("production readiness guard recognizes current Play signing OAuth identity", () => {
+  const guard = read("scripts/production-readiness-guard.mjs");
+  assert.match(guard, /23F46B7A8332A17B7541B483A3685AD5BA17D37F/);
+  assert.match(guard, /44D5E1A00B2893370BA12CAD7025DF44531B55527287EB6BD5B3123336801FD3/);
+  assert.match(guard, /Production Android OAuth client for a known Play signing identity is missing/);
+});
