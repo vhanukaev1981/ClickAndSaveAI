@@ -13,6 +13,18 @@ jobs:
   dispatch:
     runs-on: ubuntu-latest
     steps:
+      - name: Cancel stale Production Release Gate run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STALE_RUN_ID: 33325930333
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${STALE_RUN_ID}/cancel"
+
       - name: Dispatch Production Release Gate for current main
         env:
           GH_TOKEN: ${{ github.token }}
