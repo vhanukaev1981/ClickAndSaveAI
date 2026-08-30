@@ -6,6 +6,14 @@ const path = require('node:path');
 const workflowPath = path.resolve(__dirname, '../../.github/workflows/production-release.yml');
 const workflow = fs.readFileSync(workflowPath, 'utf8');
 
+function jobBlock(name, nextName) {
+  const start = workflow.indexOf(`  ${name}:`);
+  assert.notEqual(start, -1, `missing job ${name}`);
+  const end = nextName ? workflow.indexOf(`  ${nextName}:`, start + 1) : workflow.length;
+  assert.notEqual(end, -1, `missing next job ${nextName}`);
+  return workflow.slice(start, end);
+}
+
 test('production release workflow gates Google Play internal testing behind an explicit authorization phrase', () => {
   assert.match(workflow, /authorize_google_play_internal_testing:/);
   assert.match(workflow, /PUBLISH_GOOGLE_PLAY_INTERNAL_TESTING/);
@@ -25,4 +33,11 @@ test('Google Play publishing uploads the AAB only to the internal track and comm
   assert.match(workflow, /tracks\/internal/);
   assert.match(workflow, /:commit/);
   assert.doesNotMatch(workflow, /tracks\/production/);
+});
+
+test('Play Internal Testing candidate and publisher jobs do not require the protected production environment', () => {
+  const candidate = jobBlock('production-candidate', 'production-wif-auth-proof');
+  const play = jobBlock('google-play-internal-testing', 'deploy-firebase-production');
+  assert.doesNotMatch(candidate, /^\s*environment:\s*production\s*$/m);
+  assert.doesNotMatch(play, /^\s*environment:\s*production\s*$/m);
 });
