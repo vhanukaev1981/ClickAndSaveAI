@@ -21,6 +21,18 @@ function runGate(telemetry, rolloutPercent = 5) {
   return result;
 }
 
+function runFirebaseGate(telemetry) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'production-health-gate-firebase-'));
+  const telemetryPath = path.join(dir, 'telemetry.json');
+  fs.writeFileSync(telemetryPath, JSON.stringify(telemetry));
+  const result = spawnSync(process.execPath, [scriptPath, policyPath, telemetryPath, 'firebase'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  fs.rmSync(dir, { recursive: true, force: true });
+  return result;
+}
+
 test('production health gate accepts healthy complete telemetry', () => {
   assert.equal(fs.existsSync(policyPath), true, 'missing production release policy');
   assert.equal(fs.existsSync(scriptPath), true, 'missing production health gate evaluator');
@@ -65,4 +77,28 @@ test('production health gate rejects rollout percentages outside staged policy',
     telemetry_complete: true,
   }, 10);
   assert.notEqual(result.status, 0);
+});
+
+test('firebase production health gate accepts complete backend smoke telemetry without mobile vitals', () => {
+  const result = runFirebaseGate({
+    firebase_inventory_ok: true,
+    smoke_ok: true,
+    telemetry_complete: true,
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
+test('firebase production health gate fails closed when provider inventory or smoke validation fails', () => {
+  const inventoryFailure = runFirebaseGate({
+    firebase_inventory_ok: false,
+    smoke_ok: true,
+    telemetry_complete: true,
+  });
+  const smokeFailure = runFirebaseGate({
+    firebase_inventory_ok: true,
+    smoke_ok: false,
+    telemetry_complete: true,
+  });
+  assert.notEqual(inventoryFailure.status, 0);
+  assert.notEqual(smokeFailure.status, 0);
 });
