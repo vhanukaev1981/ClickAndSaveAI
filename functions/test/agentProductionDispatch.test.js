@@ -9,7 +9,7 @@ function workflow() {
   return fs.readFileSync(workflowPath, 'utf8');
 }
 
-test('production dispatcher is owner-only and validates exact current main SHA', () => {
+test('production dispatcher is owner-only, title-gated, and validates exact current main SHA', () => {
   const text = workflow();
   assert.match(text, /issues:/);
   assert.match(text, /types:\s*\[labeled\]/);
@@ -18,6 +18,8 @@ test('production dispatcher is owner-only and validates exact current main SHA',
   assert.match(text, /64756523/);
   assert.match(text, /github\.event\.issue\.user\.login/);
   assert.match(text, /github\.event\.issue\.user\.id/);
+  assert.match(text, /github\.event\.issue\.title/);
+  assert.match(text, /Agent Production Release/);
   assert.match(text, /git\/ref\/heads\/main/);
   assert.match(text, /source_sha/);
   assert.match(text, /\^\[0-9a-f\]\{40\}\$/);
