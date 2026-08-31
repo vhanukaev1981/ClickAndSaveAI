@@ -3,8 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const wrapperPath = path.resolve(__dirname, '../../scripts/bootstrap-production-deploy-iam.sh');
-const basePath = path.resolve(__dirname, '../../scripts/bootstrap-production-deploy-iam-base.sh');
+const canonicalPath = path.resolve(__dirname, '../../scripts/bootstrap-production-deploy-iam.sh');
 const bootstrapPath = path.resolve(__dirname, '../../scripts/bootstrap-production-controller-wif.sh');
 const verifyPath = path.resolve(__dirname, '../../scripts/verify-production-controller-wif.sh');
 
@@ -12,12 +11,13 @@ function read(file) {
   return fs.readFileSync(file, 'utf8');
 }
 
-test('canonical deploy bootstrap delegates old behavior and isolated controller WIF setup', () => {
-  const wrapper = read(wrapperPath);
-  assert.equal(fs.existsSync(basePath), true, 'missing preserved canonical deploy IAM bootstrap');
-  assert.match(wrapper, /bootstrap-production-deploy-iam-base\.sh/);
-  assert.match(wrapper, /bootstrap-production-controller-wif\.sh/);
-  assert.match(wrapper, /verify-production-controller-wif\.sh/);
+test('canonical deploy bootstrap remains the existing least-privilege implementation', () => {
+  const canonical = read(canonicalPath);
+  assert.match(canonical, /CUSTOM_DEPLOY_ROLE_ID="clickandsaveaiFirebaseDeployIamPolicy"/);
+  assert.match(canonical, /INTENDED_ROLES=\(/);
+  assert.match(canonical, /APPROVED_PREEXISTING_ROLES=\(/);
+  assert.match(canonical, /GOOGLE_APPLICATION_CREDENTIALS/);
+  assert.doesNotMatch(canonical, /bootstrap-production-deploy-iam-base\.sh/);
 });
 
 test('controller WIF bootstrap creates separate exact-workflow trust boundaries', () => {
