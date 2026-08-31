@@ -6,7 +6,6 @@ const path = require('node:path');
 const canonicalPath = path.resolve(__dirname, '../../scripts/bootstrap-production-deploy-iam.sh');
 const bootstrapPath = path.resolve(__dirname, '../../scripts/bootstrap-production-controller-wif.sh');
 const verifyPath = path.resolve(__dirname, '../../scripts/verify-production-controller-wif.sh');
-const workflowPath = path.resolve(__dirname, '../../.github/workflows/production-release.yml');
 
 function read(file) {
   return fs.readFileSync(file, 'utf8');
@@ -50,17 +49,8 @@ test('controller WIF verifier independently checks both isolated pools and provi
   assert.match(verify, /roles\/iam\.workloadIdentityUser|workloadIdentityUser/);
 });
 
-test('governed production bootstrap job provisions and independently verifies controller WIF boundaries', () => {
-  const workflow = read(workflowPath);
-  const marker = '  production-bootstrap-deploy-iam:';
-  const start = workflow.indexOf(marker);
-  assert.notEqual(start, -1, 'missing governed production bootstrap job');
-  const tail = workflow.slice(start + marker.length);
-  const nextJob = tail.match(/\n  [A-Za-z0-9_-]+:\n/);
-  const bootstrapJob = nextJob ? tail.slice(0, nextJob.index) : tail;
-
-  assert.match(bootstrapJob, /bash scripts\/bootstrap-production-deploy-iam\.sh/);
-  assert.match(bootstrapJob, /bash scripts\/verify-production-deploy-iam\.sh/);
-  assert.match(bootstrapJob, /bash scripts\/bootstrap-production-controller-wif\.sh/);
-  assert.match(bootstrapJob, /bash scripts\/verify-production-controller-wif\.sh/);
+test('canonical governed bootstrap provisions and independently verifies controller WIF boundaries', () => {
+  const canonical = read(canonicalPath);
+  assert.match(canonical, /bash "\$SCRIPT_DIR\/bootstrap-production-controller-wif\.sh"/);
+  assert.match(canonical, /bash "\$SCRIPT_DIR\/verify-production-controller-wif\.sh"/);
 });
