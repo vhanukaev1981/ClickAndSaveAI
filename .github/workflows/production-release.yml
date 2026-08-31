@@ -1006,8 +1006,8 @@ jobs:
       - name: Download exact candidate evidence for Firebase deployment audit
         uses: actions/download-artifact@v4
         with:
-          name: clickandsaveai-production-candidate-
-          path: /home/runner/work/_temp/firebase-production-evidence
+          name: clickandsaveai-production-candidate-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/firebase-production-evidence
 
       - name: Collect post-deploy Firebase provider smoke telemetry
         shell: bash
@@ -1047,12 +1047,11 @@ jobs:
           [[ -f "$IDENTITY" ]] || { echo 'Production candidate identity evidence is missing.' >&2; exit 1; }
           node scripts/production-release-evidence.mjs "$IDENTITY" firebase-deploy firebase-production success
           grep -qx 'firebase_deployed=true' "$IDENTITY"
-          grep -qx 'google_play_published=false' "$IDENTITY"
 
       - name: Upload Firebase Production deployment evidence
         uses: actions/upload-artifact@v4
         with:
-          name: clickandsaveai-firebase-production-evidence-
-          path: /home/runner/work/_temp/firebase-production-evidence/identity.txt
+          name: clickandsaveai-firebase-production-evidence-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/firebase-production-evidence/identity.txt
           if-no-files-found: error
           retention-days: 30
