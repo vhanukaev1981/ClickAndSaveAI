@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const workflowPath = path.resolve(__dirname, '../../.github/workflows/production-release.yml');
 const workflow = fs.readFileSync(workflowPath, 'utf8');
+const agentDispatchWorkflowPath = path.resolve(__dirname, '../../.github/workflows/agent-internal-testing-dispatch.yml');
 
 function jobBlock(name, nextName) {
   const start = workflow.indexOf(`  ${name}:`);
@@ -40,4 +41,30 @@ test('Play Internal Testing candidate and publisher jobs do not require the prot
   const play = jobBlock('google-play-internal-testing', 'deploy-firebase-production');
   assert.doesNotMatch(candidate, /^\s*environment:\s*production\s*$/m);
   assert.doesNotMatch(play, /^\s*environment:\s*production\s*$/m);
+});
+
+test('agent-controlled Internal Testing dispatch bridge is fail-closed and cannot authorize other production actions', () => {
+  assert.equal(fs.existsSync(agentDispatchWorkflowPath), true, 'missing agent Internal Testing dispatch bridge workflow');
+  const bridge = fs.readFileSync(agentDispatchWorkflowPath, 'utf8');
+
+  assert.match(bridge, /issues:/);
+  assert.match(bridge, /types:\s*\[opened\]/);
+  assert.match(bridge, /Agent Internal Testing Release/);
+  assert.match(bridge, /github\.event\.issue\.user\.login/);
+  assert.match(bridge, /github\.repository_owner/);
+  assert.match(bridge, /source_sha/);
+  assert.match(bridge, /git\/ref\/heads\/main/);
+  assert.match(bridge, /actions\/workflows\/production-release\.yml\/dispatches/);
+  assert.match(bridge, /CLICKANDSAVEAI_PRODUCTION/);
+  assert.match(bridge, /PUBLISH_GOOGLE_PLAY_INTERNAL_TESTING/);
+  assert.match(bridge, /NO_DEPLOY/);
+  assert.match(bridge, /NO_WIF_PROOF/);
+  assert.match(bridge, /NO_BOOTSTRAP/);
+  assert.match(bridge, /NO_3F_PROBE/);
+  assert.match(bridge, /NO_3F_EXTERNAL_PROBE/);
+  assert.match(bridge, /NO_3F_SERVICE_STATE_PROBE/);
+  assert.match(bridge, /NO_3F_FIREBASE_IAM_PERMISSION_PROBE/);
+  assert.doesNotMatch(bridge, /tracks\/production/);
+  assert.doesNotMatch(bridge, /DEPLOY_FIREBASE_PRODUCTION/);
+  assert.doesNotMatch(bridge, /BOOTSTRAP_PRODUCTION_IAM_ONCE/);
 });

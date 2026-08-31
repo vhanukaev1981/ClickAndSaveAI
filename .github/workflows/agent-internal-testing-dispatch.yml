@@ -1,0 +1,65 @@
+name: Agent Internal Testing Dispatch
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+
+jobs:
+  dispatch-internal-testing:
+    if: ${{ github.event.issue.user.login == github.repository_owner && github.event.issue.title == 'Agent Internal Testing Release' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Guard owner-only exact request
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$ISSUE_AUTHOR" == "$REPOSITORY_OWNER" ]] || { echo 'Only the repository owner may request an agent Internal Testing release.' >&2; exit 1; }
+
+          SOURCE_SHA="$(printf '%s\n' "$ISSUE_BODY" | sed -n 's/^source_sha=\([0-9a-f]\{40\}\)$/\1/p' | head -n 1)"
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Issue body must contain source_sha=<exact lowercase 40-character SHA>.' >&2; exit 1; }
+
+          MAIN_SHA="$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+          [[ "$MAIN_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Unable to resolve main SHA.' >&2; exit 1; }
+          [[ "$SOURCE_SHA" == "$MAIN_SHA" ]] || { echo "Requested SHA $SOURCE_SHA is not current main $MAIN_SHA." >&2; exit 1; }
+
+          echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
+
+      - name: Dispatch Production Release Gate for Internal Testing only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST "/repos/$GITHUB_REPOSITORY/actions/workflows/production-release.yml/dispatches" \
+            -f ref=main \
+            -f "inputs[source_sha]=$SOURCE_SHA" \
+            -f "inputs[confirm_environment]=CLICKANDSAVEAI_PRODUCTION" \
+            -f "inputs[authorize_firebase_deploy]=NO_DEPLOY" \
+            -f "inputs[authorize_google_play_internal_testing]=PUBLISH_GOOGLE_PLAY_INTERNAL_TESTING" \
+            -f "inputs[authorize_wif_auth_proof]=NO_WIF_PROOF" \
+            -f "inputs[authorize_production_bootstrap]=NO_BOOTSTRAP" \
+            -f "inputs[authorize_3f_metadata_probe]=NO_3F_PROBE" \
+            -f "inputs[authorize_3f_external_authority_probe]=NO_3F_EXTERNAL_PROBE" \
+            -f "inputs[authorize_3f_service_state_probe]=NO_3F_SERVICE_STATE_PROBE" \
+            -f "inputs[authorize_3f_firebase_iam_permission_probe]=NO_3F_FIREBASE_IAM_PERMISSION_PROBE"
+
+      - name: Record dispatch evidence on request issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST "/repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER/comments" \
+            -f "body=Dispatched Production Release Gate for exact main SHA $SOURCE_SHA with Google Play Internal Testing authorization only. Firebase deploy, WIF proof, bootstrap, and Block 3F probes remain disabled."
