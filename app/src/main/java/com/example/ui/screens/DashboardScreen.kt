@@ -191,7 +191,7 @@ fun DashboardScreen(
                 }
             }
             is FinancialSyncState.Failed -> item {
-                HomeStatusCard("לא הצלחנו להשלים את העדכון", "לא נציג מידע משוער במקום מידע שחסר. אפשר לנסות שוב כשהחיבור זמין.") {
+                HomeStatusCard("לא הצלחנו להשלים את העדכון", "${state.reason}\nאפשר לנסות שוב כשהחיבור זמין.") {
                     Button(onClick = { viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY) }) { Text("נסה שוב") }
                 }
             }
