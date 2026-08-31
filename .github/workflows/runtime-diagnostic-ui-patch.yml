@@ -1,0 +1,46 @@
+name: Runtime Diagnostic UI Patch
+
+on:
+  push:
+    branches:
+      - fix/runtime-refresh-diagnostics
+
+permissions:
+  contents: write
+
+jobs:
+  patch-dashboard:
+    if: ${{ github.repository_owner == 'vhanukaev1981' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/runtime-refresh-diagnostics
+          fetch-depth: 0
+      - name: Surface sanitized failure reason
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('app/src/main/java/com/example/ui/screens/DashboardScreen.kt')
+          text = p.read_text()
+          old = 'HomeStatusCard("לא הצלחנו להשלים את העדכון", "לא נציג מידע משוער במקום מידע שחסר. אפשר לנסות שוב כשהחיבור זמין.") {'
+          new = 'HomeStatusCard("לא הצלחנו להשלים את העדכון", "${state.reason}\\nאפשר לנסות שוב כשהחיבור זמין.") {'
+          if old in text:
+              text = text.replace(old, new, 1)
+              p.write_text(text)
+          elif '"${state.reason}\\nאפשר לנסות שוב כשהחיבור זמין."' not in text:
+              raise SystemExit('Expected Dashboard failed-state text was not found')
+      - name: Verify focused diagnostic tests
+        run: gradle --no-daemon testDebugUnitTest --tests com.example.FinancialRecoveryPipelineTest --tests com.example.DashboardFailureDiagnosticWiringTest
+      - name: Commit source patch if needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- app/src/main/java/com/example/ui/screens/DashboardScreen.kt; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/example/ui/screens/DashboardScreen.kt
+          git commit -m 'fix: surface safe refresh diagnostic on dashboard'
+          git push origin HEAD:fix/runtime-refresh-diagnostics
