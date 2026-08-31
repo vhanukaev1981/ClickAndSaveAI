@@ -24,8 +24,13 @@ class FinancialSessionRecovery(
 
         val connection = try {
             getConnectionStatus()
-        } catch (error: Exception) {
-            return emit(preservePreviousOrFail(previous, safeReason(error)))
+        } catch (_: Exception) {
+            return emit(
+                preservePreviousOrFail(
+                    previous,
+                    safeReason("GMAIL_CONNECTION_STATUS_FAILED")
+                )
+            )
         }
 
         if (!connection.connected) {
@@ -36,13 +41,18 @@ class FinancialSessionRecovery(
 
         val scan = try {
             recoverInvoices()
-        } catch (error: Exception) {
-            return emit(preservePreviousOrFail(previous, safeReason(error)))
+        } catch (_: Exception) {
+            return emit(
+                preservePreviousOrFail(
+                    previous,
+                    safeReason("GMAIL_SCAN_FAILED")
+                )
+            )
         }
 
         val financialHome = try {
             getFinancialHome()
-        } catch (error: Exception) {
+        } catch (_: Exception) {
             val previousHome = when (previous) {
                 is FinancialSyncState.Ready -> previous.financialHome
                 is FinancialSyncState.Partial -> previous.financialHome
@@ -52,7 +62,7 @@ class FinancialSessionRecovery(
                 FinancialSyncState.Partial(
                     latestScan = scan,
                     financialHome = previousHome,
-                    reason = safeReason(error)
+                    reason = safeReason("FINANCIAL_HOME_FAILED")
                 )
             )
         }
@@ -87,8 +97,15 @@ class FinancialSessionRecovery(
         }
     }
 
-    private fun safeReason(error: Exception): String {
-        return error.localizedMessage?.takeIf(String::isNotBlank)
-            ?: "הסנכרון הפיננסי אינו זמין כרגע."
+    private fun safeReason(code: String): String {
+        return when (code) {
+            "GMAIL_CONNECTION_STATUS_FAILED" ->
+                "בדיקת החיבור ל-Gmail נכשלה. קוד: GMAIL_CONNECTION_STATUS_FAILED"
+            "GMAIL_SCAN_FAILED" ->
+                "סריקת Gmail נכשלה. קוד: GMAIL_SCAN_FAILED"
+            "FINANCIAL_HOME_FAILED" ->
+                "טעינת הנתונים הפיננסיים נכשלה. קוד: FINANCIAL_HOME_FAILED"
+            else -> "הסנכרון הפיננסי אינו זמין כרגע. קוד: FINANCIAL_REFRESH_FAILED"
+        }
     }
 }
