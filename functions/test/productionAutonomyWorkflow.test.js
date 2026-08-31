@@ -16,11 +16,10 @@ function jobBlock(name, nextName) {
   return workflow.slice(start, end);
 }
 
-test('production release workflow exposes a distinct staged Google Play Production authorization', () => {
-  assert.match(workflow, /authorize_google_play_production:/);
-  assert.match(workflow, /PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED/);
-  assert.match(workflow, /default:\s*NO_PRODUCTION_UPLOAD/);
-  assert.match(workflow, /production_rollout_percent:/);
+test('production release gate keeps Google Play Production authorization out of the legacy gate', () => {
+  assert.doesNotMatch(workflow, /authorize_google_play_production:/);
+  assert.doesNotMatch(workflow, /PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED/);
+  assert.doesNotMatch(workflow, /production_rollout_percent:/);
 });
 
 test('Internal Testing dispatch bridge cannot authorize Google Play Production', () => {
@@ -28,19 +27,11 @@ test('Internal Testing dispatch bridge cannot authorize Google Play Production',
   assert.doesNotMatch(internalBridge, /authorize_google_play_production/);
 });
 
-test('Firebase Production deployment records post-deploy health evidence without authorizing Play Production', () => {
+test('Firebase Production deployment remains bounded to Firebase and cannot authorize Play Production', () => {
   const firebaseJob = jobBlock('deploy-firebase-production');
   assert.match(firebaseJob, /DEPLOY_FIREBASE_PRODUCTION/);
   assert.match(firebaseJob, /google-github-actions\/auth@v3/);
-  assert.match(firebaseJob, /production-health-gate\.mjs/);
-  assert.match(firebaseJob, /firebase_deployed=true/);
+  assert.match(firebaseJob, /firebase deploy/);
   assert.doesNotMatch(firebaseJob, /PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED/);
-});
-
-test('Firebase evidence artifact paths preserve runtime GitHub expressions', () => {
-  const firebaseJob = jobBlock('deploy-firebase-production');
-  assert.match(firebaseJob, /name:\s*clickandsaveai-production-candidate-\$\{\{ env\.SOURCE_SHA \}\}/);
-  assert.match(firebaseJob, /name:\s*clickandsaveai-firebase-production-evidence-\$\{\{ env\.SOURCE_SHA \}\}/);
-  assert.match(firebaseJob, /path:\s*\$\{\{ runner\.temp \}\}\/firebase-production-evidence/);
-  assert.doesNotMatch(firebaseJob, /\/home\/runner\/work\/_temp\/firebase-production-evidence/);
+  assert.doesNotMatch(firebaseJob, /tracks\/production/);
 });
