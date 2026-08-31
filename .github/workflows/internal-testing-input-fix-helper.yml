@@ -1,0 +1,44 @@
+name: Internal Testing Input Fix Helper
+
+on:
+  pull_request:
+    branches: [main]
+    types: [synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  build-patched-workflow:
+    if: ${{ github.event.pull_request.head.ref == 'fix/internal-testing-production-inputs' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/internal-testing-production-inputs
+      - name: Patch production candidate environment only
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('.github/workflows/production-release.yml')
+          text = p.read_text()
+          marker = "  production-candidate:\n"
+          start = text.index(marker)
+          runs = text.index("    runs-on: ubuntu-latest\n", start)
+          insert_at = runs + len("    runs-on: ubuntu-latest\n")
+          block_end = text.index("  production-wif-auth-proof:\n", start)
+          block = text[start:block_end]
+          if "    environment: production\n" in block:
+              raise SystemExit('production-candidate already has production environment')
+          text = text[:insert_at] + "    environment: production\n" + text[insert_at:]
+          p.write_text(text)
+      - name: Verify focused Internal Testing contract
+        working-directory: functions
+        run: node --test test/googlePlayInternalTestingWorkflow.test.js
+      - name: Upload patched workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: internal-testing-production-release-yml
+          path: .github/workflows/production-release.yml
+          if-no-files-found: error
+          retention-days: 1
