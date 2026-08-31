@@ -29,9 +29,10 @@ test('Play Production controller has a distinct exact-main staged authorization 
   assert.doesNotMatch(text, /PUBLISH_GOOGLE_PLAY_INTERNAL_TESTING/);
 });
 
-test('Play Production controller uses dedicated publisher WIF and production track only', () => {
+test('Play Production controller uses isolated publisher WIF and production track only', () => {
   const text = workflow();
   assert.match(text, /google-github-actions\/auth@v3/);
+  assert.match(text, /projects\/991489557172\/locations\/global\/workloadIdentityPools\/github-actions-play-production\/providers\/clickandsaveai-play-production/);
   assert.match(text, /clickandsaveai-play-publisher@click-save-ai-production\.iam\.gserviceaccount\.com/);
   assert.match(text, /androidpublisher/);
   assert.match(text, /tracks\/production/);
