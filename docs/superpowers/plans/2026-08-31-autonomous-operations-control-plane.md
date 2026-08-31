@@ -2,113 +2,213 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Establish an end-to-end autonomous operations control plane for Click & Save AI across GitHub, Google Cloud/Firebase, Google Play Internal Testing, Vercel, Supabase, Make, and related operational systems, while retaining explicit guardrails against unintended public-production actions.
+**Goal:** Extend the existing autonomous release control plane from Internal Testing to guarded Firebase Production deployment and Google Play Production staged rollout.
 
-**Architecture:** GitHub Actions remains the source-controlled orchestrator. Privileged cloud access uses GitHub OIDC to Google Cloud Workload Identity Federation with bounded service-account impersonation, provider-native secret stores, exact-SHA release traceability, API-first execution, and browser automation only as a fallback for UI-only operations. Google Play automation is authorized through Internal Testing only by default.
+**Architecture:** Keep `production-release.yml` as the exact-SHA source-controlled release gate. Firebase Production and Google Play Production receive distinct authorization inputs, WIF-authenticated jobs, version-controlled health policy, fail-closed telemetry checks, staged rollout state, and immutable audit evidence. The existing owner-only Internal Testing issue bridge remains isolated and cannot authorize Firebase Production or Play Production.
 
-**Tech Stack:** GitHub Actions, GitHub OIDC, Google Cloud IAM/WIF, Firebase, Google Play Developer API, Node.js 22, Bash, Android/Gradle, Vercel, Supabase, Make.
+**Tech Stack:** GitHub Actions, Node.js 22, Bash, Google Cloud Workload Identity Federation, Firebase CLI/APIs, Google Play Android Publisher API, Android/Gradle.
 
 **Spec:** `docs/superpowers/specs/2026-08-31-autonomous-operations-control-plane-design.md`
 
 ## Global Constraints
 
-- Repository: `vhanukaev1981/ClickAndSaveAI`.
-- Privileged release source must be an exact 40-character commit SHA.
-- Routine cloud auth must use short-lived OIDC/WIF where supported.
-- Never commit or log long-lived secrets.
-- Google Play autonomous publishing target is Internal Testing only.
-- Internal Testing authorization must never authorize Google Play Production/Open/Closed tracks.
-- Production capabilities remain independently gated.
-- Bounded technical blockers may be repaired autonomously only when reversible/reviewable and testable.
+- Repository is `vhanukaev1981/ClickAndSaveAI`.
+- Privileged releases use an exact lowercase 40-character source SHA.
+- Routine Google auth uses short-lived OIDC/WIF, not service-account private keys.
+- Internal Testing authorization cannot authorize Firebase Production or Google Play Production.
+- Google Play Production rollout sequence is `5 -> 20 -> 50 -> 100` percent.
+- Production promotion fails closed when required health telemetry is missing or unhealthy.
+- Google Play rollback means halt promotion and, when replacement is required, publish a corrected higher `versionCode`; never decrement `versionCode`.
+- No secret values may be committed or printed.
+- Branch protection and required checks on `main` remain enabled.
 
 ---
 
 ## File Structure
 
-- Modify `.github/workflows/production-release.yml` — exact-SHA candidate, WIF, Play Internal Testing, evidence, and independent authorization gates.
-- Modify `.github/workflows/android-ci.yml` — ensure final CI emits stable required checks for exact-SHA release gating.
-- Create `.github/workflows/autonomous-ops-preflight.yml` — read-only control-plane readiness checks across configured providers.
-- Create `.github/workflows/autonomous-release-dispatch.yml` — safe source-controlled dispatch shim for release invocation when direct connector dispatch is unavailable.
-- Modify `functions/test/googlePlayInternalTestingWorkflow.test.js` — Play release contract tests.
-- Create `functions/test/autonomousOpsPreflightWorkflow.test.js` — preflight workflow contract tests.
-- Create `functions/test/autonomousReleaseDispatchWorkflow.test.js` — dispatch boundary contract tests.
-- Create `scripts/autonomous-ops-preflight.mjs` — local/static validation for required workflow inputs, variables, and policy boundaries.
-- Create `scripts/release-evidence-validate.mjs` — validate exact-SHA, track, artifact identity, and authorization evidence.
-- Create `docs/operations/autonomous-control-plane-runbook.md` — operator/audit/rollback runbook.
+- Modify `.github/workflows/production-release.yml` — add independent Firebase Production and Play Production authorization/jobs.
+- Keep `.github/workflows/agent-internal-testing-dispatch.yml` fail-closed for Internal Testing only.
+- Create `.github/workflows/agent-production-release-dispatch.yml` — owner-only exact-main production dispatch with explicit mode.
+- Create `config/production-release-policy.json` — rollout percentages and health thresholds.
+- Create `scripts/production-health-gate.mjs` — validate normalized health telemetry against policy.
+- Create `scripts/production-release-evidence.mjs` — validate/append production deployment and rollout evidence.
+- Modify `functions/test/googlePlayInternalTestingWorkflow.test.js` — preserve isolation contract.
+- Create `functions/test/productionAutonomyWorkflow.test.js` — production workflow and dispatch contract.
+- Create `functions/test/productionHealthGate.test.js` — health policy unit tests.
+- Modify `docs/operations/autonomous-control-plane-runbook.md` — deployment, halt, rollback, and provider-only action runbook.
 
-### Task 1: Inventory and encode current control-plane assumptions
+### Task 1: Preserve Internal Testing isolation while adding production authorization inputs
 
 **Files:**
-- Create: `scripts/autonomous-ops-preflight.mjs`
-- Test: `functions/test/autonomousOpsPreflightWorkflow.test.js`
+- Modify: `.github/workflows/production-release.yml`
+- Modify: `functions/test/googlePlayInternalTestingWorkflow.test.js`
+- Create: `functions/test/productionAutonomyWorkflow.test.js`
 
 **Interfaces:**
-- Consumes: repository workflow YAML and documented expected repository/project identifiers.
-- Produces: deterministic exit status and concise diagnostics for missing or policy-violating configuration.
+- Consumes: existing `source_sha`, `confirm_environment`, Internal Testing and Firebase inputs.
+- Produces: independent inputs `authorize_google_play_production` and `production_rollout_percent` without changing the Internal Testing bridge.
 
-- [ ] **Step 1: Write the failing contract test**
+- [ ] **Step 1: Write failing production contract assertions**
 
-Create `functions/test/autonomousOpsPreflightWorkflow.test.js` asserting that `.github/workflows/autonomous-ops-preflight.yml` exists and that it invokes `node scripts/autonomous-ops-preflight.mjs` without any deployment command.
-
-- [ ] **Step 2: Run the focused test and verify RED**
-
-Run: `cd functions && node --test test/autonomousOpsPreflightWorkflow.test.js`
-
-Expected: FAIL because the workflow/script do not yet exist.
-
-- [ ] **Step 3: Implement the minimal preflight script**
-
-Create `scripts/autonomous-ops-preflight.mjs` that:
+Add a new test that requires:
 
 ```js
-import fs from 'node:fs';
-
-const requiredFiles = [
-  '.github/workflows/android-ci.yml',
-  '.github/workflows/production-release.yml',
-];
-
-const missing = requiredFiles.filter((path) => !fs.existsSync(path));
-if (missing.length) {
-  console.error(`Missing required control-plane files: ${missing.join(', ')}`);
-  process.exit(1);
-}
-
-const release = fs.readFileSync('.github/workflows/production-release.yml', 'utf8');
-const requiredTokens = [
-  'authorize_google_play_internal_testing',
-  'PUBLISH_GOOGLE_PLAY_INTERNAL_TESTING',
-  'NO_DEPLOY',
-  'source_sha',
-];
-
-for (const token of requiredTokens) {
-  if (!release.includes(token)) {
-    console.error(`Production release policy token missing: ${token}`);
-    process.exit(1);
-  }
-}
-
-if (/track:\s*production/i.test(release)) {
-  console.error('Google Play production track must not be present in autonomous release workflow.');
-  process.exit(1);
-}
-
-console.log('Autonomous operations control-plane static preflight passed.');
+assert.match(workflow, /authorize_google_play_production:/);
+assert.match(workflow, /PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED/);
+assert.match(workflow, /default:\s*NO_PRODUCTION_UPLOAD/);
+assert.match(workflow, /production_rollout_percent:/);
 ```
 
-- [ ] **Step 4: Add the read-only preflight workflow**
+Extend the existing Internal Testing bridge test with:
 
-Create `.github/workflows/autonomous-ops-preflight.yml` with `workflow_dispatch` and `pull_request` triggers, `contents: read`, Node 22 setup, checkout, and `node scripts/autonomous-ops-preflight.mjs`. Do not request `id-token: write` in this first task.
+```js
+assert.doesNotMatch(bridge, /PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED/);
+assert.doesNotMatch(bridge, /authorize_google_play_production/);
+```
 
-- [ ] **Step 5: Run focused and backend tests**
+- [ ] **Step 2: Run focused tests and verify RED**
 
 Run:
 
 ```bash
-node scripts/autonomous-ops-preflight.mjs
 cd functions
-node --test test/autonomousOpsPreflightWorkflow.test.js
+node --test test/googlePlayInternalTestingWorkflow.test.js test/productionAutonomyWorkflow.test.js
+```
+
+Expected: production autonomy test fails because the new production inputs do not exist; the existing Internal Testing contract still passes.
+
+- [ ] **Step 3: Add minimal independent workflow inputs**
+
+Add to `workflow_dispatch.inputs`:
+
+```yaml
+authorize_google_play_production:
+  description: Type PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED only for a staged Production rollout
+  required: true
+  default: NO_PRODUCTION_UPLOAD
+  type: string
+production_rollout_percent:
+  description: Requested staged rollout percentage: 5, 20, 50, or 100
+  required: true
+  default: '5'
+  type: string
+```
+
+Do not modify `.github/workflows/agent-internal-testing-dispatch.yml` to send either production input; GitHub applies workflow defaults.
+
+- [ ] **Step 4: Re-run focused tests**
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add .github/workflows/production-release.yml functions/test/googlePlayInternalTestingWorkflow.test.js functions/test/productionAutonomyWorkflow.test.js
+git commit -m "ci: add isolated production rollout authorization"
+```
+
+### Task 2: Add version-controlled health policy and fail-closed evaluator
+
+**Files:**
+- Create: `config/production-release-policy.json`
+- Create: `scripts/production-health-gate.mjs`
+- Create: `functions/test/productionHealthGate.test.js`
+
+**Interfaces:**
+- Consumes: JSON telemetry file with `crash_rate`, `anr_rate`, `backend_error_rate`, `smoke_ok`, and `telemetry_complete`.
+- Produces: exit 0 only when every required signal satisfies policy for the requested promotion.
+
+- [ ] **Step 1: Write failing unit tests**
+
+Test these cases using temporary telemetry JSON:
+
+```js
+// healthy => exit 0
+{ crash_rate: 0.005, anr_rate: 0.002, backend_error_rate: 0.005, smoke_ok: true, telemetry_complete: true }
+// missing telemetry => non-zero
+{ crash_rate: 0.005, anr_rate: 0.002, backend_error_rate: 0.005, smoke_ok: true, telemetry_complete: false }
+// crash threshold breach => non-zero
+{ crash_rate: 0.03, anr_rate: 0.002, backend_error_rate: 0.005, smoke_ok: true, telemetry_complete: true }
+```
+
+- [ ] **Step 2: Run tests and verify RED**
+
+Run: `cd functions && node --test test/productionHealthGate.test.js`
+
+Expected: FAIL because policy/evaluator files do not exist.
+
+- [ ] **Step 3: Create policy**
+
+Create:
+
+```json
+{
+  "rollout_percentages": [5, 20, 50, 100],
+  "max_crash_rate": 0.02,
+  "max_anr_rate": 0.01,
+  "max_backend_error_rate": 0.02,
+  "require_smoke_ok": true,
+  "require_complete_telemetry": true
+}
+```
+
+- [ ] **Step 4: Implement evaluator**
+
+`scripts/production-health-gate.mjs` reads policy path and telemetry path from argv, validates every numeric field is finite and non-negative, requires the rollout percentage to be one of the configured percentages, and exits non-zero on missing/unhealthy signals.
+
+- [ ] **Step 5: Run tests and verify GREEN**
+
+Run: `cd functions && node --test test/productionHealthGate.test.js`
+
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add config/production-release-policy.json scripts/production-health-gate.mjs functions/test/productionHealthGate.test.js
+git commit -m "ci: add fail closed production health policy"
+```
+
+### Task 3: Harden Firebase Production deployment with exact-SHA post-deploy health evidence
+
+**Files:**
+- Modify: `.github/workflows/production-release.yml`
+- Modify: `functions/test/productionAutonomyWorkflow.test.js`
+- Create: `scripts/production-release-evidence.mjs`
+
+**Interfaces:**
+- Consumes: `authorize_firebase_deploy=DEPLOY_FIREBASE_PRODUCTION`, exact source SHA, deploy WIF identity, production project ID.
+- Produces: Firebase deployment evidence and a post-deploy health gate result; no Play authorization is implied.
+
+- [ ] **Step 1: Add failing assertions**
+
+Require the Firebase deploy job to contain:
+
+```js
+assert.match(firebaseJob, /DEPLOY_FIREBASE_PRODUCTION/);
+assert.match(firebaseJob, /google-github-actions\/auth@v3/);
+assert.match(firebaseJob, /production-health-gate\.mjs/);
+assert.match(firebaseJob, /firebase_deployed=true/);
+assert.doesNotMatch(firebaseJob, /PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED/);
+```
+
+- [ ] **Step 2: Verify RED**
+
+Run: `cd functions && node --test test/productionAutonomyWorkflow.test.js`
+
+- [ ] **Step 3: Add post-deploy health collection contract**
+
+After Firebase deploy, write normalized telemetry to `$RUNNER_TEMP/firebase-production-health.json`. The initial implementation may use deterministic smoke/service checks already available in the repository; if crash/ANR Play vitals are not yet available for a Firebase-only deployment, mark those signals not applicable in the evidence but require all Firebase/backend signals needed by the Firebase-specific policy path.
+
+- [ ] **Step 4: Add evidence validator/appender**
+
+`production-release-evidence.mjs` accepts an existing `identity.txt`, action name, target, result, and optional rollout percentage; it rejects invalid SHA/package/version metadata and appends only normalized non-secret key/value evidence.
+
+- [ ] **Step 5: Run focused and backend tests**
+
+```bash
+cd functions
+node --test test/productionAutonomyWorkflow.test.js
 npm test
 ```
 
@@ -117,313 +217,164 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add scripts/autonomous-ops-preflight.mjs .github/workflows/autonomous-ops-preflight.yml functions/test/autonomousOpsPreflightWorkflow.test.js
-git commit -m "ci: add autonomous operations preflight"
+git add .github/workflows/production-release.yml functions/test/productionAutonomyWorkflow.test.js scripts/production-release-evidence.mjs
+git commit -m "ci: gate firebase production deploy on health evidence"
 ```
 
-### Task 2: Harden the exact-SHA release contract
+### Task 4: Implement Google Play Production staged rollout job
 
 **Files:**
 - Modify: `.github/workflows/production-release.yml`
-- Modify: `functions/test/googlePlayInternalTestingWorkflow.test.js`
+- Modify: `functions/test/productionAutonomyWorkflow.test.js`
 
 **Interfaces:**
-- Consumes: `source_sha`, explicit release authorization inputs, successful final CI on exact SHA.
-- Produces: signed candidate and release evidence tied to exact SHA.
+- Consumes: successful `production-candidate`, explicit `PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED`, rollout percentage in policy, Internal Testing lineage evidence, dedicated Play publisher WIF identity.
+- Produces: Android Publisher edit committed to `tracks/production` with `userFraction = percentage / 100` until 100%, plus rollout evidence.
 
-- [ ] **Step 1: Extend the failing test first**
+- [ ] **Step 1: Add failing Play Production assertions**
 
-Add assertions that `production-release.yml`:
-
-```js
-assert.match(workflow, /source_sha/);
-assert.match(workflow, /\^\[0-9a-f\]\{40\}\$/);
-assert.match(workflow, /head_sha=\$SOURCE_SHA/);
-assert.match(workflow, /PUBLISH_GOOGLE_PLAY_INTERNAL_TESTING/);
-assert.doesNotMatch(workflow, /track:\s*production/i);
-```
-
-Also assert the Internal Testing job does not declare `environment: production` if that would cause a protected-environment approval unrelated to Internal Testing.
-
-- [ ] **Step 2: Run the focused test**
-
-Run: `cd functions && node --test test/googlePlayInternalTestingWorkflow.test.js`
-
-Expected: RED for any unmet contract.
-
-- [ ] **Step 3: Make the minimal workflow changes**
-
-Update `.github/workflows/production-release.yml` so exact-SHA validation, final-CI lookup, candidate build/signing, and Internal Testing publication all operate on `inputs.source_sha`; keep Firebase deploy, WIF proof, IAM bootstrap, and probes independent.
-
-- [ ] **Step 4: Verify no production-track path exists**
-
-Run:
-
-```bash
-node scripts/autonomous-ops-preflight.mjs
-cd functions
-node --test test/googlePlayInternalTestingWorkflow.test.js
-```
-
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add .github/workflows/production-release.yml functions/test/googlePlayInternalTestingWorkflow.test.js
-git commit -m "ci: harden exact sha internal testing release gate"
-```
-
-### Task 3: Add an autonomous release dispatch shim
-
-**Files:**
-- Create: `.github/workflows/autonomous-release-dispatch.yml`
-- Test: `functions/test/autonomousReleaseDispatchWorkflow.test.js`
-
-**Interfaces:**
-- Consumes: exact `source_sha` and a fixed Internal Testing authorization mode.
-- Produces: a repository-controlled invocation of `production-release.yml` without enabling production-track publication.
-
-- [ ] **Step 1: Write the failing dispatch contract test**
-
-The test must assert that the new workflow:
+Require a `google-play-production-staged` job with:
 
 ```js
-assert.match(workflow, /workflow_dispatch/);
-assert.match(workflow, /source_sha/);
-assert.match(workflow, /PUBLISH_GOOGLE_PLAY_INTERNAL_TESTING/);
-assert.match(workflow, /NO_DEPLOY/);
-assert.doesNotMatch(workflow, /DEPLOY_FIREBASE_PRODUCTION/);
-assert.doesNotMatch(workflow, /track:\s*production/i);
+assert.match(playJob, /PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED/);
+assert.match(playJob, /tracks\/production/);
+assert.match(playJob, /userFraction/);
+assert.match(playJob, /production-health-gate\.mjs/);
+assert.match(playJob, /clickandsaveai-play-publisher@click-save-ai-production\.iam\.gserviceaccount\.com/);
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+Also require it to reject rollout percentages outside `5|20|50|100` and require evidence that the candidate lineage reached Internal Testing before the first Production stage.
 
-Run: `cd functions && node --test test/autonomousReleaseDispatchWorkflow.test.js`
+- [ ] **Step 2: Run focused test and verify RED**
 
-Expected: FAIL because the workflow does not exist.
+Run: `cd functions && node --test test/productionAutonomyWorkflow.test.js`
 
-- [ ] **Step 3: Implement the shim with least privilege**
+- [ ] **Step 3: Implement staged Play API transaction**
 
-Create `.github/workflows/autonomous-release-dispatch.yml` that validates `source_sha`, verifies it equals current `main` when policy requires current-main-only release, and invokes the Production Release Gate through a supported GitHub mechanism. Preferred implementation order:
+Use the existing Android Publisher edit/upload/commit pattern. For Production, update `tracks/production`; for 5/20/50 use staged rollout status and `userFraction`; for 100 use completed/full rollout semantics supported by the API. Never reuse the Internal Testing authorization input.
 
-1. reusable workflow call if `production-release.yml` is refactored to `workflow_call` safely;
-2. GitHub API dispatch using `actions: write` and `gh api` if repository token permissions permit;
-3. keep browser automation as external fallback if GitHub rejects both repository-native paths.
+- [ ] **Step 4: Wire health gate before every promotion**
 
-The selected implementation must hard-code these effective inputs:
+Before changing an existing Production rollout from one configured percentage to the next, collect normalized telemetry, run:
+
+```bash
+node scripts/production-health-gate.mjs config/production-release-policy.json "$RUNNER_TEMP/production-health.json" "$ROLLOUT_PERCENT"
+```
+
+and fail before the Play edit if unhealthy or incomplete.
+
+- [ ] **Step 5: Record audit evidence**
+
+Append at least:
 
 ```text
-confirm_environment=CLICKANDSAVEAI_PRODUCTION
-authorize_firebase_deploy=NO_DEPLOY
-authorize_google_play_internal_testing=PUBLISH_GOOGLE_PLAY_INTERNAL_TESTING
-authorize_wif_auth_proof=NO_WIF_PROOF
-authorize_production_bootstrap=NO_BOOTSTRAP
-authorize_3f_metadata_probe=NO_3F_PROBE
-authorize_3f_external_authority_probe=NO_3F_EXTERNAL_PROBE
-authorize_3f_service_state_probe=NO_3F_SERVICE_STATE_PROBE
-authorize_3f_firebase_iam_permission_probe=NO_3F_FIREBASE_IAM_PERMISSION_PROBE
+google_play_track=production
+production_rollout_percent=<5|20|50|100>
+production_health_gate=passed
+google_play_published=true
 ```
 
-- [ ] **Step 4: Run focused tests and YAML/static checks**
-
-Run:
+- [ ] **Step 6: Run focused tests and full backend suite**
 
 ```bash
 cd functions
-node --test test/autonomousReleaseDispatchWorkflow.test.js
-node --test test/googlePlayInternalTestingWorkflow.test.js
-cd ..
-node scripts/autonomous-ops-preflight.mjs
+node --test test/googlePlayInternalTestingWorkflow.test.js test/productionAutonomyWorkflow.test.js test/productionHealthGate.test.js
+npm test
 ```
+
+Expected: PASS.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add .github/workflows/production-release.yml functions/test/productionAutonomyWorkflow.test.js
+git commit -m "ci: add guarded play production staged rollout"
+```
+
+### Task 5: Add owner-only autonomous production dispatch without weakening Internal Testing
+
+**Files:**
+- Create: `.github/workflows/agent-production-release-dispatch.yml`
+- Modify: `functions/test/productionAutonomyWorkflow.test.js`
+
+**Interfaces:**
+- Consumes: owner-created issue titled `Agent Production Release` with exact `source_sha`, `mode`, and optional `rollout_percent`.
+- Produces: one bounded `production-release.yml` workflow dispatch for either `firebase` or `play-production`; it never enables bootstrap/probes and never combines both modes in one issue.
+
+- [ ] **Step 1: Add failing dispatch assertions**
+
+Require owner identity check, exact current `main` SHA check, strict mode parsing, and these mappings:
+
+```text
+mode=firebase -> authorize_firebase_deploy=DEPLOY_FIREBASE_PRODUCTION; Play Internal/Production disabled
+mode=play-production -> authorize_google_play_production=PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED; Firebase/Internal disabled
+```
+
+Require `rollout_percent` to be one of `5|20|50|100` only for `play-production`.
+
+- [ ] **Step 2: Run focused test and verify RED**
+
+Run: `cd functions && node --test test/productionAutonomyWorkflow.test.js`
+
+- [ ] **Step 3: Implement fail-closed issue dispatch workflow**
+
+Trigger on `issues: [opened]`; require `github.event.issue.user.login == github.repository_owner`, exact title, exact-main SHA, and no unrecognized body keys used for authorization. Dispatch with WIF proof, bootstrap, and 3F probes fixed to their `NO_*` values.
+
+- [ ] **Step 4: Re-run focused tests**
 
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .github/workflows/autonomous-release-dispatch.yml functions/test/autonomousReleaseDispatchWorkflow.test.js
-git commit -m "ci: add bounded autonomous internal release dispatch"
+git add .github/workflows/agent-production-release-dispatch.yml functions/test/productionAutonomyWorkflow.test.js
+git commit -m "ci: add owner only autonomous production dispatch"
 ```
 
-### Task 4: Normalize Google Cloud WIF and service-account boundaries
+### Task 6: Document halt, rollback, and user-only boundaries; verify complete contract
 
 **Files:**
-- Modify: `.github/workflows/production-release.yml`
 - Modify/Create: `docs/operations/autonomous-control-plane-runbook.md`
-- Test: `functions/test/googlePlayInternalTestingWorkflow.test.js`
+- Modify: `functions/test/productionAutonomyWorkflow.test.js`
 
 **Interfaces:**
-- Consumes: repository/environment variables for WIF provider and bounded service-account identities.
-- Produces: short-lived Google credentials for only the selected job/capability.
+- Consumes: workflow evidence, Play staged rollout state, Firebase deployment history.
+- Produces: deterministic recovery instructions and final regression contract.
 
-- [ ] **Step 1: Add failing contract assertions**
+- [ ] **Step 1: Document Play unhealthy-release handling**
 
-Assert that privileged Google jobs use `google-github-actions/auth` with Workload Identity Federation variables and do not require a service-account JSON key for routine execution.
+Record: stop promotion immediately; halt staged rollout through Android Publisher when supported; otherwise leave current fraction unchanged; prepare corrected build with higher `versionCode`; never decrement or silently replace version code.
 
-- [ ] **Step 2: Run focused test and verify RED where applicable**
+- [ ] **Step 2: Document Firebase unhealthy-deploy handling**
 
-Run: `cd functions && node --test test/googlePlayInternalTestingWorkflow.test.js`
+Record: restore provider-supported previous release/version where available; otherwise redeploy the last-known-good exact SHA/configuration; record bad SHA, rollback SHA, reason, and result.
 
-- [ ] **Step 3: Update workflow auth boundaries**
+- [ ] **Step 3: Document user-only blockers**
 
-For each privileged Google capability, configure only the minimum required job permissions, including `id-token: write` only on WIF-authenticated jobs. Pin repository/ref/workflow expectations in the existing guard steps before requesting credentials.
+Limit human intervention to provider terms, billing/identity verification, MFA/device confirmation, legal declarations, and Play Console permission grants unavailable through connected APIs.
 
-- [ ] **Step 4: Document exact external IAM bindings**
-
-In `docs/operations/autonomous-control-plane-runbook.md`, record the required identities and the exact purpose of each binding. Do not place secret values in this document.
-
-- [ ] **Step 5: Validate**
-
-Run backend tests plus the static preflight. Expected: PASS.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 4: Run complete repository verification**
 
 ```bash
-git add .github/workflows/production-release.yml functions/test/googlePlayInternalTestingWorkflow.test.js docs/operations/autonomous-control-plane-runbook.md
-git commit -m "ci: normalize workload identity release boundaries"
+cd functions
+node --test test/googlePlayInternalTestingWorkflow.test.js test/productionAutonomyWorkflow.test.js test/productionHealthGate.test.js
+npm test
+cd ..
+node scripts/repository-secret-audit.mjs current
+node scripts/production-readiness-guard.mjs repository
 ```
 
-### Task 5: Validate Google Play Internal Testing evidence
-
-**Files:**
-- Create: `scripts/release-evidence-validate.mjs`
-- Modify: `.github/workflows/production-release.yml`
-- Test: `functions/test/googlePlayInternalTestingWorkflow.test.js`
-
-**Interfaces:**
-- Consumes: `identity.txt`/publishing evidence generated by the release job.
-- Produces: non-zero exit status when SHA, track, package, version, or publication boundary is inconsistent.
-
-- [ ] **Step 1: Write failing tests for required evidence tokens**
-
-Require release evidence to include:
-
-```text
-source_sha
-application_id
-version_code
-version_name
-aab_sha256
-production_gate_run_id
-google_play_track=internal
-google_play_published=true|false
-```
-
-- [ ] **Step 2: Implement validator**
-
-Create `scripts/release-evidence-validate.mjs` to parse `key=value` evidence, reject missing fields, reject any track other than `internal`, validate the SHA format, and require the expected application ID `com.aistudio.clickandsaveai.app`.
-
-- [ ] **Step 3: Wire validation into the release job**
-
-Run the validator before uploading final release evidence.
-
-- [ ] **Step 4: Test**
-
-Run focused test, backend test suite, and static preflight. Expected: PASS.
+Expected: all tests/guards exit 0 and secret audit reports no blocking findings.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/release-evidence-validate.mjs .github/workflows/production-release.yml functions/test/googlePlayInternalTestingWorkflow.test.js
-git commit -m "ci: validate internal testing release evidence"
+git add docs/operations/autonomous-control-plane-runbook.md functions/test/productionAutonomyWorkflow.test.js
+git commit -m "docs: define autonomous production recovery policy"
 ```
-
-### Task 6: Add autonomous diagnosis and bounded retry rules
-
-**Files:**
-- Modify: `docs/operations/autonomous-control-plane-runbook.md`
-- Modify: `.github/workflows/autonomous-ops-preflight.yml`
-
-**Interfaces:**
-- Consumes: GitHub Actions job status/logs and known transient/fixable failure categories.
-- Produces: deterministic guidance for retry vs code fix vs user-only action.
-
-- [ ] **Step 1: Encode failure classes in the runbook**
-
-Document three categories:
-
-```text
-TRANSIENT: runner/network/provider temporary failure -> retry bounded failed job
-BOUNDED_TECHNICAL: workflow/code/config contract failure -> branch, test-first fix, PR, CI, merge
-USER_ONLY: MFA, legal terms, billing verification, provider console ownership/identity confirmation -> stop and request user action
-```
-
-- [ ] **Step 2: Add non-mutating diagnostic output to preflight**
-
-Have the preflight workflow emit the exact source SHA, configured target environment/track, and which external credential classes are present as boolean/redacted readiness signals only.
-
-- [ ] **Step 3: Verify no secret values are printed**
-
-Review the workflow and script for direct `echo`/printing of secret-bearing variables. Run repository secret audit if available.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add docs/operations/autonomous-control-plane-runbook.md .github/workflows/autonomous-ops-preflight.yml scripts/autonomous-ops-preflight.mjs
-git commit -m "docs: define autonomous remediation and retry policy"
-```
-
-### Task 7: Validate adjacent provider autonomy
-
-**Files:**
-- Modify: `docs/operations/autonomous-control-plane-runbook.md`
-
-**Interfaces:**
-- Consumes: connected provider capabilities for Vercel, Supabase, Make, Gmail/Drive as operational dependencies.
-- Produces: explicit capability matrix and fallback route per provider.
-
-- [ ] **Step 1: Record provider capability matrix**
-
-For each provider, record whether ChatGPT connector/API access supports read, write, deployment/execute, secrets/config changes, and whether browser fallback is required.
-
-- [ ] **Step 2: Record authorization boundary**
-
-State that provider-specific Full Access permits only actions exposed by that connector and does not create missing API endpoints.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add docs/operations/autonomous-control-plane-runbook.md
-git commit -m "docs: map autonomous provider capabilities"
-```
-
-### Task 8: End-to-end Internal Testing release validation
-
-**Files:**
-- No new source files unless a bounded blocker requires a test-first fix.
-
-**Interfaces:**
-- Consumes: green `main`, exact current `main` SHA, autonomous dispatch path, WIF, Play publishing credentials.
-- Produces: installable Google Play Internal Testing release and evidence.
-
-- [ ] **Step 1: Verify current main and required CI**
-
-Confirm all required branch checks are green on the exact current `main` SHA.
-
-- [ ] **Step 2: Invoke the bounded Internal Testing release path**
-
-Use the autonomous dispatch shim or supported connector/API path with only Google Play Internal Testing authorization enabled.
-
-- [ ] **Step 3: Monitor every release job**
-
-Inspect status, job steps, and logs. Retry transient failures only. For bounded technical blockers, create a test-first fix branch/PR and merge only after required CI is green.
-
-- [ ] **Step 4: Verify release evidence**
-
-Confirm exact SHA, versionCode/versionName, application ID, AAB hash, `google_play_track=internal`, and successful publication status.
-
-- [ ] **Step 5: Confirm install/test readiness**
-
-Verify the release reached Google Play Internal Testing and report readiness only after the publication job and evidence are successful.
-
-- [ ] **Step 6: Confirm production remained untouched**
-
-Verify no Google Play Production track publication and no Firebase Production deployment occurred during this run.
 
 ## Self-Review
 
-- Spec coverage: all design sections map to tasks 1-8.
-- Placeholder scan: no TBD/TODO/future-fill instructions remain.
-- Type/interface consistency: `source_sha`, Internal Testing authorization phrase, and evidence keys are consistent across tasks.
-- Safety boundary: Google Play Production remains excluded from the autonomous path.
+- Spec coverage: Firebase Production autonomy, Play Production staged rollout, health gates, automatic halt behavior, exact-SHA evidence, WIF, authorization isolation, and rollback semantics are each mapped to a task.
+- Placeholder scan: no `TBD`, `TODO`, or unspecified implementation step remains.
+- Interface consistency: the production authorization input is `authorize_google_play_production`; the authorization phrase is `PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED`; rollout values are exactly `5|20|50|100`; health policy lives at `config/production-release-policy.json`.
