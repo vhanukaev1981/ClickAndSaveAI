@@ -1,0 +1,243 @@
+name: Google Play Production Controller
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact lowercase 40-character main SHA to roll out
+        required: true
+        type: string
+      candidate_run_id:
+        description: Production Release Gate run ID containing the exact signed candidate
+        required: true
+        type: string
+      internal_testing_run_id:
+        description: Successful Production Release Gate run ID proving prior Internal Testing publication
+        required: true
+        type: string
+      health_run_id:
+        description: Successful Firebase Production Health Controller run ID for this exact SHA
+        required: true
+        type: string
+      authorize_google_play_production:
+        description: Type PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED only for one bounded staged transition
+        required: true
+        default: NO_PRODUCTION_UPLOAD
+        type: string
+      production_rollout_percent:
+        description: Requested next staged rollout percentage (5, 20, 50, or 100)
+        required: true
+        default: '5'
+        type: string
+
+concurrency:
+  group: google-play-production-${{ inputs.source_sha }}
+  cancel-in-progress: false
+
+jobs:
+  staged-production-rollout:
+    if: ${{ inputs.authorize_google_play_production == 'PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+      INTERNAL_TESTING_RUN_ID: ${{ inputs.internal_testing_run_id }}
+      HEALTH_RUN_ID: ${{ inputs.health_run_id }}
+      REQUESTED_PERCENT: ${{ inputs.production_rollout_percent }}
+      EXPECTED_REPOSITORY: vhanukaev1981/ClickAndSaveAI
+      EXPECTED_REPOSITORY_ID: '1314210715'
+      EXPECTED_REPOSITORY_OWNER_ID: '64756523'
+      EXPECTED_REF: refs/heads/main
+      EXPECTED_WORKFLOW_REF: vhanukaev1981/ClickAndSaveAI/.github/workflows/google-play-production-controller.yml@refs/heads/main
+      EXPECTED_PROJECT_ID: click-save-ai-production
+      EXPECTED_PROJECT_NUMBER: '991489557172'
+      EXPECTED_PACKAGE: com.aistudio.clickandsaveai.app
+      EXPECTED_PLAY_PUBLISHER_SA: clickandsaveai-play-publisher@click-save-ai-production.iam.gserviceaccount.com
+      GCP_WORKLOAD_IDENTITY_PROVIDER: projects/991489557172/locations/global/workloadIdentityPools/github-actions-play-production/providers/clickandsaveai-play-production
+
+    steps:
+      - name: Guard exact staged Production boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ '${{ inputs.authorize_google_play_production }}' == 'PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED' ]] || { echo 'Google Play Production authorization phrase mismatch.' >&2; exit 1; }
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'source_sha must be an exact lowercase 40-character commit SHA.' >&2; exit 1; }
+          [[ "$CANDIDATE_RUN_ID" =~ ^[0-9]+$ && "$INTERNAL_TESTING_RUN_ID" =~ ^[0-9]+$ && "$HEALTH_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'Evidence run IDs must be numeric.' >&2; exit 1; }
+          [[ "$REQUESTED_PERCENT" =~ ^(5|20|50|100)$ ]] || { echo 'Requested Production rollout percent is not an allowed stage.' >&2; exit 1; }
+          [[ '${{ github.sha }}' == "$SOURCE_SHA" ]] || { echo 'Production rollout source must equal current main HEAD.' >&2; exit 1; }
+          [[ '${{ github.repository }}' == "$EXPECTED_REPOSITORY" ]] || { echo 'Repository identity mismatch.' >&2; exit 1; }
+          [[ '${{ github.repository_id }}' == "$EXPECTED_REPOSITORY_ID" ]] || { echo 'Repository ID mismatch.' >&2; exit 1; }
+          [[ '${{ github.repository_owner_id }}' == "$EXPECTED_REPOSITORY_OWNER_ID" ]] || { echo 'Repository owner ID mismatch.' >&2; exit 1; }
+          [[ '${{ github.ref }}' == "$EXPECTED_REF" ]] || { echo 'Git ref mismatch.' >&2; exit 1; }
+          [[ '${{ github.workflow_ref }}' == "$EXPECTED_WORKFLOW_REF" ]] || { echo 'Workflow ref mismatch.' >&2; exit 1; }
+          [[ "$GCP_WORKLOAD_IDENTITY_PROVIDER" == "projects/${EXPECTED_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions-play-production/providers/clickandsaveai-play-production" ]] || { echo 'Play Production WIF provider mismatch.' >&2; exit 1; }
+
+      - name: Check out exact rollout policy source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify candidate and prior Internal Testing evidence lineage
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for RUN_ID in "$CANDIDATE_RUN_ID" "$INTERNAL_TESTING_RUN_ID" "$HEALTH_RUN_ID"; do
+            RUN_JSON="$(gh api --method GET "/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID")"
+            [[ "$(printf '%s' "$RUN_JSON" | jq -r '.head_sha // empty')" == "$SOURCE_SHA" ]] || { echo "Evidence run $RUN_ID source SHA mismatch." >&2; exit 1; }
+            [[ "$(printf '%s' "$RUN_JSON" | jq -r '.conclusion // empty')" == 'success' ]] || { echo "Evidence run $RUN_ID did not succeed." >&2; exit 1; }
+          done
+
+          INTERNAL_JOBS="$(gh api --method GET "/repos/$GITHUB_REPOSITORY/actions/runs/$INTERNAL_TESTING_RUN_ID/jobs?per_page=100")"
+          INTERNAL_OK="$(printf '%s' "$INTERNAL_JOBS" | jq -r '[.jobs[] | select(.name == "google-play-internal-testing" and .conclusion == "success")] | length')"
+          [[ "$INTERNAL_OK" == '1' ]] || { echo 'Prior Internal Testing evidence is missing for the exact SHA.' >&2; exit 1; }
+
+      - name: Download exact signed candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: clickandsaveai-production-candidate-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/play-production-candidate
+          run-id: ${{ env.CANDIDATE_RUN_ID }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+
+      - name: Download exact health evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: firebase-production-health-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/play-production-health
+          run-id: ${{ env.HEALTH_RUN_ID }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+
+      - name: Validate candidate and health evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          IDENTITY="$RUNNER_TEMP/play-production-candidate/identity.txt"
+          HEALTH="$RUNNER_TEMP/play-production-health/evidence.txt"
+          [[ -f "$IDENTITY" ]] || { echo 'Signed candidate evidence is missing.' >&2; exit 1; }
+          [[ -f "$HEALTH" ]] || { echo 'Production health evidence is missing.' >&2; exit 1; }
+          grep -Fqx "source_sha=$SOURCE_SHA" "$IDENTITY" || { echo 'Candidate source SHA mismatch.' >&2; exit 1; }
+          grep -Fqx "application_id=$EXPECTED_PACKAGE" "$IDENTITY" || { echo 'Candidate package mismatch.' >&2; exit 1; }
+          grep -Fqx "source_sha=$SOURCE_SHA" "$HEALTH" || { echo 'Health evidence source SHA mismatch.' >&2; exit 1; }
+          VERSION_CODE="$(sed -n 's/^version_code=//p' "$IDENTITY" | head -n1)"
+          HEALTH_STATUS="$(sed -n 's/^health_status=//p' "$HEALTH" | head -n1)"
+          TELEMETRY_COMPLETE="$(sed -n 's/^telemetry_complete=//p' "$HEALTH" | head -n1)"
+          [[ "$VERSION_CODE" =~ ^[0-9]+$ ]] || { echo 'Candidate versionCode is missing.' >&2; exit 1; }
+          [[ "$HEALTH_STATUS" == 'healthy' || "$HEALTH_STATUS" == 'rollback-required' || "$HEALTH_STATUS" == 'blocked' ]] || { echo 'Health status is invalid.' >&2; exit 1; }
+          [[ "$TELEMETRY_COMPLETE" == 'true' || "$TELEMETRY_COMPLETE" == 'false' ]] || { echo 'telemetry_complete is missing.' >&2; exit 1; }
+          echo "PLAY_VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+          echo "PLAY_HEALTH_STATUS=$HEALTH_STATUS" >> "$GITHUB_ENV"
+          echo "PLAY_TELEMETRY_COMPLETE=$TELEMETRY_COMPLETE" >> "$GITHUB_ENV"
+
+      - name: Authenticate dedicated Play publisher with GitHub OIDC
+        id: play_auth
+        uses: google-github-actions/auth@v3
+        with:
+          create_credentials_file: 'false'
+          cleanup_credentials: 'true'
+          export_environment_variables: 'false'
+          project_id: ${{ env.EXPECTED_PROJECT_ID }}
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: clickandsaveai-play-publisher@click-save-ai-production.iam.gserviceaccount.com
+          token_format: 'access_token'
+          access_token_lifetime: '600s'
+          access_token_scopes: 'https://www.googleapis.com/auth/androidpublisher'
+
+      - name: Read current Production track and evaluate staged policy
+        env:
+          PLAY_ACCESS_TOKEN: ${{ steps.play_auth.outputs.access_token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${EXPECTED_PACKAGE}"
+          AUTH_HEADER="Authorization: Bearer ${PLAY_ACCESS_TOKEN}"
+          EDIT_JSON="$(curl --fail-with-body --silent --show-error -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' -d '{}' "${API}/edits")"
+          EDIT_ID="$(printf '%s' "$EDIT_JSON" | jq -r '.id // empty')"
+          [[ -n "$EDIT_ID" ]] || { echo 'Google Play edit ID missing.' >&2; exit 1; }
+          TRACK_JSON="$(curl --fail-with-body --silent --show-error -H "$AUTH_HEADER" "${API}/edits/${EDIT_ID}/tracks/production")"
+
+          CURRENT_PERCENT="$(printf '%s' "$TRACK_JSON" | jq -r '
+            if ((.releases // []) | length) == 0 then 0
+            elif .releases[0].status == "completed" then 100
+            elif (.releases[0].userFraction // null) != null then ((.releases[0].userFraction * 100) | round)
+            else 0 end')"
+          CURRENT_CODES="$(printf '%s' "$TRACK_JSON" | jq -c '.releases[0].versionCodes // []')"
+          HEALTHY=false
+          [[ "$PLAY_HEALTH_STATUS" == 'healthy' ]] && HEALTHY=true
+          DECISION="$(node scripts/google-play-production-policy.mjs "$CURRENT_PERCENT" "$REQUESTED_PERCENT" "$HEALTHY" "$PLAY_TELEMETRY_COMPLETE")"
+          ACTION="$(printf '%s' "$DECISION" | jq -r '.action')"
+          [[ "$ACTION" == 'promote' || "$ACTION" == 'halt' || "$ACTION" == 'blocked' || "$ACTION" == 'no-op' ]] || { echo 'Rollout policy returned an invalid action.' >&2; exit 1; }
+
+          echo "PLAY_EDIT_ID=$EDIT_ID" >> "$GITHUB_ENV"
+          echo "PLAY_CURRENT_PERCENT=$CURRENT_PERCENT" >> "$GITHUB_ENV"
+          echo "PLAY_CURRENT_CODES=$CURRENT_CODES" >> "$GITHUB_ENV"
+          echo "PLAY_POLICY_ACTION=$ACTION" >> "$GITHUB_ENV"
+          echo "PLAY_POLICY_DECISION=$DECISION" >> "$GITHUB_ENV"
+
+      - name: Apply exactly one bounded Production track transition
+        if: ${{ env.PLAY_POLICY_ACTION == 'promote' || env.PLAY_POLICY_ACTION == 'halt' }}
+        env:
+          PLAY_ACCESS_TOKEN: ${{ steps.play_auth.outputs.access_token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${EXPECTED_PACKAGE}"
+          AUTH_HEADER="Authorization: Bearer ${PLAY_ACCESS_TOKEN}"
+
+          if [[ "$PLAY_POLICY_ACTION" == 'halt' ]]; then
+            [[ "$PLAY_CURRENT_CODES" != '[]' ]] || { echo 'No active Production release exists to halt.' >&2; exit 1; }
+            PAYLOAD="$(jq -cn --argjson codes "$PLAY_CURRENT_CODES" '{track:"production",releases:[{status:"halted",versionCodes:$codes}]}')"
+          elif [[ "$REQUESTED_PERCENT" == '100' ]]; then
+            PAYLOAD="$(jq -cn --arg version "$PLAY_VERSION_CODE" '{track:"production",releases:[{status:"completed",versionCodes:[$version]}]}')"
+          else
+            FRACTION="$(awk "BEGIN { printf \"%.2f\", $REQUESTED_PERCENT / 100 }")"
+            PAYLOAD="$(jq -cn --arg version "$PLAY_VERSION_CODE" --argjson fraction "$FRACTION" '{track:"production",releases:[{status:"inProgress",userFraction:$fraction,versionCodes:[$version]}]}')"
+          fi
+
+          curl --fail-with-body --silent --show-error -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' -d "$PAYLOAD" "${API}/edits/${PLAY_EDIT_ID}/tracks/production" >/dev/null
+          COMMIT_JSON="$(curl --fail-with-body --silent --show-error -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' -d '{}' "${API}/edits/${PLAY_EDIT_ID}:commit")"
+          [[ "$(printf '%s' "$COMMIT_JSON" | jq -r '.id // empty')" == "$PLAY_EDIT_ID" ]] || { echo 'Google Play Production edit commit was not confirmed.' >&2; exit 1; }
+
+      - name: Record bounded rollout evidence
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/play-production-rollout"
+          mkdir -p "$OUT"
+          printf '%s\n' \
+            "source_sha=$SOURCE_SHA" \
+            "version_code=${PLAY_VERSION_CODE:-unknown}" \
+            "requested_percent=$REQUESTED_PERCENT" \
+            "current_percent=${PLAY_CURRENT_PERCENT:-unknown}" \
+            "health_status=${PLAY_HEALTH_STATUS:-unknown}" \
+            "telemetry_complete=${PLAY_TELEMETRY_COMPLETE:-false}" \
+            "action=${PLAY_POLICY_ACTION:-blocked}" \
+            > "$OUT/evidence.txt"
+
+      - name: Upload Play Production rollout evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: play-production-rollout-${{ env.SOURCE_SHA }}
+          path: ${{ runner.temp }}/play-production-rollout/evidence.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Fail closed on blocked or no-op policy result
+        if: ${{ env.PLAY_POLICY_ACTION == 'blocked' || env.PLAY_POLICY_ACTION == 'no-op' }}
+        shell: bash
+        run: |
+          echo "Production rollout blocked/no-op by staged policy: $PLAY_POLICY_DECISION" >&2
+          exit 1
