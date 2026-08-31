@@ -6,17 +6,17 @@ on:
     types: [synchronize]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   patch:
     if: ${{ github.event.pull_request.head.ref == 'feat/guarded-production-autonomy' && github.event.pull_request.user.login == github.repository_owner }}
     runs-on: ubuntu-latest
     steps:
-      - name: Check out feature branch
+      - name: Check out exact feature head
         uses: actions/checkout@v6
         with:
-          ref: feat/guarded-production-autonomy
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
           persist-credentials: false
 
@@ -37,10 +37,25 @@ jobs:
         working-directory: functions
         run: node --test test/googlePlayInternalTestingWorkflow.test.js test/productionAutonomyWorkflow.test.js
 
-      - name: Export patched workflow for connector-controlled commit
+      - name: Create detached tested commit through Git Data API
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PARENT_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_TREE="$(gh api "/repos/$GITHUB_REPOSITORY/git/commits/$PARENT_SHA" --jq '.tree.sha')"
+          PATCHED_CONTENT="$(base64 -w0 .github/workflows/production-release.yml)"
+          BLOB_SHA="$(jq -cn --arg content "$PATCHED_CONTENT" '{content:$content,encoding:"base64"}' | gh api --method POST "/repos/$GITHUB_REPOSITORY/git/blobs" --input - --jq '.sha')"
+          TREE_SHA="$(jq -cn --arg base "$BASE_TREE" --arg blob "$BLOB_SHA" '{base_tree:$base,tree:[{path:".github/workflows/production-release.yml",mode:"100644",type:"blob",sha:$blob},{path:".github/workflows/task1-production-inputs-patch.yml",mode:"100644",type:"blob",sha:null}]}' | gh api --method POST "/repos/$GITHUB_REPOSITORY/git/trees" --input - --jq '.sha')"
+          COMMIT_SHA="$(jq -cn --arg message 'ci: add isolated production rollout authorization' --arg tree "$TREE_SHA" --arg parent "$PARENT_SHA" '{message:$message,tree:$tree,parents:[$parent]}' | gh api --method POST "/repos/$GITHUB_REPOSITORY/git/commits" --input - --jq '.sha')"
+          [[ "$COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Detached commit creation failed.' >&2; exit 1; }
+          printf '%s\n' "$COMMIT_SHA" > "$RUNNER_TEMP/task1-commit-sha.txt"
+
+      - name: Export detached commit SHA
         uses: actions/upload-artifact@v4
         with:
-          name: task1-production-release-yml
-          path: .github/workflows/production-release.yml
+          name: task1-detached-commit
+          path: ${{ runner.temp }}/task1-commit-sha.txt
           if-no-files-found: error
           retention-days: 1
