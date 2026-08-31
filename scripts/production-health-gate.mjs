@@ -5,9 +5,9 @@ function fail(message) {
   process.exit(1);
 }
 
-const [policyPath, telemetryPath, rolloutRaw] = process.argv.slice(2);
-if (!policyPath || !telemetryPath || !rolloutRaw) {
-  fail('Usage: production-health-gate.mjs <policy.json> <telemetry.json> <rollout_percent>');
+const [policyPath, telemetryPath, modeRaw] = process.argv.slice(2);
+if (!policyPath || !telemetryPath || !modeRaw) {
+  fail('Usage: production-health-gate.mjs <policy.json> <telemetry.json> <rollout_percent|firebase>');
 }
 
 let policy;
@@ -19,7 +19,26 @@ try {
   fail('Production health gate input is unreadable or invalid JSON.');
 }
 
-const rollout = Number(rolloutRaw);
+if (modeRaw === 'firebase') {
+  for (const key of ['firebase_inventory_ok', 'smoke_ok', 'telemetry_complete']) {
+    if (typeof telemetry[key] !== 'boolean') {
+      fail(`Invalid or missing Firebase production health signal: ${key}.`);
+    }
+  }
+  if (policy.require_complete_telemetry === true && telemetry.telemetry_complete !== true) {
+    fail('Firebase production health gate blocked because required telemetry is incomplete.');
+  }
+  if (telemetry.firebase_inventory_ok !== true) {
+    fail('Firebase production health gate blocked because deployed inventory validation failed.');
+  }
+  if (policy.require_smoke_ok === true && telemetry.smoke_ok !== true) {
+    fail('Firebase production health gate blocked because smoke validation failed.');
+  }
+  console.log('Firebase production health gate passed.');
+  process.exit(0);
+}
+
+const rollout = Number(modeRaw);
 if (!Number.isInteger(rollout) || !Array.isArray(policy.rollout_percentages) || !policy.rollout_percentages.includes(rollout)) {
   fail('Requested rollout percentage is outside the production release policy.');
 }
