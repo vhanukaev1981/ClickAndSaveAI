@@ -21,16 +21,6 @@ on:
         required: true
         default: NO_PLAY_UPLOAD
         type: string
-      authorize_google_play_production:
-        description: Type PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED only for a staged Production rollout
-        required: true
-        default: NO_PRODUCTION_UPLOAD
-        type: string
-      production_rollout_percent:
-        description: Requested staged rollout percentage: 5, 20, 50, or 100
-        required: true
-        default: '5'
-        type: string
       authorize_wif_auth_proof:
         description: Type PROVE_WIF_AUTH_ONLY only when a separately authorized WIF auth-only proof is intended
         required: true
@@ -1002,56 +992,3 @@ jobs:
             --only firestore:rules,firestore:indexes,functions \
             --non-interactive \
             --force
-
-      - name: Download exact candidate evidence for Firebase deployment audit
-        uses: actions/download-artifact@v4
-        with:
-          name: clickandsaveai-production-candidate-${{ env.SOURCE_SHA }}
-          path: ${{ runner.temp }}/firebase-production-evidence
-
-      - name: Collect post-deploy Firebase provider smoke telemetry
-        shell: bash
-        run: |
-          set -euo pipefail
-          FUNCTIONS_JSON="$RUNNER_TEMP/firebase-functions-list.json"
-          PROJECTS_JSON="$RUNNER_TEMP/firebase-projects-list.json"
-          TELEMETRY_JSON="$RUNNER_TEMP/firebase-production-health.json"
-          FIREBASE_INVENTORY_OK=false
-          SMOKE_OK=false
-
-          if firebase functions:list --project "$PRODUCTION_FIREBASE_PROJECT_ID" --json > "$FUNCTIONS_JSON" 2>/dev/null; then
-            if jq -e '(.result // .) | type == "array" and length > 0' "$FUNCTIONS_JSON" >/dev/null; then
-              FIREBASE_INVENTORY_OK=true
-            fi
-          fi
-
-          if firebase projects:list --json > "$PROJECTS_JSON" 2>/dev/null; then
-            if jq -e --arg project "$PRODUCTION_FIREBASE_PROJECT_ID" '(.result // .) | any((.projectId // .project_id // "") == $project)' "$PROJECTS_JSON" >/dev/null; then
-              SMOKE_OK=true
-            fi
-          fi
-
-          jq -n \
-            --argjson firebase_inventory_ok "$FIREBASE_INVENTORY_OK" \
-            --argjson smoke_ok "$SMOKE_OK" \
-            '{firebase_inventory_ok:$firebase_inventory_ok,smoke_ok:$smoke_ok,telemetry_complete:($firebase_inventory_ok and $smoke_ok)}' \
-            > "$TELEMETRY_JSON"
-
-          node scripts/production-health-gate.mjs config/production-release-policy.json "$TELEMETRY_JSON" firebase
-
-      - name: Record successful Firebase Production evidence
-        shell: bash
-        run: |
-          set -euo pipefail
-          IDENTITY="$RUNNER_TEMP/firebase-production-evidence/identity.txt"
-          [[ -f "$IDENTITY" ]] || { echo 'Production candidate identity evidence is missing.' >&2; exit 1; }
-          node scripts/production-release-evidence.mjs "$IDENTITY" firebase-deploy firebase-production success
-          grep -qx 'firebase_deployed=true' "$IDENTITY"
-
-      - name: Upload Firebase Production deployment evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: clickandsaveai-firebase-production-evidence-${{ env.SOURCE_SHA }}
-          path: ${{ runner.temp }}/firebase-production-evidence/identity.txt
-          if-no-files-found: error
-          retention-days: 30
