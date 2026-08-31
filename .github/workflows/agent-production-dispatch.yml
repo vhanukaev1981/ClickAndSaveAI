@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   dispatch-bounded-production-operation:
-    if: ${{ github.event.label.name == 'release:firebase-health' || github.event.label.name == 'release:production-staged' }}
+    if: ${{ github.event.issue.title == 'Agent Production Release' && (github.event.label.name == 'release:firebase-health' || github.event.label.name == 'release:production-staged') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -19,8 +19,10 @@ jobs:
       EXPECTED_REPOSITORY_ID: '1314210715'
       EXPECTED_REPOSITORY_OWNER: vhanukaev1981
       EXPECTED_REPOSITORY_OWNER_ID: '64756523'
+      EXPECTED_ISSUE_TITLE: Agent Production Release
       ISSUE_USER_LOGIN: ${{ github.event.issue.user.login }}
       ISSUE_USER_ID: ${{ github.event.issue.user.id }}
+      ISSUE_TITLE: ${{ github.event.issue.title }}
       ISSUE_BODY: ${{ github.event.issue.body }}
       REQUEST_LABEL: ${{ github.event.label.name }}
 
@@ -36,6 +38,7 @@ jobs:
           [[ '${{ github.event.issue.user.login }}' == "$EXPECTED_REPOSITORY_OWNER" ]] || { echo 'Issue creator is not the repository owner.' >&2; exit 1; }
           [[ '${{ github.event.issue.user.id }}' == "$EXPECTED_REPOSITORY_OWNER_ID" ]] || { echo 'Issue creator ID is not the repository owner ID.' >&2; exit 1; }
           [[ "$ISSUE_USER_LOGIN" == "$EXPECTED_REPOSITORY_OWNER" && "$ISSUE_USER_ID" == "$EXPECTED_REPOSITORY_OWNER_ID" ]] || { echo 'Owner request identity mismatch.' >&2; exit 1; }
+          [[ "$ISSUE_TITLE" == "$EXPECTED_ISSUE_TITLE" ]] || { echo 'Production request title mismatch.' >&2; exit 1; }
 
       - name: Parse bounded request and verify exact current main SHA
         id: request
