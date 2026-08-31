@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 EXPECTED_PROJECT_ID="click-save-ai-production"
 EXPECTED_PROJECT_NUMBER="991489557172"
 EXPECTED_BOOTSTRAP_SA="clickandsaveai-github-bootstra@click-save-ai-production.iam.gserviceaccount.com"
@@ -263,6 +264,9 @@ JSON
 
 configure_artifact_cleanup europe-west1
 configure_artifact_cleanup us-central1
+
+bash "$SCRIPT_DIR/bootstrap-production-controller-wif.sh"
+bash "$SCRIPT_DIR/verify-production-controller-wif.sh"
 
 printf 'Production deploy IAM foundation configured for %s.\n' "$EXPECTED_DEPLOY_SA"
 printf 'Custom deploy role permissions exact: %s.\n' "$CUSTOM_DEPLOY_ROLE_PERMISSIONS"
