@@ -44,11 +44,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BASE_TREE="$(gh api "/repos/$GITHUB_REPOSITORY/git/commits/$PARENT_SHA" --jq '.tree.sha')"
+          BASE_TREE="$(git rev-parse HEAD^{tree})"
+          echo 'git-data-stage=base-tree-local-ok'
           PATCHED_CONTENT="$(base64 -w0 .github/workflows/production-release.yml)"
           BLOB_SHA="$(jq -cn --arg content "$PATCHED_CONTENT" '{content:$content,encoding:"base64"}' | gh api --method POST "/repos/$GITHUB_REPOSITORY/git/blobs" --input - --jq '.sha')"
+          echo 'git-data-stage=blob-ok'
           TREE_SHA="$(jq -cn --arg base "$BASE_TREE" --arg blob "$BLOB_SHA" '{base_tree:$base,tree:[{path:".github/workflows/production-release.yml",mode:"100644",type:"blob",sha:$blob},{path:".github/workflows/task1-production-inputs-patch.yml",mode:"100644",type:"blob",sha:null}]}' | gh api --method POST "/repos/$GITHUB_REPOSITORY/git/trees" --input - --jq '.sha')"
+          echo 'git-data-stage=tree-ok'
           COMMIT_SHA="$(jq -cn --arg message 'ci: add isolated production rollout authorization' --arg tree "$TREE_SHA" --arg parent "$PARENT_SHA" '{message:$message,tree:$tree,parents:[$parent]}' | gh api --method POST "/repos/$GITHUB_REPOSITORY/git/commits" --input - --jq '.sha')"
+          echo 'git-data-stage=commit-ok'
           [[ "$COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Detached commit creation failed.' >&2; exit 1; }
           printf '%s\n' "$COMMIT_SHA" > "$RUNNER_TEMP/task1-commit-sha.txt"
 
