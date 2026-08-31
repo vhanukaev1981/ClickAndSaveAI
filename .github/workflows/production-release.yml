@@ -21,6 +21,16 @@ on:
         required: true
         default: NO_PLAY_UPLOAD
         type: string
+      authorize_google_play_production:
+        description: Type PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED only for a staged Production rollout
+        required: true
+        default: NO_PRODUCTION_UPLOAD
+        type: string
+      production_rollout_percent:
+        description: Requested staged rollout percentage: 5, 20, 50, or 100
+        required: true
+        default: '5'
+        type: string
       authorize_wif_auth_proof:
         description: Type PROVE_WIF_AUTH_ONLY only when a separately authorized WIF auth-only proof is intended
         required: true
