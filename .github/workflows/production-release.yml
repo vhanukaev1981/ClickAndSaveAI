@@ -60,7 +60,6 @@ jobs:
   production-candidate:
     if: ${{ inputs.authorize_production_bootstrap != 'BOOTSTRAP_PRODUCTION_IAM_ONCE' && inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_3f_external_authority_probe != 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_3f_service_state_probe != 'PROBE_3F_FIREBASE_SERVICE_STATE_READ_ONLY' && inputs.authorize_3f_firebase_iam_permission_probe != 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' }}
     runs-on: ubuntu-latest
-    environment: production
     timeout-minutes: 45
     permissions:
       contents: read
@@ -840,7 +839,6 @@ jobs:
     needs: production-candidate
     if: ${{ inputs.authorize_google_play_internal_testing == 'PUBLISH_GOOGLE_PLAY_INTERNAL_TESTING' && inputs.authorize_firebase_deploy == 'NO_DEPLOY' && inputs.authorize_production_bootstrap == 'NO_BOOTSTRAP' && inputs.authorize_wif_auth_proof == 'NO_WIF_PROOF' && inputs.authorize_3f_metadata_probe == 'NO_3F_PROBE' && inputs.authorize_3f_external_authority_probe == 'NO_3F_EXTERNAL_PROBE' && inputs.authorize_3f_service_state_probe == 'NO_3F_SERVICE_STATE_PROBE' && inputs.authorize_3f_firebase_iam_permission_probe == 'NO_3F_FIREBASE_IAM_PERMISSION_PROBE' && inputs.confirm_environment == 'CLICKANDSAVEAI_PRODUCTION' }}
     runs-on: ubuntu-latest
-    environment: production
     timeout-minutes: 15
     permissions:
       contents: read
