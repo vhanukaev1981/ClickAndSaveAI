@@ -36,3 +36,11 @@ test('Firebase Production deployment records post-deploy health evidence without
   assert.match(firebaseJob, /firebase_deployed=true/);
   assert.doesNotMatch(firebaseJob, /PUBLISH_GOOGLE_PLAY_PRODUCTION_STAGED/);
 });
+
+test('Firebase evidence artifact paths preserve runtime GitHub expressions', () => {
+  const firebaseJob = jobBlock('deploy-firebase-production');
+  assert.match(firebaseJob, /name:\s*clickandsaveai-production-candidate-\$\{\{ env\.SOURCE_SHA \}\}/);
+  assert.match(firebaseJob, /name:\s*clickandsaveai-firebase-production-evidence-\$\{\{ env\.SOURCE_SHA \}\}/);
+  assert.match(firebaseJob, /path:\s*\$\{\{ runner\.temp \}\}\/firebase-production-evidence/);
+  assert.doesNotMatch(firebaseJob, /\/home\/runner\/work\/_temp\/firebase-production-evidence/);
+});
