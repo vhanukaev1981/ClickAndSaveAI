@@ -59,7 +59,7 @@ jobs:
       EXPECTED_PROJECT_NUMBER: '991489557172'
       EXPECTED_PACKAGE: com.aistudio.clickandsaveai.app
       EXPECTED_PLAY_PUBLISHER_SA: clickandsaveai-play-publisher@click-save-ai-production.iam.gserviceaccount.com
-      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: projects/991489557172/locations/global/workloadIdentityPools/github-actions-play-production/providers/clickandsaveai-play-production
 
     steps:
       - name: Guard exact staged Production boundary
@@ -76,7 +76,7 @@ jobs:
           [[ '${{ github.repository_owner_id }}' == "$EXPECTED_REPOSITORY_OWNER_ID" ]] || { echo 'Repository owner ID mismatch.' >&2; exit 1; }
           [[ '${{ github.ref }}' == "$EXPECTED_REF" ]] || { echo 'Git ref mismatch.' >&2; exit 1; }
           [[ '${{ github.workflow_ref }}' == "$EXPECTED_WORKFLOW_REF" ]] || { echo 'Workflow ref mismatch.' >&2; exit 1; }
-          [[ "$GCP_WORKLOAD_IDENTITY_PROVIDER" =~ ^projects/${EXPECTED_PROJECT_NUMBER}/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$ ]] || { echo 'WIF provider project-number boundary mismatch.' >&2; exit 1; }
+          [[ "$GCP_WORKLOAD_IDENTITY_PROVIDER" == "projects/${EXPECTED_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions-play-production/providers/clickandsaveai-play-production" ]] || { echo 'Play Production WIF provider mismatch.' >&2; exit 1; }
 
       - name: Check out exact rollout policy source
         uses: actions/checkout@v6
@@ -148,7 +148,7 @@ jobs:
           cleanup_credentials: 'true'
           export_environment_variables: 'false'
           project_id: ${{ env.EXPECTED_PROJECT_ID }}
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: clickandsaveai-play-publisher@click-save-ai-production.iam.gserviceaccount.com
           token_format: 'access_token'
           access_token_lifetime: '600s'
