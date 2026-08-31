@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       deployment_run_id:
-        description: Production Release Gate run ID that produced Firebase deployment evidence
+        description: Production Release Gate run ID containing the successful Firebase deployment
         required: true
         type: string
       authorize_firebase_health_check:
@@ -41,9 +41,10 @@ jobs:
       EXPECTED_WORKFLOW_REF: vhanukaev1981/ClickAndSaveAI/.github/workflows/firebase-production-health-controller.yml@refs/heads/main
       EXPECTED_PROJECT_ID: click-save-ai-production
       EXPECTED_PROJECT_NUMBER: '991489557172'
+      EXPECTED_PACKAGE: com.aistudio.clickandsaveai.app
       EXPECTED_DEPLOY_SA: clickandsaveai-github-deployer@click-save-ai-production.iam.gserviceaccount.com
-      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-      GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: projects/991489557172/locations/global/workloadIdentityPools/github-actions-firebase-health/providers/clickandsaveai-firebase-health
+      GCP_DEPLOY_SERVICE_ACCOUNT: clickandsaveai-github-deployer@click-save-ai-production.iam.gserviceaccount.com
 
     steps:
       - name: Guard exact Firebase health boundary
@@ -60,7 +61,7 @@ jobs:
           [[ '${{ github.ref }}' == "$EXPECTED_REF" ]] || { echo 'Git ref mismatch.' >&2; exit 1; }
           [[ '${{ github.workflow_ref }}' == "$EXPECTED_WORKFLOW_REF" ]] || { echo 'Workflow ref mismatch.' >&2; exit 1; }
           [[ "$GCP_DEPLOY_SERVICE_ACCOUNT" == "$EXPECTED_DEPLOY_SA" ]] || { echo 'Deploy service-account identity mismatch.' >&2; exit 1; }
-          [[ "$GCP_WORKLOAD_IDENTITY_PROVIDER" =~ ^projects/${EXPECTED_PROJECT_NUMBER}/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$ ]] || { echo 'WIF provider project-number boundary mismatch.' >&2; exit 1; }
+          [[ "$GCP_WORKLOAD_IDENTITY_PROVIDER" == "projects/${EXPECTED_PROJECT_NUMBER}/locations/global/workloadIdentityPools/github-actions-firebase-health/providers/clickandsaveai-firebase-health" ]] || { echo 'Firebase health WIF provider mismatch.' >&2; exit 1; }
 
       - name: Check out exact health-policy source
         uses: actions/checkout@v6
@@ -69,7 +70,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Verify deployment run belongs to exact source SHA
+      - name: Verify deployment run and Firebase deployment job belong to exact source SHA
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -78,24 +79,28 @@ jobs:
           RUN_JSON="$(gh api --method GET "/repos/$GITHUB_REPOSITORY/actions/runs/$DEPLOYMENT_RUN_ID")"
           [[ "$(printf '%s' "$RUN_JSON" | jq -r '.head_sha // empty')" == "$SOURCE_SHA" ]] || { echo 'Deployment run source SHA mismatch.' >&2; exit 1; }
           [[ "$(printf '%s' "$RUN_JSON" | jq -r '.conclusion // empty')" == 'success' ]] || { echo 'Deployment run did not complete successfully.' >&2; exit 1; }
+          JOBS_JSON="$(gh api --method GET "/repos/$GITHUB_REPOSITORY/actions/runs/$DEPLOYMENT_RUN_ID/jobs?per_page=100")"
+          DEPLOY_OK="$(printf '%s' "$JOBS_JSON" | jq -r '[.jobs[] | select(.name == "deploy-firebase-production" and .conclusion == "success")] | length')"
+          [[ "$DEPLOY_OK" == '1' ]] || { echo 'Successful deploy-firebase-production evidence is missing.' >&2; exit 1; }
 
-      - name: Download exact Firebase Production deployment evidence
+      - name: Download exact signed production candidate from deployment run
         uses: actions/download-artifact@v4
         with:
-          name: clickandsaveai-firebase-production-evidence-${{ env.SOURCE_SHA }}
+          name: clickandsaveai-production-candidate-${{ env.SOURCE_SHA }}
           path: ${{ runner.temp }}/firebase-production-health-input
           run-id: ${{ env.DEPLOYMENT_RUN_ID }}
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
 
-      - name: Verify exact deployment evidence
+      - name: Verify exact candidate identity
         shell: bash
         run: |
           set -euo pipefail
           IDENTITY="$RUNNER_TEMP/firebase-production-health-input/identity.txt"
-          [[ -f "$IDENTITY" ]] || { echo 'Firebase deployment evidence is missing.' >&2; exit 1; }
-          grep -Fqx "source_sha=$SOURCE_SHA" "$IDENTITY" || { echo 'Firebase deployment evidence source mismatch.' >&2; exit 1; }
-          grep -Fqx 'firebase_deployed=true' "$IDENTITY" || { echo 'Firebase deployment evidence does not confirm deployment.' >&2; exit 1; }
+          [[ -f "$IDENTITY" ]] || { echo 'Firebase deployment candidate evidence is missing.' >&2; exit 1; }
+          grep -Fqx "source_sha=$SOURCE_SHA" "$IDENTITY" || { echo 'Firebase deployment candidate source mismatch.' >&2; exit 1; }
+          grep -Fqx "application_id=$EXPECTED_PACKAGE" "$IDENTITY" || { echo 'Firebase deployment candidate package mismatch.' >&2; exit 1; }
+          grep -Fqx "firebase_project_id=$EXPECTED_PROJECT_ID" "$IDENTITY" || { echo 'Firebase deployment candidate project mismatch.' >&2; exit 1; }
           echo "FIREBASE_DEPLOYMENT_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
       - name: Authenticate Firebase health identity with GitHub OIDC
@@ -104,8 +109,8 @@ jobs:
           create_credentials_file: 'true'
           cleanup_credentials: 'true'
           project_id: ${{ env.EXPECTED_PROJECT_ID }}
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_DEPLOY_SERVICE_ACCOUNT }}
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v6
