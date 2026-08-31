@@ -166,4 +166,38 @@ class FinancialRecoveryPipelineTest {
         assertFalse((result as FinancialSyncState.Failed).isAuthRequired)
         assertNull(result.observedRecurringMonthlySpendOrNull)
     }
+
+    @Test
+    fun connectionFailureReportsStableSafeStageCodeWithoutRawExceptionText() = runBlocking {
+        val sensitive = "token=secret-user-value"
+        val recovery = FinancialSessionRecovery(
+            getConnectionStatus = { throw IllegalStateException(sensitive) },
+            recoverInvoices = { scan },
+            getFinancialHome = { home }
+        )
+
+        val result = recovery.refresh(previous = null)
+
+        assertTrue(result is FinancialSyncState.Failed)
+        val reason = (result as FinancialSyncState.Failed).reason
+        assertTrue(reason.contains("GMAIL_CONNECTION_STATUS_FAILED"))
+        assertFalse(reason.contains(sensitive))
+    }
+
+    @Test
+    fun scanFailureReportsStableSafeStageCodeWithoutRawExceptionText() = runBlocking {
+        val sensitive = "credential=user-secret"
+        val recovery = FinancialSessionRecovery(
+            getConnectionStatus = { GmailConnectionResult(true, "user@example.com", "gmail-readonly-v1") },
+            recoverInvoices = { throw IllegalStateException(sensitive) },
+            getFinancialHome = { home }
+        )
+
+        val result = recovery.refresh(previous = null)
+
+        assertTrue(result is FinancialSyncState.Failed)
+        val reason = (result as FinancialSyncState.Failed).reason
+        assertTrue(reason.contains("GMAIL_SCAN_FAILED"))
+        assertFalse(reason.contains(sensitive))
+    }
 }
