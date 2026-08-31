@@ -29,7 +29,7 @@ test('Internal Testing dispatch bridge cannot authorize Google Play Production',
 });
 
 test('Firebase Production deployment records post-deploy health evidence without authorizing Play Production', () => {
-  const firebaseJob = jobBlock('deploy-firebase-production', 'production-bootstrap');
+  const firebaseJob = jobBlock('deploy-firebase-production', 'production-bootstrap-deploy-iam');
   assert.match(firebaseJob, /DEPLOY_FIREBASE_PRODUCTION/);
   assert.match(firebaseJob, /google-github-actions\/auth@v3/);
   assert.match(firebaseJob, /production-health-gate\.mjs/);
