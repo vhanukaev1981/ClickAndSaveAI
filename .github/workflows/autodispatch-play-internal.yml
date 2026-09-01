@@ -19,15 +19,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for run_id in 33330152482 33330442726 33330909718; do
+          for run_id in 33330152482 33330442726 33330909718 33331046671; do
             gh api --method POST -H "Accept: application/vnd.github+json" "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" || true
           done
 
       - name: Dispatch Production Release Gate for current main
-        id: dispatch
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: 152b4c44287c36a6f56d1d0ba8832ef618c3c562
+          SOURCE_SHA: 2ea40e9a8c3e6ec2e5cb940956c955695d0c4f64
         shell: bash
         run: |
           set -euo pipefail
@@ -42,35 +41,5 @@ jobs:
             -f authorize_production_bootstrap=NO_BOOTSTRAP \
             -f authorize_3f_metadata_probe=NO_3F_PROBE \
             -f authorize_3f_external_authority_probe=NO_3F_EXTERNAL_PROBE \
-            -f authorize_3f_service_state_probe=NO_3F_SERVICE_STATE_PROBE \
+            -f authorize_3f_service_state_probe=NO_3F_FIREBASE_SERVICE_STATE_PROBE \
             -f authorize_3f_firebase_iam_permission_probe=NO_3F_FIREBASE_IAM_PERMISSION_PROBE
-          sleep 8
-          run_id="$(gh run list --repo "${GITHUB_REPOSITORY}" --workflow production-release.yml --branch main --event workflow_dispatch --limit 10 --json databaseId,createdAt,headSha --jq '.[] | select(.headSha == "'"${SOURCE_SHA}"'") | .databaseId' | head -n1)"
-          [[ -n "$run_id" ]] || { echo 'Unable to identify newly dispatched Production Release Gate.' >&2; exit 1; }
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          echo "Dispatched Production Release Gate run $run_id"
-
-      - name: Approve pending production environment for Play Internal Testing
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ steps.dispatch.outputs.run_id }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in $(seq 1 12); do
-            pending="$(gh api -H "Accept: application/vnd.github+json" "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/pending_deployments" 2>/dev/null || echo '[]')"
-            env_ids="$(printf '%s' "$pending" | jq -c '[.[].environment.id]')"
-            if [[ "$env_ids" != '[]' ]]; then
-              gh api --method POST \
-                -H "Accept: application/vnd.github+json" \
-                "/repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/pending_deployments" \
-                --input - <<EOF
-          {"environment_ids":${env_ids},"state":"approved","comment":"Authorized autonomous Click & Save AI Google Play Internal Testing release."}
-          EOF
-              echo "Approved pending deployment environment(s) for run ${RUN_ID}."
-              exit 0
-            fi
-            sleep 5
-          done
-          echo 'No pending deployment approval became visible within the polling window.' >&2
-          exit 1
