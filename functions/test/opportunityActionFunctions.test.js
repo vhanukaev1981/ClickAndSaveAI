@@ -42,7 +42,7 @@ function providerOffer(overrides = {}) {
     oneTimeFees: 0,
     serviceType: "ANY",
     verifiedAt: "2026-08-08T08:00:00Z",
-    validUntil: "2026-09-08T08:00:00Z",
+    validUntil: "2099-09-08T08:00:00Z",
     officialSourceVerified: true,
     officialSourceUrl: "https://provider.example/official-offer",
     officialSourceName: "Provider official offer",
