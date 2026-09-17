@@ -31,6 +31,7 @@ function opportunity(overrides = {}) {
 }
 
 function providerOffer(overrides = {}) {
+  const now = Date.now();
   return {
     id: "offer-1",
     providerName: "Provider A",
@@ -41,8 +42,8 @@ function providerOffer(overrides = {}) {
     priceGuaranteedMonths: 12,
     oneTimeFees: 0,
     serviceType: "ANY",
-    verifiedAt: "2026-08-08T08:00:00Z",
-    validUntil: "2026-09-08T08:00:00Z",
+    verifiedAt: new Date(now - (24 * 60 * 60 * 1000)).toISOString(),
+    validUntil: new Date(now + (24 * 60 * 60 * 1000)).toISOString(),
     officialSourceVerified: true,
     officialSourceUrl: "https://provider.example/official-offer",
     officialSourceName: "Provider official offer",
