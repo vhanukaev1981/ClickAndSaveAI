@@ -12,6 +12,10 @@ const {
   OPPORTUNITY_ACTION_CONSENT_VERSION,
 } = require("../src/opportunityActionFunctions");
 
+function isoDaysFromNow(days) {
+  return new Date(Date.now() + (days * 24 * 60 * 60 * 1000)).toISOString();
+}
+
 function opportunity(overrides = {}) {
   return {
     id: "opp-1",
@@ -41,8 +45,8 @@ function providerOffer(overrides = {}) {
     priceGuaranteedMonths: 12,
     oneTimeFees: 0,
     serviceType: "ANY",
-    verifiedAt: "2026-08-08T08:00:00Z",
-    validUntil: "2026-09-08T08:00:00Z",
+    verifiedAt: isoDaysFromNow(-30),
+    validUntil: isoDaysFromNow(30),
     officialSourceVerified: true,
     officialSourceUrl: "https://provider.example/official-offer",
     officialSourceName: "Provider official offer",
@@ -178,7 +182,7 @@ test("opportunity cannot be accepted against expired, unverified, sourceless or 
   assert.equal(
     verifiedActionSnapshot(
       opportunity(),
-      providerOffer({ validUntil: "2026-01-01T00:00:00Z" }),
+      providerOffer({ validUntil: isoDaysFromNow(-1) }),
       "offer-1"
     ),
     null
