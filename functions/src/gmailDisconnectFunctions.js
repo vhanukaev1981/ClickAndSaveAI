@@ -83,7 +83,7 @@ async function disconnectGmailForUid(uid) {
   let watchStopStatus = "NO_CREDENTIAL";
   let oauthRevocationStatus = "NO_CREDENTIAL";
   let refreshToken = "";
-  const encryptedRefreshToken = String(data.encryptedRefreshToken || "").trim();
+  const encryptedRefreshToken = data.encryptedRefreshToken || null;
   if (encryptedRefreshToken) {
     try {
       refreshToken = decryptToken(encryptedRefreshToken, oauthTokenEncryptionKey.value());
