@@ -22,4 +22,21 @@ class DashboardFailureDiagnosticWiringTest {
             failedBlock.contains("state.reason")
         )
     }
+
+    @Test
+    fun partialFinancialRefreshSurfacesSanitizedStageReason() {
+        val source = Files.readString(
+            Path.of("src/main/java/com/example/ui/screens/DashboardScreen.kt")
+        )
+        val partialStart = source.indexOf("is FinancialSyncState.Partial ->")
+        assertTrue("missing Partial financial sync branch", partialStart >= 0)
+        val failedStart = source.indexOf("is FinancialSyncState.Failed ->", partialStart)
+        assertTrue("missing Failed branch after Partial branch", failedStart > partialStart)
+        val partialBlock = source.substring(partialStart, failedStart)
+
+        assertTrue(
+            "Partial dashboard state must surface the sanitized recovery reason",
+            partialBlock.contains("state.reason")
+        )
+    }
 }
