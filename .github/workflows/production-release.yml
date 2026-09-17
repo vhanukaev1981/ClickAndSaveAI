@@ -60,6 +60,7 @@ jobs:
   production-candidate:
     if: ${{ inputs.authorize_production_bootstrap != 'BOOTSTRAP_PRODUCTION_IAM_ONCE' && inputs.authorize_wif_auth_proof != 'PROVE_WIF_AUTH_ONLY' && inputs.authorize_3f_metadata_probe != 'PROBE_3F_METADATA_ONLY' && inputs.authorize_3f_external_authority_probe != 'PROBE_3F_FIREBASE_AUTHORITY_READ_ONLY' && inputs.authorize_3f_service_state_probe != 'PROBE_3F_FIREBASE_SERVICE_STATE_READ_ONLY' && inputs.authorize_3f_firebase_iam_permission_probe != 'PROBE_3F_FIREBASE_IAM_PERMISSIONS_READ_ONLY' }}
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 45
     permissions:
       contents: read
