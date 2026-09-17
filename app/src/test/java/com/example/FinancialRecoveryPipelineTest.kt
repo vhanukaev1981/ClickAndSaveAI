@@ -10,6 +10,7 @@ import com.example.data.repository.GmailScanResult
 import com.example.data.repository.financialHomeOrNull
 import com.example.data.repository.latestScanOrNull
 import com.example.data.repository.observedRecurringMonthlySpendOrNull
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -216,5 +217,22 @@ class FinancialRecoveryPipelineTest {
         val reason = (result as FinancialSyncState.Partial).reason
         assertTrue(reason.contains("FINANCIAL_HOME_FAILED"))
         assertFalse(reason.contains(sensitive))
+    }
+
+    @Test
+    fun cancellationExceptionIsRethrownDuringRefresh() = runBlocking {
+        val recovery = FinancialSessionRecovery(
+            getConnectionStatus = { throw CancellationException("test cancellation") },
+            recoverInvoices = { scan },
+            getFinancialHome = { home }
+        )
+
+        var thrown = false
+        try {
+            recovery.refresh(previous = null)
+        } catch (e: CancellationException) {
+            thrown = true
+        }
+        assertTrue("CancellationException must be rethrown", thrown)
     }
 }

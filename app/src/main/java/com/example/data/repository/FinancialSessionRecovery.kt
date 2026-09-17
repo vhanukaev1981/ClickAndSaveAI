@@ -1,5 +1,7 @@
 package com.example.data.repository
 
+import kotlinx.coroutines.CancellationException
+
 /**
  * Coordinates the server-authoritative financial recovery sequence for one authenticated session.
  *
@@ -24,6 +26,8 @@ class FinancialSessionRecovery(
 
         val connection = try {
             getConnectionStatus()
+        } catch (error: CancellationException) {
+            throw error
         } catch (_: Exception) {
             return emit(
                 preservePreviousOrFail(
@@ -41,6 +45,8 @@ class FinancialSessionRecovery(
 
         val scan = try {
             recoverInvoices()
+        } catch (error: CancellationException) {
+            throw error
         } catch (_: Exception) {
             return emit(
                 preservePreviousOrFail(
@@ -52,6 +58,8 @@ class FinancialSessionRecovery(
 
         val financialHome = try {
             getFinancialHome()
+        } catch (error: CancellationException) {
+            throw error
         } catch (_: Exception) {
             val previousHome = when (previous) {
                 is FinancialSyncState.Ready -> previous.financialHome
