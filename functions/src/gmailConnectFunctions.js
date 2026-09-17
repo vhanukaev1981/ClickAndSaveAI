@@ -95,6 +95,7 @@ exports.connectGmail = onCall(
         client_secret: googleOAuthClientSecret.value(),
         code: serverAuthCode,
         grant_type: "authorization_code",
+        redirect_uri: "",
       });
       const grantedScopes = String(tokenPayload.scope || "").split(/\s+/).filter(Boolean);
       if (!grantedScopes.includes(GMAIL_READONLY_SCOPE)) {
