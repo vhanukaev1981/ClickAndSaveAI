@@ -57,6 +57,7 @@ fun ProfileScreen(
     val authState by viewModel.authState.collectAsState()
     val financialSyncState by viewModel.financialSyncState.collectAsState()
     val privacyOperationState by viewModel.privacyOperationState.collectAsState()
+    val gmailSyncStep by viewModel.gmailSyncStep.collectAsState()
     var pendingConfirmation by remember { mutableStateOf<String?>(null) }
     val heroSession = (authState as? AuthState.Authenticated)?.session
 
@@ -79,6 +80,7 @@ fun ProfileScreen(
             GmailAuthorityGroup(
                 financialSyncState = financialSyncState,
                 authState = authState,
+                gmailSyncStep = gmailSyncStep,
                 onRequestGmailAuthorization = onRequestGmailAuthorization
             )
         }
@@ -138,6 +140,7 @@ fun ProfileScreen(
 private fun GmailAuthorityGroup(
     financialSyncState: FinancialSyncState,
     authState: AuthState,
+    gmailSyncStep: String,
     onRequestGmailAuthorization: () -> Unit
 ) {
     val connection = financialSyncState.gmailConnectionOrNull
@@ -160,6 +163,14 @@ private fun GmailAuthorityGroup(
             icon = Icons.Default.Link,
             trailingText = if (connection?.connected == true) "קריאה בלבד" else null
         )
+        if (gmailSyncStep.isNotBlank()) {
+            Text(
+                gmailSyncStep,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag("gmail_connection_message")
+            )
+        }
         if (authState is AuthState.Authenticated && financialSyncState == FinancialSyncState.Disconnected) {
             HorizontalDivider(color = V3Border)
             V3SettingsRow(
