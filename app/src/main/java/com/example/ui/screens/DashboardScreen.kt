@@ -171,7 +171,12 @@ fun DashboardScreen(
                 )
             }
             is FinancialSyncState.Partial -> {
-                item { V3SoftStatusCard("המידע האחרון נשמר", "אנחנו מעדכנים את התמונה שלך. חלק מהמידע עדיין מתעדכן, ולכן מוצג רק מה שכבר אומת.") }
+                item {
+                    V3SoftStatusCard(
+                        "המידע האחרון נשמר",
+                        "${state.reason}\nחלק מהמידע עדיין מתעדכן, ולכן מוצג רק מה שכבר אומת."
+                    )
+                }
                 val home = financialHome
                 if (home != null) {
                     authoritativeHomeItems(home, latestScan, state, isSyncing, gmailSyncStep, onNavigateToTab, onOpenInvoices)
@@ -191,7 +196,7 @@ fun DashboardScreen(
                 }
             }
             is FinancialSyncState.Failed -> item {
-                HomeStatusCard("לא הצלחנו להשלים את העדכון", "לא נציג מידע משוער במקום מידע שחסר. אפשר לנסות שוב כשהחיבור זמין.") {
+                HomeStatusCard("לא הצלחנו להשלים את העדכון", "${state.reason}\nאפשר לנסות שוב כשהחיבור זמין.") {
                     Button(onClick = { viewModel.refreshFinancialSession(FinancialRefreshReason.RETRY) }) { Text("נסה שוב") }
                 }
             }

@@ -10,6 +10,7 @@ import com.example.data.repository.GmailScanResult
 import com.example.data.repository.financialHomeOrNull
 import com.example.data.repository.latestScanOrNull
 import com.example.data.repository.observedRecurringMonthlySpendOrNull
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -165,5 +166,73 @@ class FinancialRecoveryPipelineTest {
         assertTrue(result is FinancialSyncState.Failed)
         assertFalse((result as FinancialSyncState.Failed).isAuthRequired)
         assertNull(result.observedRecurringMonthlySpendOrNull)
+    }
+
+    @Test
+    fun connectionFailureReportsStableSafeStageCodeWithoutRawExceptionText() = runBlocking {
+        val sensitive = "token=secret-user-value"
+        val recovery = FinancialSessionRecovery(
+            getConnectionStatus = { throw IllegalStateException(sensitive) },
+            recoverInvoices = { scan },
+            getFinancialHome = { home }
+        )
+
+        val result = recovery.refresh(previous = null)
+
+        assertTrue(result is FinancialSyncState.Failed)
+        val reason = (result as FinancialSyncState.Failed).reason
+        assertTrue(reason.contains("GMAIL_CONNECTION_STATUS_FAILED"))
+        assertFalse(reason.contains(sensitive))
+    }
+
+    @Test
+    fun scanFailureReportsStableSafeStageCodeWithoutRawExceptionText() = runBlocking {
+        val sensitive = "credential=user-secret"
+        val recovery = FinancialSessionRecovery(
+            getConnectionStatus = { GmailConnectionResult(true, "user@example.com", "gmail-readonly-v1") },
+            recoverInvoices = { throw IllegalStateException(sensitive) },
+            getFinancialHome = { home }
+        )
+
+        val result = recovery.refresh(previous = null)
+
+        assertTrue(result is FinancialSyncState.Failed)
+        val reason = (result as FinancialSyncState.Failed).reason
+        assertTrue(reason.contains("GMAIL_SCAN_FAILED"))
+        assertFalse(reason.contains(sensitive))
+    }
+
+    @Test
+    fun financialHomeFailureReportsStableSafeStageCodeWithoutRawExceptionText() = runBlocking {
+        val sensitive = "authorization=secret-home-value"
+        val recovery = FinancialSessionRecovery(
+            getConnectionStatus = { GmailConnectionResult(true, "user@example.com", "gmail-readonly-v1") },
+            recoverInvoices = { scan },
+            getFinancialHome = { throw IllegalStateException(sensitive) }
+        )
+
+        val result = recovery.refresh(previous = null)
+
+        assertTrue(result is FinancialSyncState.Partial)
+        val reason = (result as FinancialSyncState.Partial).reason
+        assertTrue(reason.contains("FINANCIAL_HOME_FAILED"))
+        assertFalse(reason.contains(sensitive))
+    }
+
+    @Test
+    fun cancellationExceptionIsRethrownDuringRefresh() = runBlocking {
+        val recovery = FinancialSessionRecovery(
+            getConnectionStatus = { throw CancellationException("test cancellation") },
+            recoverInvoices = { scan },
+            getFinancialHome = { home }
+        )
+
+        var thrown = false
+        try {
+            recovery.refresh(previous = null)
+        } catch (e: CancellationException) {
+            thrown = true
+        }
+        assertTrue("CancellationException must be rethrown", thrown)
     }
 }
