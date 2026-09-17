@@ -12,8 +12,10 @@ const {
   OPPORTUNITY_ACTION_CONSENT_VERSION,
 } = require("../src/opportunityActionFunctions");
 
+const TEST_NOW_MS = Date.now();
+
 function isoDaysFromNow(days) {
-  return new Date(Date.now() + (days * 24 * 60 * 60 * 1000)).toISOString();
+  return new Date(TEST_NOW_MS + (days * 24 * 60 * 60 * 1000)).toISOString();
 }
 
 function opportunity(overrides = {}) {
