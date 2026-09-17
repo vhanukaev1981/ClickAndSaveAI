@@ -200,4 +200,21 @@ class FinancialRecoveryPipelineTest {
         assertTrue(reason.contains("GMAIL_SCAN_FAILED"))
         assertFalse(reason.contains(sensitive))
     }
+
+    @Test
+    fun financialHomeFailureReportsStableSafeStageCodeWithoutRawExceptionText() = runBlocking {
+        val sensitive = "authorization=secret-home-value"
+        val recovery = FinancialSessionRecovery(
+            getConnectionStatus = { GmailConnectionResult(true, "user@example.com", "gmail-readonly-v1") },
+            recoverInvoices = { scan },
+            getFinancialHome = { throw IllegalStateException(sensitive) }
+        )
+
+        val result = recovery.refresh(previous = null)
+
+        assertTrue(result is FinancialSyncState.Partial)
+        val reason = (result as FinancialSyncState.Partial).reason
+        assertTrue(reason.contains("FINANCIAL_HOME_FAILED"))
+        assertFalse(reason.contains(sensitive))
+    }
 }
