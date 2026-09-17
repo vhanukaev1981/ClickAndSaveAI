@@ -36,10 +36,10 @@ test('Google Play publishing uploads the AAB only to the internal track and comm
   assert.doesNotMatch(workflow, /tracks\/production/);
 });
 
-test('Play Internal Testing candidate and publisher jobs do not require the protected production environment', () => {
+test('Internal Testing candidate build can read production-scoped signing inputs while Play publishing stays outside the environment gate', () => {
   const candidate = jobBlock('production-candidate', 'production-wif-auth-proof');
   const play = jobBlock('google-play-internal-testing', 'deploy-firebase-production');
-  assert.doesNotMatch(candidate, /^\s*environment:\s*production\s*$/m);
+  assert.match(candidate, /^\s*environment:\s*production\s*$/m);
   assert.doesNotMatch(play, /^\s*environment:\s*production\s*$/m);
 });
 
