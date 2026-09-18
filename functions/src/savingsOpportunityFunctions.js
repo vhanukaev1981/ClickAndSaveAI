@@ -43,6 +43,7 @@ function userFacingOffer(offer) {
     verificationMethod: String(offer.verificationMethod || ""),
     officialSourceUrl: String(offer.officialSourceUrl || ""),
     officialSourceName: String(offer.officialSourceName || ""),
+    externalRedirectAvailable: offer.externalRedirectAvailable === true,
     verifiedAt: String(offer.verifiedAt || ""),
     validUntil: String(offer.validUntil || ""),
   };
