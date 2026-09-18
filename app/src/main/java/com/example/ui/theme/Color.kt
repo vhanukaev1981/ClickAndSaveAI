@@ -2,6 +2,21 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
+// Approved Click & Save AI USA Native Mobile Design System: Forest & Paper
+val Paper = Color(0xFFF8F7F2)
+val Forest = Color(0xFF0D4F3C)
+val Mint = Color(0xFFD6ECDD)
+val Gold = Color(0xFFE8B84A)
+val Ink = Color(0xFF18332C)
+val Muted = Color(0xFF5F6F69)
+val Line = Color(0xFFD9DDD5)
+val White = Color(0xFFFFFFFF)
+val Danger = Color(0xFFA63D2F)
+val GoldSoft = Color(0xFFFBF1D4)
+val GoldDark = Color(0xFF72520B)
+val DangerSoft = Color(0xFFFAE7E4)
+val MintSoft = Color(0xFFEDF5EF)
+
 // Frozen premium visual tokens from the approved V3 source of truth.
 val V3Background = Color(0xFFF8FAFC)
 val V3Surface = Color(0xFFFFFFFF)
