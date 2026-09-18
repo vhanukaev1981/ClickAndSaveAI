@@ -12,16 +12,15 @@ function androidSource(relativePath) {
   );
 }
 
-test("completed sign-out is fail-closed on push revocation failure", () => {
+test("completed sign-out observes push revocation failure but still signs out", () => {
   const auth = androidSource("data/repository/AuthRepository.kt");
   const signOut = auth.split("suspend fun signOut()")[1] || "";
   assert.match(signOut, /revokeCurrentDeviceBeforeSignOut\(\)/);
-  assert.match(
-    signOut,
-    /getOrThrow\(\)|throwOnFailure|isFailure|exceptionOrNull/,
-    "AuthRepository must consume the revocation result before Firebase Auth sign-out"
-  );
-  const revokeAt = signOut.indexOf("revokeCurrentDeviceBeforeSignOut")
-  const firebaseSignOutAt = signOut.indexOf("signOut()")
-  assert.ok(revokeAt >= 0 && firebaseSignOutAt > revokeAt)
+  assert.match(signOut, /exceptionOrNull\(\)/);
+  assert.doesNotMatch(signOut, /getOrThrow\(\)/);
+  const revokeAt = signOut.indexOf("revokeCurrentDeviceBeforeSignOut");
+  const observeFailureAt = signOut.indexOf("exceptionOrNull()");
+  const firebaseSignOutAt = signOut.indexOf("getFirebaseAuthSafe()?.signOut()");
+  assert.ok(revokeAt >= 0 && observeFailureAt > revokeAt);
+  assert.ok(firebaseSignOutAt > observeFailureAt);
 });

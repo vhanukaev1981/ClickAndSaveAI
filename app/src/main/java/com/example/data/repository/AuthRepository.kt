@@ -163,7 +163,15 @@ class AuthRepository(private val applicationContext: Context) {
     suspend fun signOut() {
         _authState.value = AuthState.Loading
         try {
-            PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut().getOrThrow()
+            val pushRevocationFailure =
+                PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut().exceptionOrNull()
+            if (pushRevocationFailure != null) {
+                Log.w(
+                    "AuthRepository",
+                    "Push revocation was incomplete during sign-out; continuing local/auth cleanup",
+                    pushRevocationFailure
+                )
+            }
             purgeImportedFinancialDataLocally()
             getFirebaseAuthSafe()?.signOut()
             _userSession.value = UserSession()

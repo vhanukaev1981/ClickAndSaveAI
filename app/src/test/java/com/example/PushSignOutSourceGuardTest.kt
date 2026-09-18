@@ -1,6 +1,6 @@
 package com.example
 
-// Block 3 P0 contract: sign-out is fail-closed until push revocation succeeds.
+// Block 3 P0 contract: sign-out attempts push revocation first but never strands the user signed in.
 import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -32,19 +32,20 @@ class PushSignOutSourceGuardTest {
     }
 
     @Test
-    fun signOutIsFailClosedWhenPushRevocationFails() {
+    fun signOutContinuesWhenPushRevocationFails() {
         val authRepository = File("src/main/java/com/example/data/repository/AuthRepository.kt").readText()
         val signOutSection = authRepository
             .substringAfter("suspend fun signOut()")
             .substringBefore("_userSession.value = UserSession()")
 
         val revokeIndex = signOutSection.indexOf("PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut()")
-        val hardGateIndex = signOutSection.indexOf("getOrThrow()")
+        val failureCaptureIndex = signOutSection.indexOf("exceptionOrNull()")
         val firebaseSignOutIndex = signOutSection.indexOf("getFirebaseAuthSafe()?.signOut()")
 
-        assertTrue("Revocation result must be consumed as a hard gate", hardGateIndex > revokeIndex)
-        assertTrue("Firebase Auth sign-out must occur only after revocation succeeds", firebaseSignOutIndex > hardGateIndex)
-        assertFalse(signOutSection.contains("Push revocation incomplete during sign-out"))
+        assertTrue("Push revocation must still be attempted before auth sign-out", revokeIndex >= 0)
+        assertTrue("Revocation failure must be observed without throwing", failureCaptureIndex > revokeIndex)
+        assertTrue("Firebase Auth sign-out must continue after the revocation attempt", firebaseSignOutIndex > failureCaptureIndex)
+        assertFalse("A network revocation failure must not hard-gate sign-out", signOutSection.contains("getOrThrow()"))
     }
 
     @Test
