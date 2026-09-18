@@ -162,8 +162,8 @@ class AuthRepository(private val applicationContext: Context) {
 
     suspend fun signOut() {
         _authState.value = AuthState.Loading
-        PushTokenLifecycle.beginSignOutRegistrationSuppression()
         try {
+            PushTokenLifecycle.beginSignOutRegistrationSuppressionAndDrain()
             PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut().getOrThrow()
             purgeImportedFinancialDataLocally()
             getFirebaseAuthSafe()?.signOut()
