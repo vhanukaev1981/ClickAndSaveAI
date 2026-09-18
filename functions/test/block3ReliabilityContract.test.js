@@ -25,13 +25,21 @@ test("Gmail stays read-only and uses checkpoint-preserving guarded recovery", ()
   assert.match(guard, /RECONNECT_REQUIRED/);
 });
 
-test("incremental scan returns authoritative server snapshot and recovery is bounded", () => {
+test("incremental scan returns authoritative snapshot and History recovery is explicit and bounded", () => {
   const reliable = src("gmailReliableScanFunctions.js");
+  const watch = src("gmailWatchFunctions.js");
   assert.match(reliable, /authoritativeInvoiceSnapshot/);
   assert.match(reliable, /mode === "INCREMENTAL"/);
   assert.match(reliable, /RECOVERY_REQUIRED/);
   assert.match(reliable, /recoveryBaselineHistoryId/);
-  assert.match(reliable, /stableScan\.scanGmailInvoices/);
+  assert.match(reliable, /runBoundedHistoryRecovery/);
+  assert.match(reliable, /RECOVERY_MAX_LOOKBACK_MS/);
+  assert.match(reliable, /after:\\?\$\{Math\.floor\(startMs \/ 1000\)\}/);
+  assert.match(reliable, /acquireRecoveryLease/);
+  assert.match(reliable, /gmailWatch\._processMessage/);
+  assert.match(reliable, /pdfAnalysisComplete !== true/);
+  assert.match(watch, /_refreshAccessToken/);
+  assert.match(watch, /_processMessage/);
 });
 
 test("authoritative notifications have exact stable identities and no financial content", () => {

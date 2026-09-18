@@ -447,6 +447,7 @@ exports.gmailPushNotification = onMessagePublished(
 
 Object.defineProperties(module.exports, {
   _listHistoryMessageIds: { value: listHistoryMessageIds, enumerable: false },
+  _refreshAccessToken: { value: refreshAccessToken, enumerable: false },
   _processMessage: { value: processMessage, enumerable: false },
   _processMailboxNotification: { value: processMailboxNotification, enumerable: false },
   _recentCandidateHistory: { value: recentCandidateHistory, enumerable: false },

@@ -1,5 +1,6 @@
 "use strict";
 
+const crypto = require("node:crypto");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
@@ -16,6 +17,11 @@ const oauthTokenEncryptionKey = defineSecret("OAUTH_TOKEN_ENCRYPTION_KEY");
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const MAX_AUTHORITATIVE_INVOICES = 500;
 const DISCONNECT_STATES = new Set(["DISCONNECTING", "RETRY_REQUIRED"]);
+const RECOVERY_MAX_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
+const RECOVERY_OVERLAP_MS = 5 * 60 * 1000;
+const RECOVERY_LEASE_TTL_MS = 10 * 60 * 1000;
+const RECOVERY_PAGE_SIZE = 100;
+const RECOVERY_MAX_PAGES = 20;
 
 function requireAuth(request) {
   const uid = request.auth?.uid;
@@ -75,6 +81,137 @@ async function establishRecoveryBaseline(request, connectionRef, before) {
   return recoveryBaseline;
 }
 
+function timestampMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return Number(value.toMillis()) || 0;
+  const seconds = Number(value.seconds ?? value._seconds ?? 0);
+  if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
+function recoveryWindowStartMs(connection, nowMs = Date.now()) {
+  const checkpoints = [
+    connection.lastSuccessfulProcessingAt,
+    connection.lastReconciliationAt,
+    connection.initialBackfillCompletedAt,
+    connection.lastScanAt,
+  ].map(timestampMillis).filter((value) => value > 0);
+  if (checkpoints.length === 0) {
+    throw new HttpsError(
+      "failed-precondition",
+      "A bounded Gmail History recovery window cannot be proven from stored checkpoints."
+    );
+  }
+  const latestSuccessfulMs = Math.max(...checkpoints);
+  const startMs = Math.max(0, latestSuccessfulMs - RECOVERY_OVERLAP_MS);
+  if (nowMs - startMs > RECOVERY_MAX_LOOKBACK_MS) {
+    throw new HttpsError(
+      "failed-precondition",
+      "The Gmail History recovery gap exceeds the bounded automatic recovery window."
+    );
+  }
+  return startMs;
+}
+
+async function acquireRecoveryLease(connectionRef) {
+  const owner = crypto.randomUUID();
+  const nowMs = Date.now();
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(connectionRef);
+    const data = snapshot.data() || {};
+    const activeUntil = Number(data.incrementalLeaseUntilMs || 0);
+    const activeOwner = String(data.incrementalLeaseOwner || "");
+    if (activeUntil > nowMs && activeOwner) {
+      throw new HttpsError("aborted", "Gmail mailbox reconciliation is already in progress.");
+    }
+    transaction.set(connectionRef, {
+      incrementalLeaseOwner: owner,
+      incrementalLeaseUntilMs: nowMs + RECOVERY_LEASE_TTL_MS,
+      recoveryAttemptStartedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+  return owner;
+}
+
+async function releaseRecoveryLease(connectionRef, owner) {
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(connectionRef);
+    const data = snapshot.data() || {};
+    if (String(data.incrementalLeaseOwner || "") !== owner) return;
+    transaction.set(connectionRef, {
+      incrementalLeaseOwner: FieldValue.delete(),
+      incrementalLeaseUntilMs: FieldValue.delete(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+}
+
+async function listRecoveryMessageIds(accessToken, startMs) {
+  const messageIds = [];
+  let pageToken = "";
+  let pageCount = 0;
+  const query = `after:${Math.floor(startMs / 1000)}`;
+  do {
+    const params = new URLSearchParams({
+      q: query,
+      maxResults: String(RECOVERY_PAGE_SIZE),
+    });
+    if (pageToken) params.set("pageToken", pageToken);
+    const response = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?${params.toString()}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!response.ok) {
+      throw new HttpsError("unavailable", "Gmail recovery messages could not be listed.");
+    }
+    const payload = await response.json().catch(() => ({}));
+    for (const item of Array.isArray(payload.messages) ? payload.messages : []) {
+      const id = String(item?.id || "").trim();
+      if (id) messageIds.push(id);
+    }
+    pageToken = String(payload.nextPageToken || "");
+    pageCount += 1;
+    if (pageToken && pageCount >= RECOVERY_MAX_PAGES) {
+      throw new HttpsError(
+        "resource-exhausted",
+        "The Gmail History recovery window is too large for one bounded recovery pass."
+      );
+    }
+  } while (pageToken);
+  return messageIds;
+}
+
+async function runBoundedHistoryRecovery(uid, connection, nowMs = Date.now()) {
+  if (!connection.encryptedRefreshToken) {
+    throw new HttpsError("failed-precondition", "No Gmail refresh token is stored.");
+  }
+  const startMs = recoveryWindowStartMs(connection, nowMs);
+  const accessToken = await gmailWatch._refreshAccessToken(connection.encryptedRefreshToken);
+  const messageIds = await listRecoveryMessageIds(accessToken, startMs);
+  let processedMessages = 0;
+
+  for (const messageId of messageIds) {
+    await gmailWatch._processMessage(uid, accessToken, messageId);
+    const audit = await db.collection("users").doc(uid)
+      .collection("gmailMessageImports").doc(messageId).get();
+    const auditData = audit.data() || {};
+    if (auditData.pdfAnalysisComplete !== true) {
+      throw new HttpsError(
+        "unavailable",
+        "Gmail recovery paused because one or more PDF attachments require retry."
+      );
+    }
+    processedMessages += 1;
+  }
+
+  return {
+    processedMessages,
+    recoveryWindowStartMs: startMs,
+  };
+}
+
 exports.scanGmailInvoices = onCall(
   {
     enforceAppCheck: true,
@@ -125,16 +262,30 @@ exports.scanGmailInvoices = onCall(
       }
 
       let baseline = normalizeHistoryId(before.watchHistoryId);
+      let recoveryLeaseOwner = "";
+      let result;
       if (mode === "INITIAL_BACKFILL") {
         stage = "ESTABLISH_INITIAL_BASELINE";
         baseline = await establishInitialBaseline(request, connectionRef, before);
+        stage = "RUN_STABLE_SCAN";
+        result = await handlerRunner(stableScanHandler, "Stable Gmail scan")(request);
       } else if (mode === "RECOVERY_REQUIRED") {
-        stage = "ESTABLISH_RECOVERY_BASELINE";
-        baseline = await establishRecoveryBaseline(request, connectionRef, before);
+        stage = "ACQUIRE_RECOVERY_LEASE";
+        recoveryLeaseOwner = await acquireRecoveryLease(connectionRef);
+        try {
+          stage = "ESTABLISH_RECOVERY_BASELINE";
+          baseline = await establishRecoveryBaseline(request, connectionRef, before);
+          stage = "RUN_BOUNDED_HISTORY_RECOVERY";
+          result = await runBoundedHistoryRecovery(uid, before);
+        } catch (error) {
+          await releaseRecoveryLease(connectionRef, recoveryLeaseOwner).catch(() => undefined);
+          throw error;
+        }
+      } else {
+        stage = "RUN_STABLE_SCAN";
+        result = await handlerRunner(stableScanHandler, "Stable Gmail scan")(request);
       }
 
-      stage = "RUN_STABLE_SCAN";
-      const result = await handlerRunner(stableScanHandler, "Stable Gmail scan")(request);
       stage = "RELOAD_CONNECTION";
       const afterSnapshot = await connectionRef.get();
       const after = afterSnapshot.data() || before;
@@ -177,6 +328,9 @@ exports.scanGmailInvoices = onCall(
 
       stage = "PERSIST_RECONCILIATION_UPDATE";
       await connectionRef.set(update, { merge: true });
+      if (recoveryLeaseOwner) {
+        await releaseRecoveryLease(connectionRef, recoveryLeaseOwner);
+      }
 
       const historyRecoveryRequired = update.historyRecoveryRequired === true;
       stage = "EMIT_COMPLETION_TELEMETRY";
@@ -230,4 +384,7 @@ Object.defineProperties(module.exports, {
   _authoritativeInvoiceSnapshot: { value: authoritativeInvoiceSnapshot, enumerable: false },
   _handlerRunner: { value: handlerRunner, enumerable: false },
   _stableScanHandler: { value: stableScanHandler, enumerable: false },
+  _recoveryWindowStartMs: { value: recoveryWindowStartMs, enumerable: false },
+  _listRecoveryMessageIds: { value: listRecoveryMessageIds, enumerable: false },
+  _runBoundedHistoryRecovery: { value: runBoundedHistoryRecovery, enumerable: false },
 });
