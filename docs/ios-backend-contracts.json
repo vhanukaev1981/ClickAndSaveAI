@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Click & Save AI iOS Backend Contract Specification and Parity Manifest",
   "backendRegion": "europe-west1",
   "canonicalBackendUrlPattern": "https://europe-west1-click-save-ai-production.cloudfunctions.net/{endpointName}",
@@ -20,52 +20,81 @@
       "responseSchema": {
         "type": "object",
         "required": [
-          "currentMonthTotal",
-          "previousMonthTotal",
-          "potentialMonthlySavings",
-          "potentialAnnualSavings",
-          "activeOpportunitiesCount",
-          "topOpportunities",
-          "monthlyTrend",
-          "lastUpdated"
+          "contextStatus",
+          "context",
+          "insights",
+          "opportunities"
         ],
         "properties": {
-          "currentMonthTotal": { "type": "number" },
-          "previousMonthTotal": { "type": "number" },
-          "potentialMonthlySavings": { "type": "number" },
-          "potentialAnnualSavings": { "type": "number" },
-          "activeOpportunitiesCount": { "type": "integer" },
-          "topOpportunities": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": ["id", "providerName", "category", "currentMonthlyCost", "potentialMonthlySaving"],
-              "properties": {
-                "id": { "type": "string" },
-                "providerName": { "type": "string" },
-                "category": { "type": "string" },
-                "currentMonthlyCost": { "type": "number" },
-                "potentialMonthlySaving": { "type": "number" },
-                "potentialAnnualSaving": { "type": "number" },
-                "matchedOffer": { "type": "object" },
-                "status": { "type": "string" }
+          "contextStatus": {
+            "type": "string",
+            "const": "READY"
+          },
+          "context": {
+            "type": "object",
+            "required": [
+              "sourceCoverage",
+              "isCompleteHouseholdSpend",
+              "observedRecurringMonthlySpend",
+              "recurringServiceCount",
+              "recurringServices",
+              "categories"
+            ],
+            "properties": {
+              "sourceCoverage": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "isCompleteHouseholdSpend": {
+                "type": "boolean"
+              },
+              "observedRecurringMonthlySpend": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "recurringServiceCount": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "recurringServices": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "categories": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
               }
             }
           },
-          "monthlyTrend": {
+          "insights": {
             "type": "array",
             "items": {
-              "type": "object",
-              "properties": {
-                "month": { "type": "string" },
-                "totalAmount": { "type": "number" }
-              }
+              "type": "object"
             }
           },
-          "lastUpdated": { "type": "string" }
+          "opportunities": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "permission-denied", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "permission-denied",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/FinancialHomeRepository.kt",
@@ -82,32 +111,61 @@
       "requestSchema": {
         "type": "object",
         "properties": {
-          "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
         }
       },
       "responseSchema": {
         "type": "object",
-        "required": ["ledger", "count"],
+        "required": [
+          "ledger",
+          "count"
+        ],
         "properties": {
           "ledger": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["eventId", "type", "timestamp"],
+              "required": [
+                "eventId",
+                "type",
+                "timestamp"
+              ],
               "properties": {
-                "eventId": { "type": "string" },
-                "type": { "type": "string" },
-                "timestamp": { "type": "string" },
-                "title": { "type": "string" },
-                "amount": { "type": "number" },
-                "details": { "type": "object" }
+                "eventId": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "timestamp": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "details": {
+                  "type": "object"
+                }
               }
             }
           },
-          "count": { "type": "integer" }
+          "count": {
+            "type": "integer"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "permission-denied", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "permission-denied",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/FinancialHomeRepository.kt",
@@ -127,13 +185,24 @@
       },
       "responseSchema": {
         "type": "object",
-        "required": ["status", "opportunitiesFound"],
+        "required": [
+          "status",
+          "opportunitiesFound"
+        ],
         "properties": {
-          "status": { "type": "string" },
-          "opportunitiesFound": { "type": "integer" }
+          "status": {
+            "type": "string"
+          },
+          "opportunitiesFound": {
+            "type": "integer"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "permission-denied", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "permission-denied",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/FinancialHomeRepository.kt",
@@ -153,14 +222,27 @@
       },
       "responseSchema": {
         "type": "object",
-        "required": ["connected", "email", "consentVersion"],
+        "required": [
+          "connected",
+          "email",
+          "consentVersion"
+        ],
         "properties": {
-          "connected": { "type": "boolean" },
-          "email": { "type": "string" },
-          "consentVersion": { "type": "string" }
+          "connected": {
+            "type": "boolean"
+          },
+          "email": {
+            "type": "string"
+          },
+          "consentVersion": {
+            "type": "string"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/GmailRepository.kt",
@@ -176,22 +258,48 @@
       "activeAccountRequired": true,
       "requestSchema": {
         "type": "object",
-        "required": ["serverAuthCode", "consentAccepted", "consentVersion"],
+        "required": [
+          "serverAuthCode",
+          "consentAccepted",
+          "consentVersion"
+        ],
         "properties": {
-          "serverAuthCode": { "type": "string", "minLength": 10 },
-          "consentAccepted": { "type": "boolean", "const": true },
-          "consentVersion": { "type": "string", "minLength": 1 }
+          "serverAuthCode": {
+            "type": "string",
+            "minLength": 10
+          },
+          "consentAccepted": {
+            "type": "boolean",
+            "const": true
+          },
+          "consentVersion": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       },
       "responseSchema": {
         "type": "object",
-        "required": ["connected", "email"],
+        "required": [
+          "connected",
+          "email"
+        ],
         "properties": {
-          "connected": { "type": "boolean" },
-          "email": { "type": "string" }
+          "connected": {
+            "type": "boolean"
+          },
+          "email": {
+            "type": "string"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "invalid-argument", "failed-precondition", "permission-denied", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "invalid-argument",
+        "failed-precondition",
+        "permission-denied",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/GmailRepository.kt",
@@ -208,23 +316,88 @@
       "requestSchema": {
         "type": "object",
         "properties": {
-          "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
         }
       },
       "responseSchema": {
         "type": "object",
-        "required": ["scanned", "invoicesFound", "invoices", "syncState"],
+        "required": [
+          "invoices",
+          "scannedMessages",
+          "importedCount",
+          "removedSourceMessageIds",
+          "initialBackfillCompleted",
+          "historyRecoveryRequired",
+          "syncMode"
+        ],
         "properties": {
-          "scanned": { "type": "integer" },
-          "invoicesFound": { "type": "integer" },
           "invoices": {
             "type": "array",
-            "items": { "type": "object" }
+            "items": {
+              "type": "object"
+            }
           },
-          "syncState": { "type": "string" }
+          "scannedMessages": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "importedCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "removedSourceMessageIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scannedPages": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lookback": {
+            "type": "string"
+          },
+          "parserVersion": {
+            "type": "integer"
+          },
+          "upgradedMessages": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "agentRefreshed": {
+            "type": "boolean"
+          },
+          "initialBackfillCompleted": {
+            "type": "boolean"
+          },
+          "historyRecoveryRequired": {
+            "type": "boolean"
+          },
+          "authoritativeSnapshotTruncated": {
+            "type": "boolean"
+          },
+          "syncMode": {
+            "type": "string",
+            "enum": [
+              "INITIAL_BACKFILL",
+              "INCREMENTAL",
+              "RECOVERY_REQUIRED",
+              "PARSER_UPGRADE_BACKFILL"
+            ]
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "failed-precondition", "permission-denied", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "failed-precondition",
+        "permission-denied",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/GmailRepository.kt",
@@ -244,12 +417,20 @@
       },
       "responseSchema": {
         "type": "object",
-        "required": ["connected"],
+        "required": [
+          "connected"
+        ],
         "properties": {
-          "connected": { "type": "boolean", "const": false }
+          "connected": {
+            "type": "boolean",
+            "const": false
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/GmailRepository.kt",
@@ -269,15 +450,45 @@
       },
       "responseSchema": {
         "type": "object",
-        "required": ["syncState", "lastSyncTimestamp", "invoicesCount", "errorStage"],
+        "required": [
+          "syncState",
+          "lastSyncTimestamp",
+          "invoicesCount",
+          "errorStage"
+        ],
         "properties": {
-          "syncState": { "type": "string", "enum": ["IDLE", "SYNCING", "COMPLETED", "PARTIAL", "FAILED"] },
-          "lastSyncTimestamp": { "type": ["string", "null"] },
-          "invoicesCount": { "type": "integer" },
-          "errorStage": { "type": ["string", "null"] }
+          "syncState": {
+            "type": "string",
+            "enum": [
+              "IDLE",
+              "SYNCING",
+              "COMPLETED",
+              "PARTIAL",
+              "FAILED"
+            ]
+          },
+          "lastSyncTimestamp": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "invoicesCount": {
+            "type": "integer"
+          },
+          "errorStage": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "permission-denied", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "permission-denied",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/GmailRepository.kt",
@@ -297,13 +508,24 @@
       },
       "responseSchema": {
         "type": "object",
-        "required": ["historyId", "expiration"],
+        "required": [
+          "historyId",
+          "expiration"
+        ],
         "properties": {
-          "historyId": { "type": "string" },
-          "expiration": { "type": "string" }
+          "historyId": {
+            "type": "string"
+          },
+          "expiration": {
+            "type": "string"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "failed-precondition", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "failed-precondition",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/GmailRepository.kt",
@@ -323,12 +545,19 @@
       },
       "responseSchema": {
         "type": "object",
-        "required": ["stopped"],
+        "required": [
+          "stopped"
+        ],
         "properties": {
-          "stopped": { "type": "boolean" }
+          "stopped": {
+            "type": "boolean"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/GmailRepository.kt",
@@ -344,20 +573,42 @@
       "activeAccountRequired": true,
       "requestSchema": {
         "type": "object",
-        "required": ["token"],
+        "required": [
+          "token"
+        ],
         "properties": {
-          "token": { "type": "string", "minLength": 20, "maxLength": 4096 },
-          "platform": { "type": "string", "enum": ["android", "ios"] }
+          "token": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 4096
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "android",
+              "ios"
+            ]
+          }
         }
       },
       "responseSchema": {
         "type": "object",
-        "required": ["registered"],
+        "required": [
+          "registered"
+        ],
         "properties": {
-          "registered": { "type": "boolean", "const": true }
+          "registered": {
+            "type": "boolean",
+            "const": true
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "invalid-argument", "permission-denied", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "invalid-argument",
+        "permission-denied",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/ClickAndSaveMessagingService.kt",
@@ -373,19 +624,34 @@
       "activeAccountRequired": false,
       "requestSchema": {
         "type": "object",
-        "required": ["token"],
+        "required": [
+          "token"
+        ],
         "properties": {
-          "token": { "type": "string", "minLength": 20, "maxLength": 4096 }
+          "token": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 4096
+          }
         }
       },
       "responseSchema": {
         "type": "object",
-        "required": ["registered"],
+        "required": [
+          "registered"
+        ],
         "properties": {
-          "registered": { "type": "boolean", "const": false }
+          "registered": {
+            "type": "boolean",
+            "const": false
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "invalid-argument", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "invalid-argument",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/PushTokenLifecycle.kt",
@@ -405,14 +671,28 @@
       },
       "responseSchema": {
         "type": "object",
-        "required": ["attempted", "delivered", "removedInvalid"],
+        "required": [
+          "attempted",
+          "delivered",
+          "removedInvalid"
+        ],
         "properties": {
-          "attempted": { "type": "integer" },
-          "delivered": { "type": "integer" },
-          "removedInvalid": { "type": "integer" }
+          "attempted": {
+            "type": "integer"
+          },
+          "delivered": {
+            "type": "integer"
+          },
+          "removedInvalid": {
+            "type": "integer"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "failed-precondition", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "failed-precondition",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/ui/screens/SettingsScreen.kt",
@@ -438,27 +718,69 @@
           "consentVersion"
         ],
         "properties": {
-          "opportunityId": { "type": "string", "minLength": 1 },
-          "expectedOfferId": { "type": "string", "minLength": 1 },
-          "contactName": { "type": "string", "minLength": 2 },
-          "phone": { "type": "string", "pattern": "^\\+?[0-9]{9,15}$" },
-          "contactEmail": { "type": "string", "format": "email" },
-          "consentAccepted": { "type": "boolean", "const": true },
-          "consentVersion": { "type": "string", "minLength": 1 }
+          "opportunityId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedOfferId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "contactName": {
+            "type": "string",
+            "minLength": 2
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\+?[0-9]{9,15}$"
+          },
+          "contactEmail": {
+            "type": "string",
+            "format": "email"
+          },
+          "consentAccepted": {
+            "type": "boolean",
+            "const": true
+          },
+          "consentVersion": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       },
       "responseSchema": {
         "type": "object",
-        "required": ["leadId", "status", "duplicate"],
+        "required": [
+          "leadId",
+          "status",
+          "duplicate"
+        ],
         "properties": {
-          "leadId": { "type": "string" },
-          "status": { "type": "string" },
-          "duplicate": { "type": "boolean" },
-          "action": { "type": "object" },
-          "handoffTruth": { "type": "object" }
+          "leadId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "duplicate": {
+            "type": "boolean"
+          },
+          "action": {
+            "type": "object"
+          },
+          "handoffTruth": {
+            "type": "object"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "invalid-argument", "not-found", "failed-precondition", "permission-denied", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "invalid-argument",
+        "not-found",
+        "failed-precondition",
+        "permission-denied",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/OpportunityRepository.kt",
@@ -474,21 +796,54 @@
       "activeAccountRequired": true,
       "requestSchema": {
         "type": "object",
-        "required": ["opportunityId", "offerId", "actionType"],
+        "required": [
+          "opportunityId",
+          "expectedOfferId"
+        ],
         "properties": {
-          "opportunityId": { "type": "string" },
-          "offerId": { "type": "string" },
-          "actionType": { "type": "string" }
-        }
+          "opportunityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expectedOfferId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "additionalProperties": false
       },
       "responseSchema": {
         "type": "object",
-        "required": ["recorded"],
+        "required": [
+          "recorded",
+          "duplicate",
+          "opportunityId",
+          "offerId"
+        ],
         "properties": {
-          "recorded": { "type": "boolean" }
+          "recorded": {
+            "type": "boolean",
+            "const": true
+          },
+          "duplicate": {
+            "type": "boolean"
+          },
+          "opportunityId": {
+            "type": "string"
+          },
+          "offerId": {
+            "type": "string"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "invalid-argument", "permission-denied", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "invalid-argument",
+        "permission-denied",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/OpportunityRepository.kt",
@@ -504,16 +859,63 @@
       "activeAccountRequired": true,
       "requestSchema": {
         "type": "object",
-        "properties": {}
+        "required": [
+          "confirmation"
+        ],
+        "properties": {
+          "confirmation": {
+            "type": "string",
+            "const": "DELETE_IMPORTED_FINANCIAL_DATA"
+          }
+        },
+        "additionalProperties": false
       },
       "responseSchema": {
         "type": "object",
-        "required": ["deleted"],
+        "required": [
+          "deleted",
+          "operation",
+          "accountPreserved",
+          "gmailConnectionPreserved",
+          "providerHandoffRecordsPreserved",
+          "futureGmailIngestionMayCreateNewData",
+          "topLevelDeleted"
+        ],
         "properties": {
-          "deleted": { "type": "boolean", "const": true }
+          "deleted": {
+            "type": "boolean",
+            "const": true
+          },
+          "operation": {
+            "type": "string",
+            "const": "DELETE_IMPORTED_FINANCIAL_DATA"
+          },
+          "accountPreserved": {
+            "type": "boolean",
+            "const": true
+          },
+          "gmailConnectionPreserved": {
+            "type": "boolean",
+            "const": true
+          },
+          "providerHandoffRecordsPreserved": {
+            "type": "boolean",
+            "const": true
+          },
+          "futureGmailIngestionMayCreateNewData": {
+            "type": "boolean",
+            "const": true
+          },
+          "topLevelDeleted": {
+            "type": "object"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "permission-denied", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "permission-denied",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/AuthRepository.kt",
@@ -529,16 +931,59 @@
       "activeAccountRequired": false,
       "requestSchema": {
         "type": "object",
-        "properties": {}
+        "required": [
+          "confirmation"
+        ],
+        "properties": {
+          "confirmation": {
+            "type": "string",
+            "const": "DELETE_ACCOUNT"
+          }
+        },
+        "additionalProperties": false
       },
       "responseSchema": {
         "type": "object",
-        "required": ["deleted"],
+        "required": [
+          "accountDeleted",
+          "authAlreadyMissing",
+          "gmailCleanup",
+          "topLevelDeleted",
+          "userTreeDeleted",
+          "pushRegistrationsDeleted",
+          "lifecycleMarkerDeleted"
+        ],
         "properties": {
-          "deleted": { "type": "boolean", "const": true }
+          "accountDeleted": {
+            "type": "boolean",
+            "const": true
+          },
+          "authAlreadyMissing": {
+            "type": "boolean"
+          },
+          "gmailCleanup": {
+            "type": "object"
+          },
+          "topLevelDeleted": {
+            "type": "object"
+          },
+          "userTreeDeleted": {
+            "type": "boolean",
+            "const": true
+          },
+          "pushRegistrationsDeleted": {
+            "type": "boolean",
+            "const": true
+          },
+          "lifecycleMarkerDeleted": {
+            "type": "boolean"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/AuthRepository.kt",
@@ -555,19 +1000,33 @@
       "requestSchema": {
         "type": "object",
         "properties": {
-          "text": { "type": "string" },
-          "fileData": { "type": "string" },
-          "mimeType": { "type": "string" }
+          "text": {
+            "type": "string"
+          },
+          "fileData": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          }
         }
       },
       "responseSchema": {
         "type": "object",
-        "required": ["analysis"],
+        "required": [
+          "analysis"
+        ],
         "properties": {
-          "analysis": { "type": "object" }
+          "analysis": {
+            "type": "object"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "invalid-argument", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "invalid-argument",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/DealAnalysisRepository.kt",
@@ -594,28 +1053,63 @@
           "consentVersion"
         ],
         "properties": {
-          "contactName": { "type": "string" },
-          "phone": { "type": "string" },
-          "contactEmail": { "type": "string" },
-          "currentProvider": { "type": "string" },
-          "requestedProvider": { "type": "string" },
-          "category": { "type": "string" },
-          "invoiceLocalId": { "type": "string" },
-          "idempotencyKey": { "type": "string" },
-          "consentAccepted": { "type": "boolean" },
-          "consentVersion": { "type": "string" }
+          "contactName": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "contactEmail": {
+            "type": "string"
+          },
+          "currentProvider": {
+            "type": "string"
+          },
+          "requestedProvider": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "invoiceLocalId": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "consentAccepted": {
+            "type": "boolean"
+          },
+          "consentVersion": {
+            "type": "string"
+          }
         }
       },
       "responseSchema": {
         "type": "object",
-        "required": ["leadId", "status", "duplicate"],
+        "required": [
+          "leadId",
+          "status",
+          "duplicate"
+        ],
         "properties": {
-          "leadId": { "type": "string" },
-          "status": { "type": "string" },
-          "duplicate": { "type": "boolean" }
+          "leadId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "duplicate": {
+            "type": "boolean"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "invalid-argument", "permission-denied", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "invalid-argument",
+        "permission-denied",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "app/src/main/java/com/example/data/repository/OpportunityRepository.kt",
@@ -631,23 +1125,43 @@
       "activeAccountRequired": false,
       "requestSchema": {
         "type": "object",
-        "required": ["leadId"],
+        "required": [
+          "leadId"
+        ],
         "properties": {
-          "leadId": { "type": "string" },
-          "dispatchQueueId": { "type": "string" },
-          "providerStatus": { "type": "string" },
-          "evidenceNotes": { "type": "string" },
-          "externalLeadRef": { "type": "string" }
+          "leadId": {
+            "type": "string"
+          },
+          "dispatchQueueId": {
+            "type": "string"
+          },
+          "providerStatus": {
+            "type": "string"
+          },
+          "evidenceNotes": {
+            "type": "string"
+          },
+          "externalLeadRef": {
+            "type": "string"
+          }
         }
       },
       "responseSchema": {
         "type": "object",
-        "required": ["recorded"],
+        "required": [
+          "recorded"
+        ],
         "properties": {
-          "recorded": { "type": "boolean" }
+          "recorded": {
+            "type": "boolean"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "invalid-argument", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "invalid-argument",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "N/A (Partner/Admin surface)",
@@ -663,24 +1177,47 @@
       "activeAccountRequired": false,
       "requestSchema": {
         "type": "object",
-        "required": ["leadId", "outcomeStatus"],
+        "required": [
+          "leadId",
+          "outcomeStatus"
+        ],
         "properties": {
-          "leadId": { "type": "string" },
-          "outcomeStatus": { "type": "string" },
-          "commercialStatus": { "type": "string" },
-          "finalCommissionAmount": { "type": "number" },
-          "rejectionReason": { "type": "string" },
-          "outcomeNotes": { "type": "string" }
+          "leadId": {
+            "type": "string"
+          },
+          "outcomeStatus": {
+            "type": "string"
+          },
+          "commercialStatus": {
+            "type": "string"
+          },
+          "finalCommissionAmount": {
+            "type": "number"
+          },
+          "rejectionReason": {
+            "type": "string"
+          },
+          "outcomeNotes": {
+            "type": "string"
+          }
         }
       },
       "responseSchema": {
         "type": "object",
-        "required": ["updated"],
+        "required": [
+          "updated"
+        ],
         "properties": {
-          "updated": { "type": "boolean" }
+          "updated": {
+            "type": "boolean"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "invalid-argument", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "invalid-argument",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "N/A (Partner/Admin surface)",
@@ -696,26 +1233,57 @@
       "activeAccountRequired": false,
       "requestSchema": {
         "type": "object",
-        "required": ["leadId", "realizationStatus", "baselineMonthlyCost", "realizedMonthlyCost", "realizedMonthlySaving", "effectiveStartDate"],
+        "required": [
+          "leadId",
+          "realizationStatus",
+          "baselineMonthlyCost",
+          "realizedMonthlyCost",
+          "realizedMonthlySaving",
+          "effectiveStartDate"
+        ],
         "properties": {
-          "leadId": { "type": "string" },
-          "realizationStatus": { "type": "string" },
-          "baselineMonthlyCost": { "type": "number" },
-          "realizedMonthlyCost": { "type": "number" },
-          "realizedMonthlySaving": { "type": "number" },
-          "effectiveStartDate": { "type": "string" },
-          "verifiedSource": { "type": "string" },
-          "realizationNotes": { "type": "string" }
+          "leadId": {
+            "type": "string"
+          },
+          "realizationStatus": {
+            "type": "string"
+          },
+          "baselineMonthlyCost": {
+            "type": "number"
+          },
+          "realizedMonthlyCost": {
+            "type": "number"
+          },
+          "realizedMonthlySaving": {
+            "type": "number"
+          },
+          "effectiveStartDate": {
+            "type": "string"
+          },
+          "verifiedSource": {
+            "type": "string"
+          },
+          "realizationNotes": {
+            "type": "string"
+          }
         }
       },
       "responseSchema": {
         "type": "object",
-        "required": ["recorded"],
+        "required": [
+          "recorded"
+        ],
         "properties": {
-          "recorded": { "type": "boolean" }
+          "recorded": {
+            "type": "boolean"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "invalid-argument", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "invalid-argument",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "N/A (Partner/Admin surface)",
@@ -731,25 +1299,52 @@
       "activeAccountRequired": false,
       "requestSchema": {
         "type": "object",
-        "required": ["providerName", "category", "monthlyPrice"],
+        "required": [
+          "providerName",
+          "category",
+          "monthlyPrice"
+        ],
         "properties": {
-          "id": { "type": "string" },
-          "providerName": { "type": "string" },
-          "category": { "type": "string" },
-          "monthlyPrice": { "type": "number" },
-          "pricingModel": { "type": "string" },
-          "availabilityStatus": { "type": "string" }
+          "id": {
+            "type": "string"
+          },
+          "providerName": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "monthlyPrice": {
+            "type": "number"
+          },
+          "pricingModel": {
+            "type": "string"
+          },
+          "availabilityStatus": {
+            "type": "string"
+          }
         }
       },
       "responseSchema": {
         "type": "object",
-        "required": ["offerId", "status"],
+        "required": [
+          "offerId",
+          "status"
+        ],
         "properties": {
-          "offerId": { "type": "string" },
-          "status": { "type": "string" }
+          "offerId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "invalid-argument", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "invalid-argument",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "N/A (Catalog Admin)",
@@ -765,20 +1360,35 @@
       "activeAccountRequired": false,
       "requestSchema": {
         "type": "object",
-        "required": ["offerId", "reason"],
+        "required": [
+          "offerId",
+          "reason"
+        ],
         "properties": {
-          "offerId": { "type": "string" },
-          "reason": { "type": "string" }
+          "offerId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       },
       "responseSchema": {
         "type": "object",
-        "required": ["disabled"],
+        "required": [
+          "disabled"
+        ],
         "properties": {
-          "disabled": { "type": "boolean" }
+          "disabled": {
+            "type": "boolean"
+          }
         }
       },
-      "errorCodes": ["unauthenticated", "invalid-argument", "internal"],
+      "errorCodes": [
+        "unauthenticated",
+        "invalid-argument",
+        "internal"
+      ],
       "status": "NOT_STARTED",
       "clientImplementation": {
         "androidFile": "N/A (Catalog Admin)",
