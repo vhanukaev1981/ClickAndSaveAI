@@ -18,6 +18,9 @@ test("Firebase Functions entry point loads all push and Gmail watch handlers", (
     "gmailPushNotification",
     "renewGmailWatches",
     "createTrackedOfferRedirect",
+    "upsertProviderIntegrationConfig",
+    "verifyProviderIntegrationHealth",
+    "getProviderIntegrationStatuses",
   ];
 
   for (const name of expected) {
