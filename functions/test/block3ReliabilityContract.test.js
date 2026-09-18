@@ -34,10 +34,17 @@ test("incremental scan returns authoritative snapshot and History recovery is ex
   assert.match(reliable, /recoveryBaselineHistoryId/);
   assert.match(reliable, /runBoundedHistoryRecovery/);
   assert.match(reliable, /RECOVERY_MAX_LOOKBACK_MS/);
-  assert.match(reliable, /after:\\?\$\{Math\.floor\(startMs \/ 1000\)\}/);
+  assert.doesNotMatch(reliable, /after:/);
+  assert.match(reliable, /RECOVERY_MAX_PAGES/);
   assert.match(reliable, /acquireRecoveryLease/);
   assert.match(reliable, /gmailWatch\._processMessage/);
+  assert.match(reliable, /maintenance:\s*true/);
+  assert.match(reliable, /suppressUserNotification:\s*true/);
+  assert.match(reliable, /runFinancialAgentForUser/);
+  assert.match(reliable, /finally/);
+  assert.match(reliable, /releaseRecoveryLease/);
   assert.match(reliable, /pdfAnalysisComplete !== true/);
+  assert.match(watch, /BACKFILL_BATCH_MODE/);
   assert.match(watch, /_refreshAccessToken/);
   assert.match(watch, /_processMessage/);
 });
@@ -48,6 +55,7 @@ test("authoritative notifications have exact stable identities and no financial 
   assert.match(invoicePush, /bill-detected:\$\{sourceMessageId\}/);
   assert.match(invoicePush, /sourceMessageId/);
   assert.match(invoicePush, /authenticatedAccountExists/);
+  assert.match(invoicePush, /suppressUserNotification === true/);
   assert.match(opportunityPush, /opportunityId/);
   assert.match(opportunityPush, /offerId/);
   assert.match(opportunityPush, /authenticatedAccountExists/);
