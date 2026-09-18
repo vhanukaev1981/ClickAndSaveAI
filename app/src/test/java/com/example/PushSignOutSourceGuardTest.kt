@@ -45,7 +45,7 @@ class PushSignOutSourceGuardTest {
         assertTrue("Push revocation must still be attempted before auth sign-out", revokeIndex >= 0)
         assertTrue("Only a double-path revocation failure may block auth sign-out", hardGateIndex > revokeIndex)
         assertTrue("Firebase Auth sign-out must happen after the guarded revocation result", firebaseSignOutIndex > hardGateIndex)
-        assertTrue(signOutSection.contains("beginSignOutRegistrationSuppression"))
+        assertTrue(signOutSection.contains("beginSignOutRegistrationSuppressionAndDrain"))
         assertTrue(authRepository.contains("endSignOutRegistrationSuppression"))
     }
 
@@ -68,7 +68,8 @@ class PushSignOutSourceGuardTest {
             .substringAfter("object PushRegistration")
             .substringBefore("class ClickAndSaveMessagingService")
 
-        assertTrue(registrationSection.contains("PushTokenLifecycle.isRegistrationSuppressed()"))
+        assertTrue(registrationSection.contains("PushTokenLifecycle.tryAcquireRegistrationSlot()"))
+        assertTrue(registrationSection.contains("PushTokenLifecycle.releaseRegistrationSlot()"))
         assertTrue(registrationSection.contains("if (FirebaseAuth.getInstance().currentUser == null) return"))
         assertTrue(registrationSection.contains("if (FirebaseAuth.getInstance().currentUser == null || token.isBlank()) return"))
     }
