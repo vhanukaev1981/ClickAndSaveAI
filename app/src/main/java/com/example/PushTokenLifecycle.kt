@@ -4,6 +4,8 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessaging
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
 
@@ -19,9 +21,27 @@ object PushTokenLifecycle {
     private const val TAG = "PushTokenLifecycle"
     private const val FCM_OPERATION_TIMEOUT_MS = 5_000L
     @Volatile private var registrationSuppressedForSignOut: Boolean = false
+    private val inFlightRegistrations = AtomicInteger(0)
 
-    fun beginSignOutRegistrationSuppression() {
+    fun tryAcquireRegistrationSlot(): Boolean {
+        if (registrationSuppressedForSignOut) return false
+        inFlightRegistrations.incrementAndGet()
+        if (registrationSuppressedForSignOut) {
+            inFlightRegistrations.decrementAndGet()
+            return false
+        }
+        return true
+    }
+
+    fun releaseRegistrationSlot() {
+        inFlightRegistrations.updateAndGet { current -> if (current > 0) current - 1 else 0 }
+    }
+
+    suspend fun beginSignOutRegistrationSuppressionAndDrain() {
         registrationSuppressedForSignOut = true
+        withTimeout(FCM_OPERATION_TIMEOUT_MS) {
+            while (inFlightRegistrations.get() > 0) delay(25)
+        }
     }
 
     fun endSignOutRegistrationSuppression() {
