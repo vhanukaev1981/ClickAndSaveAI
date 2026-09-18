@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Owns privacy-sensitive lifecycle handling for the current device's FCM registration.
@@ -37,12 +38,15 @@ object PushTokenLifecycle {
         inFlightRegistrations.updateAndGet { current -> if (current > 0) current - 1 else 0 }
     }
 
-    suspend fun beginSignOutRegistrationSuppressionAndDrain() {
+    suspend fun beginSignOutRegistrationSuppressionAndDrain(): Boolean {
         registrationSuppressedForSignOut = true
-        withTimeout(FCM_OPERATION_TIMEOUT_MS) {
+        return withTimeoutOrNull(FCM_OPERATION_TIMEOUT_MS) {
             while (inFlightRegistrations.get() > 0) delay(25)
-        }
+            true
+        } == true
     }
+
+    fun hasInFlightRegistrations(): Boolean = inFlightRegistrations.get() > 0
 
     fun endSignOutRegistrationSuppression() {
         registrationSuppressedForSignOut = false
@@ -90,11 +94,17 @@ object PushTokenLifecycle {
             Log.w(TAG, "Local FCM token deletion failed during sign-out", error)
         }
 
-        if (backendRevoked || localDeleted) return Result.success(Unit)
+        if (registrationDrainCompleted && !hasInFlightRegistrations() && (backendRevoked || localDeleted)) {
+            return Result.success(Unit)
+        }
 
-        val failure = localDeletion.exceptionOrNull()
-            ?: tokenResolutionFailure
-            ?: IllegalStateException("Push token revocation failed on both backend and local paths")
+        val failure = if (!registrationDrainCompleted || hasInFlightRegistrations()) {
+            IllegalStateException("Push registration is still in flight after bounded drain; revocation was attempted")
+        } else {
+            localDeletion.exceptionOrNull()
+                ?: tokenResolutionFailure
+                ?: IllegalStateException("Push token revocation failed on both backend and local paths")
+        }
         return Result.failure(failure)
     }
 
