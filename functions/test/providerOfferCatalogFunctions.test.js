@@ -197,6 +197,7 @@ test("commission data cannot be attached without a valid active commission model
     commercialAgreementActive: false,
     commissionType: "NONE",
     commissionValue: null,
+    partnerSubIdParam: "",
   }), nowMs);
   assert.equal(nonPartner.commercialAgreementActive, false);
   assert.equal(nonPartner.commissionType, "NONE");
