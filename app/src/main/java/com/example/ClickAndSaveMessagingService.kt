@@ -14,6 +14,7 @@ import com.google.firebase.messaging.RemoteMessage
 
 object PushRegistration {
     fun registerCurrentToken() {
+        if (PushTokenLifecycle.isRegistrationSuppressed()) return
         if (FirebaseAuth.getInstance().currentUser == null) return
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener(::registerToken)
@@ -23,6 +24,7 @@ object PushRegistration {
     }
 
     fun registerToken(token: String) {
+        if (PushTokenLifecycle.isRegistrationSuppressed()) return
         if (FirebaseAuth.getInstance().currentUser == null || token.isBlank()) return
         FirebaseFunctions.getInstance("europe-west1")
             .getHttpsCallable("registerPushToken")

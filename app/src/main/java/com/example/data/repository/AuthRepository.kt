@@ -162,6 +162,7 @@ class AuthRepository(private val applicationContext: Context) {
 
     suspend fun signOut() {
         _authState.value = AuthState.Loading
+        PushTokenLifecycle.beginSignOutRegistrationSuppression()
         try {
             PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut().getOrThrow()
             purgeImportedFinancialDataLocally()
@@ -174,6 +175,8 @@ class AuthRepository(private val applicationContext: Context) {
         } catch (e: Exception) {
             _authState.value = AuthState.Error(e.localizedMessage ?: "Sign-out failed")
             throw e
+        } finally {
+            PushTokenLifecycle.endSignOutRegistrationSuppression()
         }
     }
 
