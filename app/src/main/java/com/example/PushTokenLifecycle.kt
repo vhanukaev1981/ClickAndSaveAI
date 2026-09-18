@@ -18,6 +18,17 @@ import kotlinx.coroutines.withTimeout
 object PushTokenLifecycle {
     private const val TAG = "PushTokenLifecycle"
     private const val FCM_OPERATION_TIMEOUT_MS = 5_000L
+    @Volatile private var registrationSuppressedForSignOut: Boolean = false
+
+    fun beginSignOutRegistrationSuppression() {
+        registrationSuppressedForSignOut = true
+    }
+
+    fun endSignOutRegistrationSuppression() {
+        registrationSuppressedForSignOut = false
+    }
+
+    fun isRegistrationSuppressed(): Boolean = registrationSuppressedForSignOut
 
     suspend fun revokeCurrentDeviceBeforeSignOut(): Result<Unit> {
         val messaging = FirebaseMessaging.getInstance()
