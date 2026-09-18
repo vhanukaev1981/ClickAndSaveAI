@@ -4,6 +4,8 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.messaging.FirebaseMessaging
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
 
@@ -18,16 +20,47 @@ import kotlinx.coroutines.withTimeout
 object PushTokenLifecycle {
     private const val TAG = "PushTokenLifecycle"
     private const val FCM_OPERATION_TIMEOUT_MS = 5_000L
+    @Volatile private var registrationSuppressedForSignOut: Boolean = false
+    private val inFlightRegistrations = AtomicInteger(0)
+
+    fun tryAcquireRegistrationSlot(): Boolean {
+        if (registrationSuppressedForSignOut) return false
+        inFlightRegistrations.incrementAndGet()
+        if (registrationSuppressedForSignOut) {
+            inFlightRegistrations.decrementAndGet()
+            return false
+        }
+        return true
+    }
+
+    fun releaseRegistrationSlot() {
+        inFlightRegistrations.updateAndGet { current -> if (current > 0) current - 1 else 0 }
+    }
+
+    suspend fun beginSignOutRegistrationSuppressionAndDrain() {
+        registrationSuppressedForSignOut = true
+        withTimeout(FCM_OPERATION_TIMEOUT_MS) {
+            while (inFlightRegistrations.get() > 0) delay(25)
+        }
+    }
+
+    fun endSignOutRegistrationSuppression() {
+        registrationSuppressedForSignOut = false
+    }
+
+    fun isRegistrationSuppressed(): Boolean = registrationSuppressedForSignOut
 
     suspend fun revokeCurrentDeviceBeforeSignOut(): Result<Unit> {
         val messaging = FirebaseMessaging.getInstance()
         val authenticated = FirebaseAuth.getInstance().currentUser != null
 
-        var firstFailure: Throwable? = null
+        var tokenResolutionFailure: Throwable? = null
+        var backendRevoked = false
+        var localDeleted = false
         val token = runCatching {
             withTimeout(FCM_OPERATION_TIMEOUT_MS) { messaging.token.await().trim() }
         }.onFailure { error ->
-            firstFailure = error
+            tokenResolutionFailure = error
             Log.w(TAG, "Unable to resolve current FCM token before sign-out", error)
         }.getOrNull().orEmpty()
 
@@ -39,8 +72,9 @@ object PushTokenLifecycle {
                         .call(mapOf("token" to token))
                         .await()
                 }
+            }.onSuccess {
+                backendRevoked = true
             }.onFailure { error ->
-                if (firstFailure == null) firstFailure = error
                 Log.w(TAG, "Backend FCM token revocation failed before sign-out", error)
             }
         }
@@ -48,15 +82,20 @@ object PushTokenLifecycle {
         // Always try to delete the local token even when the authenticated backend revocation
         // fails. Firebase will mint a fresh token on a later authenticated session, while the
         // server delivery path already deletes registrations that FCM reports as invalid.
-        runCatching {
+        val localDeletion = runCatching {
             withTimeout(FCM_OPERATION_TIMEOUT_MS) { messaging.deleteToken().await() }
+        }.onSuccess {
+            localDeleted = true
         }.onFailure { error ->
-            if (firstFailure == null) firstFailure = error
             Log.w(TAG, "Local FCM token deletion failed during sign-out", error)
         }
 
-        val failure = firstFailure
-        return if (failure != null) Result.failure(failure) else Result.success(Unit)
+        if (backendRevoked || localDeleted) return Result.success(Unit)
+
+        val failure = localDeletion.exceptionOrNull()
+            ?: tokenResolutionFailure
+            ?: IllegalStateException("Push token revocation failed on both backend and local paths")
+        return Result.failure(failure)
     }
 
     suspend fun deleteLocalTokenAfterAccountDeletion(): Result<Unit> {
