@@ -10,6 +10,7 @@ const gmailWatch = require("./gmailWatchFunctions");
 const { ACTIVE_GMAIL_PARSER_VERSION } = require("./gmailParserVersion");
 const { normalizeHistoryId, syncMode } = require("./gmailHistoryPolicy");
 const { emitOperationalEvent } = require("./operationalTelemetry");
+const { _runFinancialAgentForUser: runFinancialAgentForUser } = require("./financialAgentFunctions");
 
 const db = getFirestore();
 const googleOAuthClientSecret = defineSecret("GOOGLE_OAUTH_CLIENT_SECRET");
@@ -148,14 +149,12 @@ async function releaseRecoveryLease(connectionRef, owner) {
   });
 }
 
-async function listRecoveryMessageIds(accessToken, startMs) {
+async function listRecoveryMessageIds(accessToken) {
   const messageIds = [];
   let pageToken = "";
   let pageCount = 0;
-  const query = `after:${Math.floor(startMs / 1000)}`;
   do {
     const params = new URLSearchParams({
-      q: query,
       maxResults: String(RECOVERY_PAGE_SIZE),
     });
     if (pageToken) params.set("pageToken", pageToken);
@@ -189,11 +188,15 @@ async function runBoundedHistoryRecovery(uid, connection, nowMs = Date.now()) {
   }
   const startMs = recoveryWindowStartMs(connection, nowMs);
   const accessToken = await gmailWatch._refreshAccessToken(connection.encryptedRefreshToken);
-  const messageIds = await listRecoveryMessageIds(accessToken, startMs);
+  const messageIds = await listRecoveryMessageIds(accessToken);
   let processedMessages = 0;
 
   for (const messageId of messageIds) {
-    await gmailWatch._processMessage(uid, accessToken, messageId);
+    await gmailWatch._processMessage(uid, accessToken, messageId, {
+      maintenance: true,
+      suppressUserNotification: true,
+      notificationSuppressedReason: "HISTORY_RECOVERY",
+    });
     const audit = await db.collection("users").doc(uid)
       .collection("gmailMessageImports").doc(messageId).get();
     const auditData = audit.data() || {};
@@ -206,9 +209,13 @@ async function runBoundedHistoryRecovery(uid, connection, nowMs = Date.now()) {
     processedMessages += 1;
   }
 
+  await runFinancialAgentForUser(uid);
+
   return {
     processedMessages,
     recoveryWindowStartMs: startMs,
+    scannedMailboxMessages: messageIds.length,
+    agentRefreshed: true,
   };
 }
 
@@ -222,6 +229,8 @@ exports.scanGmailInvoices = onCall(
   async (request) => {
     const uid = requireAuth(request);
     let stage = "LOAD_CONNECTION";
+    let recoveryConnectionRef = null;
+    let recoveryLeaseOwner = "";
     try {
       const connectionRef = db.collection("gmailConnections").doc(uid);
       const beforeSnapshot = await connectionRef.get();
@@ -262,7 +271,6 @@ exports.scanGmailInvoices = onCall(
       }
 
       let baseline = normalizeHistoryId(before.watchHistoryId);
-      let recoveryLeaseOwner = "";
       let result;
       if (mode === "INITIAL_BACKFILL") {
         stage = "ESTABLISH_INITIAL_BASELINE";
@@ -271,16 +279,12 @@ exports.scanGmailInvoices = onCall(
         result = await handlerRunner(stableScanHandler, "Stable Gmail scan")(request);
       } else if (mode === "RECOVERY_REQUIRED") {
         stage = "ACQUIRE_RECOVERY_LEASE";
+        recoveryConnectionRef = connectionRef;
         recoveryLeaseOwner = await acquireRecoveryLease(connectionRef);
-        try {
-          stage = "ESTABLISH_RECOVERY_BASELINE";
-          baseline = await establishRecoveryBaseline(request, connectionRef, before);
-          stage = "RUN_BOUNDED_HISTORY_RECOVERY";
-          result = await runBoundedHistoryRecovery(uid, before);
-        } catch (error) {
-          await releaseRecoveryLease(connectionRef, recoveryLeaseOwner).catch(() => undefined);
-          throw error;
-        }
+        stage = "ESTABLISH_RECOVERY_BASELINE";
+        baseline = await establishRecoveryBaseline(request, connectionRef, before);
+        stage = "RUN_BOUNDED_HISTORY_RECOVERY";
+        result = await runBoundedHistoryRecovery(uid, before);
       } else {
         stage = "RUN_STABLE_SCAN";
         result = await handlerRunner(stableScanHandler, "Stable Gmail scan")(request);
@@ -328,9 +332,6 @@ exports.scanGmailInvoices = onCall(
 
       stage = "PERSIST_RECONCILIATION_UPDATE";
       await connectionRef.set(update, { merge: true });
-      if (recoveryLeaseOwner) {
-        await releaseRecoveryLease(connectionRef, recoveryLeaseOwner);
-      }
 
       const historyRecoveryRequired = update.historyRecoveryRequired === true;
       stage = "EMIT_COMPLETION_TELEMETRY";
@@ -376,6 +377,10 @@ exports.scanGmailInvoices = onCall(
       }
       if (error instanceof HttpsError) throw error;
       throw new HttpsError("internal", `GMAIL_RECONCILIATION_INTERNAL_${stage}`);
+    } finally {
+      if (recoveryConnectionRef && recoveryLeaseOwner) {
+        await releaseRecoveryLease(recoveryConnectionRef, recoveryLeaseOwner).catch(() => undefined);
+      }
     }
   }
 );
