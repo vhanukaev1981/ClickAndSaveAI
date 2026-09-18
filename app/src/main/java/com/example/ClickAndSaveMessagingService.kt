@@ -26,7 +26,7 @@ object PushRegistration {
         if (FirebaseAuth.getInstance().currentUser == null || token.isBlank()) return
         FirebaseFunctions.getInstance("europe-west1")
             .getHttpsCallable("registerPushToken")
-            .call(mapOf("token" to token))
+            .call(mapOf("token" to token, "platform" to "android"))
             .addOnFailureListener { error ->
                 Log.w("PushRegistration", "FCM token registration failed", error)
             }

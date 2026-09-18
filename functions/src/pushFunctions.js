@@ -9,6 +9,8 @@ const { emitOperationalEvent } = require("./operationalTelemetry");
 
 const db = getFirestore();
 
+const ALLOWED_PLATFORMS = new Set(["android", "ios"]);
+
 function requireAuth(request) {
   const uid = request.auth?.uid;
   if (!uid) {
@@ -23,6 +25,23 @@ function normalizeToken(value) {
     throw new HttpsError("invalid-argument", "A valid FCM registration token is required.");
   }
   return token;
+}
+
+function normalizePlatform(value) {
+  if (value === undefined || value === null || value === "") {
+    return "android";
+  }
+  if (typeof value !== "string") {
+    throw new HttpsError("invalid-argument", "Platform must be a string if provided.");
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!ALLOWED_PLATFORMS.has(normalized)) {
+    throw new HttpsError(
+      "invalid-argument",
+      `Unsupported platform '${value}'. Allowed platforms are: android, ios.`
+    );
+  }
+  return normalized;
 }
 
 function tokenDocumentId(token) {
@@ -64,6 +83,13 @@ async function sendPushToUser(uid, { title, body, data = {} }) {
       priority: "high",
       notification: {
         channelId: "savings_opportunities",
+      },
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: "default",
+        },
       },
     },
   });
@@ -112,6 +138,7 @@ exports.registerPushToken = onCall(
     const uid = requireAuth(request);
     await assertActiveAccount(uid);
     const token = normalizeToken(request.data?.token);
+    const platform = normalizePlatform(request.data?.platform);
     const tokenId = tokenDocumentId(token);
 
     await db
@@ -121,7 +148,7 @@ exports.registerPushToken = onCall(
       .doc(tokenId)
       .set({
         token,
-        platform: "android",
+        platform,
         enabled: true,
         updatedAt: FieldValue.serverTimestamp(),
         createdAt: FieldValue.serverTimestamp(),
@@ -170,5 +197,15 @@ exports.sendTestPush = onCall(
 
 Object.defineProperty(module.exports, "_sendPushToUser", {
   value: sendPushToUser,
+  enumerable: false,
+});
+
+Object.defineProperty(module.exports, "_normalizePlatform", {
+  value: normalizePlatform,
+  enumerable: false,
+});
+
+Object.defineProperty(module.exports, "_normalizeToken", {
+  value: normalizeToken,
   enumerable: false,
 });
