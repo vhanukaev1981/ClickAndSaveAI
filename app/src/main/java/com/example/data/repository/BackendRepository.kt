@@ -119,10 +119,10 @@ data class FinancialMatchedOffer(
     val verificationMethod: String,
     val officialSourceUrl: String,
     val officialSourceName: String,
-    val externalRedirectAvailable: Boolean,
     val verifiedAt: String,
     val validUntil: String,
-    val userFitScore: Double?
+    val userFitScore: Double?,
+    val externalRedirectAvailable: Boolean = false
 )
 
 data class FinancialOpportunity(
@@ -391,10 +391,10 @@ class BackendRepository(
                             verificationMethod = it["verificationMethod"] as? String ?: "",
                             officialSourceUrl = it["officialSourceUrl"] as? String ?: "",
                             officialSourceName = it["officialSourceName"] as? String ?: "",
-                            externalRedirectAvailable = it["externalRedirectAvailable"] as? Boolean ?: false,
                             verifiedAt = it["verifiedAt"] as? String ?: "",
                             validUntil = it["validUntil"] as? String ?: "",
-                            userFitScore = (it["userFitScore"] as? Number)?.toDouble()
+                            userFitScore = (it["userFitScore"] as? Number)?.toDouble(),
+                            externalRedirectAvailable = it["externalRedirectAvailable"] as? Boolean ?: false
                         )
                     }
                 )
