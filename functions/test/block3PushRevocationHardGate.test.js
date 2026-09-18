@@ -12,15 +12,18 @@ function androidSource(relativePath) {
   );
 }
 
-test("completed sign-out observes push revocation failure but still signs out", () => {
+test("completed sign-out blocks only when both revocation paths fail", () => {
   const auth = androidSource("data/repository/AuthRepository.kt");
   const signOut = auth.split("suspend fun signOut()")[1] || "";
   assert.match(signOut, /revokeCurrentDeviceBeforeSignOut\(\)/);
-  assert.match(signOut, /exceptionOrNull\(\)/);
-  assert.doesNotMatch(signOut, /getOrThrow\(\)/);
+  assert.match(signOut, /getOrThrow\(\)/);
   const revokeAt = signOut.indexOf("revokeCurrentDeviceBeforeSignOut");
-  const observeFailureAt = signOut.indexOf("exceptionOrNull()");
+  const hardGateAt = signOut.indexOf("getOrThrow()");
   const firebaseSignOutAt = signOut.indexOf("getFirebaseAuthSafe()?.signOut()");
-  assert.ok(revokeAt >= 0 && observeFailureAt > revokeAt);
-  assert.ok(firebaseSignOutAt > observeFailureAt);
+  assert.ok(revokeAt >= 0 && hardGateAt > revokeAt);
+  assert.ok(firebaseSignOutAt > hardGateAt);
+
+  const lifecycle = androidSource("PushTokenLifecycle.kt");
+  assert.match(lifecycle, /backendRevoked \|\| localDeleted/);
+  assert.match(lifecycle, /Result\.failure\(failure\)/);
 });
