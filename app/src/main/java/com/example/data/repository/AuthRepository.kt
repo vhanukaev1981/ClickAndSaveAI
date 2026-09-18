@@ -163,6 +163,7 @@ class AuthRepository(private val applicationContext: Context) {
     suspend fun signOut() {
         _authState.value = AuthState.Loading
         try {
+            PushTokenLifecycle.beginSignOutRegistrationSuppressionAndDrain()
             PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut().getOrThrow()
             purgeImportedFinancialDataLocally()
             getFirebaseAuthSafe()?.signOut()
@@ -174,6 +175,8 @@ class AuthRepository(private val applicationContext: Context) {
         } catch (e: Exception) {
             _authState.value = AuthState.Error(e.localizedMessage ?: "Sign-out failed")
             throw e
+        } finally {
+            PushTokenLifecycle.endSignOutRegistrationSuppression()
         }
     }
 
