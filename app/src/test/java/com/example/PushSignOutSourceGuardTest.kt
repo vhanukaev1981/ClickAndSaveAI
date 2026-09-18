@@ -46,6 +46,8 @@ class PushSignOutSourceGuardTest {
         assertTrue("Only a double-path revocation failure may block auth sign-out", hardGateIndex > revokeIndex)
         assertTrue("Firebase Auth sign-out must happen after the guarded revocation result", firebaseSignOutIndex > hardGateIndex)
         assertTrue(signOutSection.contains("beginSignOutRegistrationSuppressionAndDrain"))
+        assertTrue(signOutSection.contains("registrationDrainCompleted"))
+        assertTrue(signOutSection.contains("revokeCurrentDeviceBeforeSignOut(registrationDrainCompleted)"))
         assertTrue(authRepository.contains("endSignOutRegistrationSuppression"))
     }
 
