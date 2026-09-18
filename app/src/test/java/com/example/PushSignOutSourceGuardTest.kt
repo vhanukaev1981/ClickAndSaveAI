@@ -32,20 +32,19 @@ class PushSignOutSourceGuardTest {
     }
 
     @Test
-    fun signOutContinuesWhenPushRevocationFails() {
+    fun signOutFailsClosedOnlyWhenBothPushRevocationPathsFail() {
         val authRepository = File("src/main/java/com/example/data/repository/AuthRepository.kt").readText()
         val signOutSection = authRepository
             .substringAfter("suspend fun signOut()")
             .substringBefore("_userSession.value = UserSession()")
 
         val revokeIndex = signOutSection.indexOf("PushTokenLifecycle.revokeCurrentDeviceBeforeSignOut()")
-        val failureCaptureIndex = signOutSection.indexOf("exceptionOrNull()")
+        val hardGateIndex = signOutSection.indexOf("getOrThrow()")
         val firebaseSignOutIndex = signOutSection.indexOf("getFirebaseAuthSafe()?.signOut()")
 
         assertTrue("Push revocation must still be attempted before auth sign-out", revokeIndex >= 0)
-        assertTrue("Revocation failure must be observed without throwing", failureCaptureIndex > revokeIndex)
-        assertTrue("Firebase Auth sign-out must continue after the revocation attempt", firebaseSignOutIndex > failureCaptureIndex)
-        assertFalse("A network revocation failure must not hard-gate sign-out", signOutSection.contains("getOrThrow()"))
+        assertTrue("Only a double-path revocation failure may block auth sign-out", hardGateIndex > revokeIndex)
+        assertTrue("Firebase Auth sign-out must happen after the guarded revocation result", firebaseSignOutIndex > hardGateIndex)
     }
 
     @Test
