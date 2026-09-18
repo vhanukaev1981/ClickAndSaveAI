@@ -31,6 +31,8 @@ function validOffer(overrides = {}) {
     availabilityStatus: "AVAILABLE",
     officialSourceUrl: "https://provider.example.co.il/fiber/1g",
     officialSourceName: "Provider A official website",
+    destinationUrl: "https://provider.example.co.il/join/fiber-1g",
+    partnerSubIdParam: "click_id",
     sourceEvidenceNote: "Public 1Gbps monthly price and first-year fees",
     verifiedAt: "2026-08-08T16:30:00Z",
     validUntil: "2026-09-08T16:30:00Z",
@@ -54,6 +56,8 @@ test("catalog accepts a current Israeli fixed-monthly offer with complete first-
   assert.equal(result.requiredRecurringFees, 0);
   assert.equal(result.availabilityMode, "NATIONWIDE");
   assert.equal(result.commissionType, "CPA");
+  assert.equal(result.destinationUrl, "https://provider.example.co.il/join/fiber-1g");
+  assert.equal(result.partnerSubIdParam, "click_id");
 });
 
 test("headline promo prices shorter than twelve months are rejected", () => {
@@ -193,6 +197,7 @@ test("commission data cannot be attached without a valid active commission model
     commercialAgreementActive: false,
     commissionType: "NONE",
     commissionValue: null,
+    partnerSubIdParam: "",
   }), nowMs);
   assert.equal(nonPartner.commercialAgreementActive, false);
   assert.equal(nonPartner.commissionType, "NONE");
@@ -207,5 +212,31 @@ test("catalog only accepts supported household savings categories and IL offers"
   assert.throws(
     () => validateProviderOfferInput(validOffer({ country: "US" }), nowMs),
     /only IL/i
+  );
+});
+
+
+test("catalog keeps exact redirect optional but requires HTTPS when present", () => {
+  const withoutRedirect = validateProviderOfferInput(validOffer({
+    destinationUrl: "",
+    partnerSubIdParam: "",
+  }), nowMs);
+  assert.equal(withoutRedirect.destinationUrl, "");
+
+  assert.throws(
+    () => validateProviderOfferInput(validOffer({ destinationUrl: "http://provider.example.co.il/join" }), nowMs),
+    /https/i
+  );
+});
+
+test("partner sub-id parameter requires an active commercial agreement", () => {
+  assert.throws(
+    () => validateProviderOfferInput(validOffer({
+      commercialAgreementActive: false,
+      commissionType: "NONE",
+      commissionValue: null,
+      partnerSubIdParam: "click_id",
+    }), nowMs),
+    /active commercial agreement/i
   );
 });

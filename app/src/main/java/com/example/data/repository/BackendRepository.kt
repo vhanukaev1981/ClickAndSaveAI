@@ -121,7 +121,8 @@ data class FinancialMatchedOffer(
     val officialSourceName: String,
     val verifiedAt: String,
     val validUntil: String,
-    val userFitScore: Double?
+    val userFitScore: Double?,
+    val externalRedirectAvailable: Boolean = false
 )
 
 data class FinancialOpportunity(
@@ -392,7 +393,8 @@ class BackendRepository(
                             officialSourceName = it["officialSourceName"] as? String ?: "",
                             verifiedAt = it["verifiedAt"] as? String ?: "",
                             validUntil = it["validUntil"] as? String ?: "",
-                            userFitScore = (it["userFitScore"] as? Number)?.toDouble()
+                            userFitScore = (it["userFitScore"] as? Number)?.toDouble(),
+                            externalRedirectAvailable = it["externalRedirectAvailable"] as? Boolean ?: false
                         )
                     }
                 )

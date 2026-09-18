@@ -48,6 +48,7 @@ pushCache.exports = originalPushExports;
 
 const opportunityActionFunctions = require("./opportunityActionFunctions");
 const opportunityEngagementFunctions = require("./opportunityEngagementFunctions");
+const offerRedirectFunctions = require("./offerRedirectFunctions");
 const commerceOperationsFunctions = require("./commerceOperationsFunctions");
 const providerOfferCatalogFunctions = require("./providerOfferCatalogFunctions");
 const providerDispatchFunctions = require("./providerDispatchFunctions");
@@ -80,6 +81,7 @@ module.exports = {
   ...opportunityNotificationFunctions,
   ...opportunityActionFunctions,
   ...opportunityEngagementFunctions,
+  ...offerRedirectFunctions,
   ...commerceOperationsFunctions,
   ...providerOfferCatalogFunctions,
   ...providerDispatchFunctions,

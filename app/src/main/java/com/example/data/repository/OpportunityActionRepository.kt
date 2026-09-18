@@ -3,6 +3,15 @@ package com.example.data.repository
 import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.tasks.await
 
+data class OfferRedirectResult(
+    val clickId: String,
+    val offerId: String,
+    val providerName: String,
+    val redirectUrl: String,
+    val duplicate: Boolean,
+    val attributionMode: String
+)
+
 data class OpportunityActionResult(
     val leadId: String,
     val status: String,
@@ -42,6 +51,30 @@ class OpportunityActionRepository(
                 )
             )
             .await()
+    }
+
+    suspend fun createTrackedOfferRedirect(
+        opportunityId: String,
+        expectedOfferId: String
+    ): OfferRedirectResult {
+        val response = functions.getHttpsCallable("createTrackedOfferRedirect")
+            .call(
+                mapOf(
+                    "opportunityId" to opportunityId,
+                    "expectedOfferId" to expectedOfferId
+                )
+            )
+            .await()
+            .data
+            .asStringMap()
+        return OfferRedirectResult(
+            clickId = response["clickId"] as? String ?: error("Backend did not return a click ID"),
+            offerId = response["offerId"] as? String ?: expectedOfferId,
+            providerName = response["providerName"] as? String ?: "",
+            redirectUrl = response["redirectUrl"] as? String ?: error("Backend did not return a redirect URL"),
+            duplicate = response["duplicate"] as? Boolean ?: false,
+            attributionMode = response["attributionMode"] as? String ?: "DIRECT_UNATTRIBUTED"
+        )
     }
 
     suspend fun acceptSavingsOpportunity(

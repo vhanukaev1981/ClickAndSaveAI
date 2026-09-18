@@ -69,6 +69,7 @@ function normalizeOffer(offer, nowMs = Date.now()) {
   const pricingEvidence = normalizeConsumerPricingEvidence(offer);
   const officialSourceUrl = normalizeHttpsSourceUrl(offer.officialSourceUrl);
   const officialSourceName = normalizeText(offer.officialSourceName);
+  const destinationUrl = normalizeHttpsSourceUrl(offer.destinationUrl);
 
   if (!offerId || !providerName || !category) return null;
   if (pricingModel !== SUPPORTED_PRICING_MODEL) return null;
@@ -110,6 +111,7 @@ function normalizeOffer(offer, nowMs = Date.now()) {
     freshnessState: "FRESH",
     officialSourceUrl,
     officialSourceName,
+    destinationUrl,
     verificationMethod: normalizeText(offer.verificationMethod) || "OFFICIAL_SOURCE_OPERATOR_ATTESTATION",
     verifiedAt: new Date(verifiedAtMs).toISOString(),
     validUntil: new Date(validUntilMs).toISOString(),
@@ -225,6 +227,7 @@ function enrichOpportunityWithBestOffer(opportunity, offers, options = {}) {
       verificationMethod: best.verificationMethod,
       officialSourceUrl: best.officialSourceUrl,
       officialSourceName: best.officialSourceName,
+      externalRedirectAvailable: Boolean(best.destinationUrl),
       verifiedAt: best.verifiedAt,
       validUntil: best.validUntil,
       userFitScore: best.userFitScore,

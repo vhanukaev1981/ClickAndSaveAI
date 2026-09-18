@@ -317,6 +317,7 @@ function homeOpportunity(item) {
       verificationMethod: String(item.matchedOffer.verificationMethod || ""),
       officialSourceUrl: String(item.matchedOffer.officialSourceUrl || ""),
       officialSourceName: String(item.matchedOffer.officialSourceName || ""),
+      externalRedirectAvailable: item.matchedOffer.externalRedirectAvailable === true,
       verifiedAt: String(item.matchedOffer.verifiedAt || ""),
       validUntil: String(item.matchedOffer.validUntil || ""),
       userFitScore: nullableFiniteNumber(item.matchedOffer.userFitScore),

@@ -24,6 +24,7 @@ test("provider commerce retention classification matches the destructive account
     "providerDispatchQueue",
     "commerceMatches",
     "commerceEvents",
+    "offerClicks",
   ]) {
     assert.match(lifecycle, new RegExp(`ACCOUNT_TOP_LEVEL_UID_COLLECTIONS[\\s\\S]*["']${collection}["']`));
   }

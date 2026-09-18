@@ -30,6 +30,7 @@ const ACCOUNT_TOP_LEVEL_UID_COLLECTIONS = [
   "providerDispatchQueue",
   "commerceMatches",
   "commerceEvents",
+  "offerClicks",
 ];
 
 function requireAuth(request) {

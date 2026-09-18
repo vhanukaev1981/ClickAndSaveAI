@@ -55,6 +55,12 @@ function parseHttpsUrl(value, field) {
   return parsed.toString();
 }
 
+function parseOptionalHttpsUrl(value, field) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return parseHttpsUrl(text, field);
+}
+
 function parseIsoDate(value, field) {
   const text = requiredString(value, field, 80);
   const ms = Date.parse(text);
@@ -187,6 +193,15 @@ function validateProviderOfferInput(data, nowMs = Date.now()) {
     throw new TypeError("a positive commissionValue is required for an active commission model");
   }
 
+  const destinationUrl = parseOptionalHttpsUrl(data.destinationUrl, "destinationUrl");
+  const partnerSubIdParam = optionalString(data.partnerSubIdParam, "partnerSubIdParam", 64);
+  if (partnerSubIdParam && !/^[A-Za-z0-9_.-]+$/.test(partnerSubIdParam)) {
+    throw new TypeError("partnerSubIdParam contains unsupported characters");
+  }
+  if (partnerSubIdParam && !commercialAgreementActive) {
+    throw new TypeError("partnerSubIdParam requires an active commercial agreement");
+  }
+
   return {
     offerId,
     providerName,
@@ -210,6 +225,8 @@ function validateProviderOfferInput(data, nowMs = Date.now()) {
     commercialAgreementActive,
     commissionType,
     commissionValue,
+    destinationUrl,
+    partnerSubIdParam,
   };
 }
 
@@ -250,6 +267,9 @@ exports.upsertProviderOffer = onCall(
       commercialAgreementActive: offer.commercialAgreementActive,
       commissionType: offer.commissionType,
       commissionValue: offer.commissionValue,
+      destinationUrl: offer.destinationUrl,
+      destinationVerified: Boolean(offer.destinationUrl),
+      partnerSubIdParam: offer.partnerSubIdParam,
       updatedByOperatorUid: operatorUid,
       updatedAt: FieldValue.serverTimestamp(),
       ...(existing.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
@@ -284,6 +304,7 @@ exports.upsertProviderOffer = onCall(
       saved: true,
       availabilityStatus: offer.availabilityStatus,
       officialSourceVerified: true,
+      destinationVerified: Boolean(offer.destinationUrl),
     };
   }
 );
@@ -330,3 +351,4 @@ exports.onProviderOfferCatalogChanged = onDocumentWritten(
 
 exports._validateProviderOfferInput = validateProviderOfferInput;
 exports._parseHttpsUrl = parseHttpsUrl;
+exports._parseOptionalHttpsUrl = parseOptionalHttpsUrl;
