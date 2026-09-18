@@ -6,7 +6,7 @@ const {
   validateProviderIntegrationConfig,
   integrationStatus,
 } = require("./providerIntegrationFramework");
-const { hasProviderAdapter } = require("./providerAdapterRegistry");
+const { hasProviderAdapter, getProviderAdapter } = require("./providerAdapterRegistry");
 
 const db = getFirestore();
 const MAX_INTEGRATIONS = 100;
@@ -65,6 +65,73 @@ exports.upsertProviderIntegrationConfig = onCall(
     return publicIntegrationStatus(config.providerId, {
       ...config,
       lastHealthVerified: false,
+    });
+  }
+);
+
+exports.verifyProviderIntegrationHealth = onCall(
+  { enforceAppCheck: true },
+  async (request) => {
+    const operatorUid = requireCommerceOperator(request);
+    const providerId = String(request.data?.providerId || "").trim();
+    if (!providerId) throw new HttpsError("invalid-argument", "providerId is required.");
+
+    const ref = db.collection("providerIntegrations").doc(providerId);
+    const snapshot = await ref.get();
+    if (!snapshot.exists) throw new HttpsError("not-found", "Provider integration config was not found.");
+    const data = snapshot.data() || {};
+    const adapter = getProviderAdapter(data.adapterKey);
+    if (!adapter) {
+      await ref.set({
+        lastHealthVerified: false,
+        lastHealthReference: FieldValue.delete(),
+        lastHealthVerifiedAt: FieldValue.delete(),
+        lastHealthCheckedAt: FieldValue.serverTimestamp(),
+        updatedByOperatorUid: operatorUid,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return publicIntegrationStatus(providerId, { ...data, lastHealthVerified: false });
+    }
+    if (typeof adapter.healthCheck !== "function") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Registered adapter does not implement authoritative health verification."
+      );
+    }
+
+    let result;
+    try {
+      result = await adapter.healthCheck();
+    } catch (error) {
+      await ref.set({
+        lastHealthVerified: false,
+        lastHealthReference: FieldValue.delete(),
+        lastHealthVerifiedAt: FieldValue.delete(),
+        lastHealthCheckedAt: FieldValue.serverTimestamp(),
+        updatedByOperatorUid: operatorUid,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      throw new HttpsError("unavailable", "Provider adapter health verification failed.");
+    }
+    const healthy = result?.healthy === true;
+    const externalReference = String(result?.externalReference || "").trim();
+    if (healthy && !externalReference) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Healthy provider status requires authoritative external reference evidence."
+      );
+    }
+    await ref.set({
+      lastHealthVerified: healthy,
+      lastHealthReference: healthy ? externalReference : FieldValue.delete(),
+      lastHealthVerifiedAt: healthy ? FieldValue.serverTimestamp() : FieldValue.delete(),
+      lastHealthCheckedAt: FieldValue.serverTimestamp(),
+      updatedByOperatorUid: operatorUid,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return publicIntegrationStatus(providerId, {
+      ...data,
+      lastHealthVerified: healthy,
     });
   }
 );
