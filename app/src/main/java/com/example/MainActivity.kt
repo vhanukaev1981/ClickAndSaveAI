@@ -99,21 +99,8 @@ class MainActivity : ComponentActivity() {
             )
         )
         setContent {
-            ClickAndSaveTheme {
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    MainAppStructure(
-                        viewModel = viewModel,
-                        onGoogleSignIn = {
-                            val clientId = getString(R.string.google_web_client_id).trim()
-                            if (clientId.isBlank()) {
-                                viewModel.reportGmailAuthorizationError("לא הצלחנו להתחיל את ההתחברות כרגע. נסו שוב בעוד רגע.")
-                            } else {
-                                viewModel.signInWithGoogle(this, clientId)
-                            }
-                        },
-                        onRequestGmailAuthorization = ::requestGmailAuthorization
-                    )
-                }
+            com.example.ui.usa.theme.UsaTheme {
+                com.example.ui.usa.UsaAppShell()
             }
         }
         maybeTriggerDebugTestPush(intent)
