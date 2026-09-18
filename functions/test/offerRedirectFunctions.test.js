@@ -51,3 +51,35 @@ test("partner attribution adds only the configured sub-id parameter", () => {
   assert.equal(parsed.searchParams.get("campaign"), "savings");
   assert.equal(parsed.searchParams.get("click_id"), "click-123");
 });
+
+
+test("offer version identity changes when attribution configuration changes", () => {
+  const offer = {
+    offerId: "offer-1",
+    verifiedAt: "2026-09-18T08:00:00.000Z",
+    validUntil: "2026-10-18T08:00:00.000Z",
+    monthlyPrice: 89,
+    requiredRecurringFees: 0,
+    oneTimeFees: 0,
+  };
+  const base = offerVersionHash(offer, "https://provider.example/join", {
+    commercialAgreementActive: true,
+    commissionType: "CPA",
+    commissionValue: 180,
+    partnerSubIdParam: "click_id",
+  });
+  const changedParam = offerVersionHash(offer, "https://provider.example/join", {
+    commercialAgreementActive: true,
+    commissionType: "CPA",
+    commissionValue: 180,
+    partnerSubIdParam: "subid",
+  });
+  const inactive = offerVersionHash(offer, "https://provider.example/join", {
+    commercialAgreementActive: false,
+    commissionType: "NONE",
+    commissionValue: null,
+    partnerSubIdParam: "",
+  });
+  assert.notEqual(base, changedParam);
+  assert.notEqual(base, inactive);
+});
