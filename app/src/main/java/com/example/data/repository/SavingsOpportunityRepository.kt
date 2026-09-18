@@ -21,9 +21,9 @@ data class SavingsMatchedOffer(
     val verificationMethod: String,
     val officialSourceUrl: String,
     val officialSourceName: String,
-    val externalRedirectAvailable: Boolean,
     val verifiedAt: String,
-    val validUntil: String
+    val validUntil: String,
+    val externalRedirectAvailable: Boolean = false
 )
 
 data class SavingsOpportunityView(
@@ -132,9 +132,9 @@ class SavingsOpportunityRepository(
             verificationMethod = map["verificationMethod"] as? String ?: "",
             officialSourceUrl = map["officialSourceUrl"] as? String ?: "",
             officialSourceName = map["officialSourceName"] as? String ?: "",
-            externalRedirectAvailable = map["externalRedirectAvailable"] as? Boolean ?: false,
             verifiedAt = map["verifiedAt"] as? String ?: "",
-            validUntil = map["validUntil"] as? String ?: ""
+            validUntil = map["validUntil"] as? String ?: "",
+            externalRedirectAvailable = map["externalRedirectAvailable"] as? Boolean ?: false
         )
     }
 
