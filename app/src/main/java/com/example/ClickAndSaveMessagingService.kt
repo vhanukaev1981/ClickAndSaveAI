@@ -24,13 +24,16 @@ object PushRegistration {
     }
 
     fun registerToken(token: String) {
-        if (PushTokenLifecycle.isRegistrationSuppressed()) return
         if (FirebaseAuth.getInstance().currentUser == null || token.isBlank()) return
+        if (!PushTokenLifecycle.tryAcquireRegistrationSlot()) return
         FirebaseFunctions.getInstance("europe-west1")
             .getHttpsCallable("registerPushToken")
             .call(mapOf("token" to token))
             .addOnFailureListener { error ->
                 Log.w("PushRegistration", "FCM token registration failed", error)
+            }
+            .addOnCompleteListener {
+                PushTokenLifecycle.releaseRegistrationSlot()
             }
     }
 }
