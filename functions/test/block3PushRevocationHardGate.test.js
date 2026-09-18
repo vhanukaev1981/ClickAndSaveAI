@@ -25,6 +25,8 @@ test("completed sign-out blocks only when both revocation paths fail", () => {
   assert.ok(revokeAt >= 0 && hardGateAt > revokeAt);
   assert.ok(firebaseSignOutAt > hardGateAt);
   assert.match(signOut, /beginSignOutRegistrationSuppressionAndDrain/);
+  assert.match(signOut, /registrationDrainCompleted/);
+  assert.match(signOut, /revokeCurrentDeviceBeforeSignOut\(registrationDrainCompleted\)/);
   assert.match(signOut, /endSignOutRegistrationSuppression/);
 
   const lifecycle = androidSource("PushTokenLifecycle.kt");
@@ -35,4 +37,6 @@ test("completed sign-out blocks only when both revocation paths fail", () => {
   assert.match(messaging, /PushTokenLifecycle\.tryAcquireRegistrationSlot\(\)/);
   assert.match(messaging, /PushTokenLifecycle\.releaseRegistrationSlot\(\)/);
   assert.match(lifecycle, /inFlightRegistrations/);
+  assert.match(lifecycle, /withTimeoutOrNull/);
+  assert.match(lifecycle, /revocation was attempted/);
 });
