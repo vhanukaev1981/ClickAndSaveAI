@@ -41,6 +41,8 @@ test("incremental scan returns authoritative snapshot and History recovery is ex
   assert.match(reliable, /maintenance:\s*true/);
   assert.match(reliable, /suppressUserNotification:\s*true/);
   assert.match(reliable, /runFinancialAgentForUser/);
+  assert.match(reliable, /_listHistoryMessageIds/);
+  assert.match(reliable, /postBaselineIds/);
   assert.match(reliable, /finally/);
   assert.match(reliable, /releaseRecoveryLease/);
   assert.match(reliable, /pdfAnalysisComplete !== true/);
