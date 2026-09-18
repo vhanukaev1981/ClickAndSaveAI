@@ -182,16 +182,25 @@ async function listRecoveryMessageIds(accessToken) {
   return messageIds;
 }
 
-async function runBoundedHistoryRecovery(uid, connection, nowMs = Date.now()) {
+async function runBoundedHistoryRecovery(uid, connection, recoveryBaselineHistoryId, nowMs = Date.now()) {
   if (!connection.encryptedRefreshToken) {
     throw new HttpsError("failed-precondition", "No Gmail refresh token is stored.");
   }
   const startMs = recoveryWindowStartMs(connection, nowMs);
   const accessToken = await gmailWatch._refreshAccessToken(connection.encryptedRefreshToken);
   const messageIds = await listRecoveryMessageIds(accessToken);
+  const postBaselineHistory = await gmailWatch._listHistoryMessageIds(
+    accessToken,
+    recoveryBaselineHistoryId
+  );
+  if (postBaselineHistory.expired) {
+    throw new HttpsError("unavailable", "Fresh Gmail History recovery baseline expired unexpectedly.");
+  }
+  const postBaselineIds = new Set(postBaselineHistory.messageIds);
   let processedMessages = 0;
 
   for (const messageId of messageIds) {
+    if (postBaselineIds.has(messageId)) continue;
     await gmailWatch._processMessage(uid, accessToken, messageId, {
       maintenance: true,
       suppressUserNotification: true,
@@ -209,10 +218,15 @@ async function runBoundedHistoryRecovery(uid, connection, nowMs = Date.now()) {
     processedMessages += 1;
   }
 
+  for (const messageId of postBaselineIds) {
+    await gmailWatch._processMessage(uid, accessToken, messageId);
+  }
+
   await runFinancialAgentForUser(uid);
 
   return {
     processedMessages,
+    postBaselineMessages: postBaselineIds.size,
     recoveryWindowStartMs: startMs,
     scannedMailboxMessages: messageIds.length,
     agentRefreshed: true,
@@ -284,7 +298,7 @@ exports.scanGmailInvoices = onCall(
         stage = "ESTABLISH_RECOVERY_BASELINE";
         baseline = await establishRecoveryBaseline(request, connectionRef, before);
         stage = "RUN_BOUNDED_HISTORY_RECOVERY";
-        result = await runBoundedHistoryRecovery(uid, before);
+        result = await runBoundedHistoryRecovery(uid, before, baseline);
       } else {
         stage = "RUN_STABLE_SCAN";
         result = await handlerRunner(stableScanHandler, "Stable Gmail scan")(request);
