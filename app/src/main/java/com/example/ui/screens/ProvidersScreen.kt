@@ -28,6 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,6 +68,7 @@ fun ProvidersScreen(viewModel: MainViewModel) {
     val financialHome by viewModel.authoritativeFinancialHome.collectAsState()
     val actionRepository = remember { OpportunityActionRepository() }
     val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
     var error by remember { mutableStateOf("") }
     var actionMessage by remember { mutableStateOf("") }
     var selectedOpportunity by remember { mutableStateOf<FinancialOpportunity?>(null) }
@@ -166,6 +168,29 @@ fun ProvidersScreen(viewModel: MainViewModel) {
                                         }
                                     }
                                 }
+                            },
+                            onOpenExternal = {
+                                val offerId = opportunity.matchedOffer?.offerId.orEmpty()
+                                if (offerId.isBlank() || opportunity.matchedOffer?.externalRedirectAvailable != true) {
+                                    error = "אין כרגע יעד ספק מאומת להצעה."
+                                } else {
+                                    scope.launch {
+                                        runCatching {
+                                            actionRepository.createTrackedOfferRedirect(opportunity.id, offerId)
+                                        }.onSuccess { redirect ->
+                                            runCatching { uriHandler.openUri(redirect.redirectUrl) }
+                                                .onSuccess {
+                                                    actionMessage = "ההצעה נפתחה באתר הספק. ההשלמה מתבצעת ישירות מול הספק."
+                                                    error = ""
+                                                }
+                                                .onFailure {
+                                                    error = "לא הצלחנו לפתוח את אתר הספק."
+                                                }
+                                        }.onFailure {
+                                            error = "יעד ההצעה השתנה, פג תוקף או אינו מאומת עוד."
+                                        }
+                                    }
+                                }
                             }
                         )
                     }
@@ -245,12 +270,17 @@ fun ProvidersScreen(viewModel: MainViewModel) {
 }
 
 @Composable
-private fun OpportunityCard(opportunity: FinancialOpportunity, onAccept: () -> Unit) {
+private fun OpportunityCard(
+    opportunity: FinancialOpportunity,
+    onAccept: () -> Unit,
+    onOpenExternal: () -> Unit
+) {
     val matched = opportunity.matchedOffer?.takeIf { opportunity.hasAuthoritativeV3Offer() }
     val monthlySaving = opportunity.potentialMonthlySaving
     val actionMode = opportunity.v3SavingsActionMode()
     val actionAvailable = opportunity.hasVerifiedSavingsActionTarget() &&
         matched != null && monthlySaving != null && monthlySaving > 0.0
+    val externalRedirectAvailable = matched?.externalRedirectAvailable == true
 
     V3Panel {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -296,10 +326,21 @@ private fun OpportunityCard(opportunity: FinancialOpportunity, onAccept: () -> U
 
         when {
             actionAvailable -> V3PrimaryButton("בדיקת ההצעה", onAccept, Modifier.fillMaxWidth())
-            actionMode == V3SavingsActionMode.VIEW_ONLY -> Text("ההזדמנות היא לצפייה בלבד; אין יעד פעולה מאומת.", style = MaterialTheme.typography.bodySmall)
-            actionMode == V3SavingsActionMode.NO_VERIFIED_ACTION_TARGET -> Text("אין כרגע יעד פעולה מאומת להצעה.", style = MaterialTheme.typography.bodySmall)
-            actionMode == V3SavingsActionMode.DIRECT_PLAN_JOIN -> Text("חיבור ישיר למסלול אינו זמין ללא יעד מאומת.", style = MaterialTheme.typography.bodySmall)
-            else -> Unit
+            !externalRedirectAvailable && actionMode == V3SavingsActionMode.VIEW_ONLY ->
+                Text("ההזדמנות היא לצפייה בלבד; אין יעד פעולה מאומת.", style = MaterialTheme.typography.bodySmall)
+            !externalRedirectAvailable && actionMode == V3SavingsActionMode.NO_VERIFIED_ACTION_TARGET ->
+                Text("אין כרגע יעד פעולה מאומת להצעה.", style = MaterialTheme.typography.bodySmall)
+            !externalRedirectAvailable && actionMode == V3SavingsActionMode.DIRECT_PLAN_JOIN ->
+                Text("חיבור ישיר למסלול אינו זמין ללא יעד מאומת.", style = MaterialTheme.typography.bodySmall)
+        }
+        if (externalRedirectAvailable) {
+            TextButton(onClick = onOpenExternal, modifier = Modifier.fillMaxWidth()) {
+                Text("מעבר להצעה באתר הספק")
+            }
+            Text(
+                "ההצטרפות והתשלום מתבצעים ישירות מול הספק. Click&SaveAI אינו משלים את המעבר עבורך.",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }
