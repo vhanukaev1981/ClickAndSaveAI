@@ -38,6 +38,13 @@ exports.onAuthoritativeGmailInvoiceCreated = onDocumentCreated(
     const invoice = event.data?.data() || {};
     const sourceMessageId = String(invoice.sourceMessageId || "").trim();
     if (!uid || !sourceMessageId) return;
+    if (invoice.suppressUserNotification === true) {
+      logger.info("Gmail invoice push suppressed for maintenance import", {
+        uid,
+        reason: String(invoice.notificationSuppressedReason || "MAINTENANCE"),
+      });
+      return;
+    }
 
     const connection = await db.collection("gmailConnections").doc(uid).get();
     if (!connection.exists || connection.data()?.initialBackfillCompleted !== true) return;
