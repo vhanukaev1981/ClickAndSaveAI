@@ -52,6 +52,7 @@ const offerRedirectFunctions = require("./offerRedirectFunctions");
 const commerceOperationsFunctions = require("./commerceOperationsFunctions");
 const providerOfferCatalogFunctions = require("./providerOfferCatalogFunctions");
 const providerDispatchFunctions = require("./providerDispatchFunctions");
+const providerIntegrationFunctions = require("./providerIntegrationFunctions");
 const commerceFunnelFunctions = require("./commerceFunnelFunctions");
 const gmailScanV5Functions = require("./gmailScanV5Functions");
 const gmailSyncStatusFunctions = require("./gmailSyncStatusFunctions");
@@ -85,6 +86,7 @@ module.exports = {
   ...commerceOperationsFunctions,
   ...providerOfferCatalogFunctions,
   ...providerDispatchFunctions,
+  ...providerIntegrationFunctions,
   ...commerceFunnelFunctions,
   ...gmailSyncStatusFunctions,
   // Production-authorized read-only connection status. Staging recovery/debug callables are
