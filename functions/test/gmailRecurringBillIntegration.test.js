@@ -60,7 +60,7 @@ test("real-time watch stays on Gmail History and applies the same recurring-bill
   assert.match(watchSource, /require\("\.\/gmailRecurringBillPolicy"\)/);
   assert.match(watchSource, /users\/me\/history/);
   assert.match(watchSource, /selectRecurringBills/);
-  assert.match(watchSource, /persistInvoiceDocuments\(uid, recurringInvoices\)/);
+  assert.match(watchSource, /persistInvoiceDocuments\(uid, recurringInvoices(?:, options)?\)/);
   assert.doesNotMatch(watchSource, /newer_than:/);
 });
 

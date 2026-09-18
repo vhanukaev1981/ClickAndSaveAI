@@ -7,7 +7,7 @@ const { defineSecret, defineString } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const { collectPdfAttachments, parseGmailMessage } = require("./gmailParser");
 const { decryptToken } = require("./tokenCrypto");
-const { REALTIME_MODE } = require("./agentTriggerPolicy");
+const { BACKFILL_BATCH_MODE, REALTIME_MODE } = require("./agentTriggerPolicy");
 const { ACTIVE_GMAIL_PARSER_VERSION } = require("./gmailParserVersion");
 const { gmailInvoiceDocumentId } = require("./gmailInvoiceSources");
 const { emitOperationalEvent } = require("./operationalTelemetry");
@@ -66,7 +66,7 @@ function currentProjectId() {
   return projectId;
 }
 
-async function persistInvoiceDocuments(uid, recurringInvoices) {
+async function persistInvoiceDocuments(uid, recurringInvoices, options = {}) {
   await Promise.all(recurringInvoices.map((invoice) => {
     const safeId = gmailInvoiceDocumentId(invoice.sourceMessageId);
     return db.collection("users").doc(uid).collection("gmailInvoices").doc(safeId).set({
@@ -75,6 +75,10 @@ async function persistInvoiceDocuments(uid, recurringInvoices) {
       verificationStatus: "UNVERIFIED_GMAIL_IMPORT",
       sourceType: "GMAIL_READONLY",
       parserVersion: GMAIL_PARSER_VERSION,
+      suppressUserNotification: options.suppressUserNotification === true,
+      notificationSuppressedReason: options.suppressUserNotification === true
+        ? String(options.notificationSuppressedReason || "MAINTENANCE")
+        : FieldValue.delete(),
       updatedAt: FieldValue.serverTimestamp(),
       createdAt: FieldValue.serverTimestamp(),
     }, { merge: true });
@@ -136,13 +140,13 @@ function acceptedFromAudit(data) {
   return raw.map(normalizeStoredCandidate).filter(Boolean);
 }
 
-async function processMessage(uid, accessToken, messageId) {
+async function processMessage(uid, accessToken, messageId, options = {}) {
   const auditRef = db.collection("users").doc(uid).collection("gmailMessageImports").doc(messageId);
   const existing = await auditRef.get();
   const existingData = existing.data() || {};
   if (Number(existingData.parserVersion || 0) >= GMAIL_PARSER_VERSION && existingData.pdfAnalysisComplete === true) {
     const acceptedInvoices = acceptedFromAudit(existingData);
-    await persistInvoiceDocuments(uid, acceptedInvoices);
+    await persistInvoiceDocuments(uid, acceptedInvoices, options);
     return { invoices: acceptedInvoices, importedCount: 0, removedSourceMessageIds: [] };
   }
 
@@ -216,7 +220,7 @@ async function processMessage(uid, accessToken, messageId) {
     parserVersion: GMAIL_PARSER_VERSION,
     pdfAttachmentCount: pdfAttachments.length,
     pdfAnalysisComplete: allPdfsAnalyzed,
-    agentTriggerMode: REALTIME_MODE,
+    agentTriggerMode: options.maintenance === true ? BACKFILL_BATCH_MODE : REALTIME_MODE,
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
@@ -224,7 +228,7 @@ async function processMessage(uid, accessToken, messageId) {
   // rejected one-off/refund/unknown document never reaches gmailInvoices and can
   // never emit a NEW_INVOICE notification.
   await Promise.all([
-    persistInvoiceDocuments(uid, recurringInvoices),
+    persistInvoiceDocuments(uid, recurringInvoices, options),
     deleteInvoiceDocuments(uid, removedSourceMessageIds),
   ]);
 
@@ -447,6 +451,7 @@ exports.gmailPushNotification = onMessagePublished(
 
 Object.defineProperties(module.exports, {
   _listHistoryMessageIds: { value: listHistoryMessageIds, enumerable: false },
+  _refreshAccessToken: { value: refreshAccessToken, enumerable: false },
   _processMessage: { value: processMessage, enumerable: false },
   _processMailboxNotification: { value: processMailboxNotification, enumerable: false },
   _recentCandidateHistory: { value: recentCandidateHistory, enumerable: false },

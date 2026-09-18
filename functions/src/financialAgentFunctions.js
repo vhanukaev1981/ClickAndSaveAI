@@ -36,9 +36,11 @@ function requireAuth(request) {
 }
 
 function collectInvoicesFromImportDoc(data) {
-  const raw = Array.isArray(data?.invoices)
-    ? data.invoices
-    : (data?.invoice ? [data.invoice] : []);
+  const raw = Array.isArray(data?.acceptedInvoices)
+    ? data.acceptedInvoices
+    : (Array.isArray(data?.invoices)
+      ? data.invoices
+      : (data?.invoice ? [data.invoice] : []));
   return raw.filter((invoice) => invoice && typeof invoice === "object");
 }
 
