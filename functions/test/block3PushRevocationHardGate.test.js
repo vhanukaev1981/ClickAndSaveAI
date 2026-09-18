@@ -1,5 +1,7 @@
 "use strict";
 
+// Exact-head CI synchronization marker: sign-out revocation guard is fully specified below.
+
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
